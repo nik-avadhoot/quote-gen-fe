@@ -30,16 +30,22 @@ Run the backend repo alongside it for full-fidelity Excel export.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VITE_API_BASE` | Production | Base URL of the export backend, no trailing slash, e.g. `https://quote-gen-be.vercel.app`. Falls back to `http://localhost:3001`. |
+| `VITE_API_BASE` | Optional | Base URL of the export backend, no trailing slash. Set to `https://quote-gen-be.vercel.app` in the committed `.env.production`, so production builds need no dashboard configuration. Falls back to `http://localhost:3001` for `npm run dev`. |
 
 Vite inlines this at **build time** — changing it requires a redeploy, not just
-a restart. See `.env.example`.
+a restart. A `VITE_API_BASE` set in the Vercel dashboard overrides
+`.env.production`.
 
 ## Deploying to Vercel
 
 Import this repo — Vite is detected automatically (build `npm run build`, output
-`dist`). Set `VITE_API_BASE` to the deployed backend URL before the first build,
-then add this app's domain to the backend's `CORS_ORIGINS` and redeploy the backend.
+`dist`), and the backend URL comes from `.env.production`. No environment
+variables needed for a standard deploy.
+
+The backend already allows this app's production domain. If you deploy to a
+different domain, or test from a preview URL (each gets its own unique
+`*.vercel.app` domain), add it to `CORS_ORIGINS` on the backend or the browser
+will block the export request.
 
 ## Data & state
 
