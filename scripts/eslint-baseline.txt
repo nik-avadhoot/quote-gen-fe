@@ -1,0 +1,31 @@
+ESLint baseline - Phase 0 of the QuotationApp.jsx component split.
+
+Command: npx eslint src   (run from quote-gen-fe/)
+Captured on main, before any refactor phase touched src/.
+
+GATE: no NEW rule violations in any later phase. Counts may only go DOWN.
+Regenerate with the same command and diff against this file.
+
+NOTE: scripts/*.mjs is NOT linted - eslint.config.js matches only
+**/*.{js,jsx}, so the .mjs harness falls outside the config. Intentional
+for now: adding .mjs coverage needs node globals and would shift this
+baseline. Revisit in Phase 8.
+
+TOTAL: 121 errors, 2 warnings
+
+By file:
+   118 err   2 warn   src/QuotationApp.jsx
+     2 err   0 warn   src/engine/costing.js
+     1 err   0 warn   src/AuthContext.jsx
+
+By rule:
+    91  no-unused-vars
+    19  no-empty
+     4  no-undef
+     2  (unused-disable-directive)
+     2  react-hooks/static-components
+     1  react-refresh/only-export-components
+     1  react-hooks/set-state-in-effect
+     1  react-hooks/immutability
+     1  react-hooks/purity
+     1  no-useless-assignment

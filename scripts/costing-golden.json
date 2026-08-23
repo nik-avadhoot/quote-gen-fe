@@ -1,0 +1,30 @@
+{
+  "box-5ply": {
+    "finalRate": 41.25,
+    "ratePerKg": 50.75,
+    "calcMOQ": 6400,
+    "calcGSM": 942,
+    "calcBS": 12.24
+  },
+  "plate": {
+    "finalRate": 2.7,
+    "ratePerKg": 54.64,
+    "calcMOQ": 63600,
+    "calcGSM": 464,
+    "calcBS": 6.24
+  },
+  "part-L wPP=0": {
+    "finalRate": 2.1,
+    "ratePerKg": 52.34,
+    "calcMOQ": 82200,
+    "calcGSM": 464,
+    "calcBS": 6.24
+  },
+  "part-L wPP=5": {
+    "finalRate": 2.2,
+    "ratePerKg": 54.83,
+    "calcMOQ": 78300,
+    "calcGSM": 464,
+    "calcBS": 6.24
+  }
+}
