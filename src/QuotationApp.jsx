@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import * as XLSX from "xlsx-js-style"; // npm install xlsx-js-style
 
-// ── Export API ───────────────────────────────────────────────────────────────
-// Base URL of the Flask export server. Set VITE_API_BASE in the Vercel project
-// (or a local .env) to point at the deployed backend; falls back to the local
-// dev server. Vite inlines this at build time, so changing it needs a rebuild.
-const API_BASE = (import.meta.env.VITE_API_BASE || "http://localhost:3001").replace(/\/$/, "");
+import { apiFetch } from "./lib/apiClient.js";
+import { useAuth } from "./AuthContext.jsx";
+import UserManagementTab from "./UserManagementTab.jsx";
+import ChangePasswordModal from "./ChangePasswordModal.jsx";
+import ProfileModal from "./ProfileModal.jsx";
+import AccountMenu from "./AccountMenu.jsx";
 
 
 // ── Brand logos (base64 embedded) ────────────────────────────────────────────
@@ -26,13 +27,7 @@ import {
   suggestMargin, buildSpecFromRow,
 } from "./engine/costing.js";
 
-/* ═══ DESIGN TOKENS ═══════════════════════════════════════════════════════ */
-const C={slate:"#1C2B3A",slateM:"#2E4057",slateL:"#4A647D",amber:"#D97B2E",
-  amberL:"#FEF3E8",amberD:"#B5641F",cream:"#FAF7F2",paper:"#F0EAE0",
-  border:"#DDD4C7",green:"#2A7550",greenL:"#EBF7F1",red:"#B83232",
-  redL:"#FDECEA",orange:"#C45A1A",orangeL:"#FEF3E8",white:"#FFFFFF"};
-const mono="'JetBrains Mono','Courier New',monospace";
-const sans="'Inter','Segoe UI',system-ui,sans-serif";
+import { C, mono, sans } from "./theme.js";
 
 /* ═══ EXCEL EXPORT — matches CBB+PP xlsx format ════════════════════════════ */
 const exportExcelFull=(items,rates,freight)=>{
@@ -182,7 +177,7 @@ const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={},onErro
 
   // Try Python export server first (full openpyxl formatting preserved)
   try{
-    const resp=await fetch(`${API_BASE}/export`,{
+    const resp=await apiFetch('/export',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({items,rates,freight,
         marginPP:meta.marginPP??8,           // PP margin — separate from Box margin in items[0].spec.margin
@@ -765,8 +760,13 @@ function BoxDieline({L,W,H,boxType,dimType,ups,style={}}){
 // ── end BoxDieline ────────────────────────────────────────────────────────────
 
 export default function App(){
+  const{profile,signOut}=useAuth();
+  const role=profile?.role||"maker"; // maker | admin | checker — sourced from the logged-in account
+  const[showChangePassword,setShowChangePassword]=useState(false);
+  const[showProfile,setShowProfile]=useState(false);
+  const[sidebarCollapsed,setSidebarCollapsed]=useState(()=>localStorage.getItem('qgos_sidebar_collapsed')==='1');
+  useEffect(()=>{try{localStorage.setItem('qgos_sidebar_collapsed',sidebarCollapsed?'1':'0');}catch(e){}},[sidebarCollapsed]);
   const[tab,setTab]=useState("costing");
-  const[role,setRole]=useState("maker"); // maker | admin | checker
   const[aiOpen,setAiOpen]=useState(false);
   const[aiMode,setAiMode]=useState("pdf");
   const[spec,setSpec]=useState(()=>{
@@ -871,7 +871,7 @@ export default function App(){
     const d=new Date();
     return`QR-${String(d.getFullYear()).slice(-2)}${String(d.getMonth()+1).padStart(2,"0")}-001`;
   });
-  const[makerName,setMakerName]=useState(()=>localStorage.getItem("cbb_maker")||"");
+  const makerName=profile?.display_name||""; // sourced from the logged-in account, not free text
   // ── BATCH ENTRY STATE ─────────────────────────────────────────────────────
   const[batchProfile,setBatchProfile]=useState(()=>{
     try{const s=localStorage.getItem('cbb_batchprofile');return s?JSON.parse(s):{
@@ -889,7 +889,7 @@ export default function App(){
   // Backup: download all 10 localStorage keys as a single JSON file.
   // Fix 3: cbb_batch_autosave added so batch rows are included in manual JSON backups.
   const BACKUP_KEYS=['cbb_rates','cbb_freight','cbb_sectors','cbb_boxtrim',
-    'cbb_partitions','cbb_constrlib','cbb_template','cbb_maker',
+    'cbb_partitions','cbb_constrlib','cbb_template',
     'cbb_rate_date','cbb_batchprofile','cbb_quoteitems','cbb_batch_autosave',
     'cbb_locations']; // A3: locations is a persisted master
 
@@ -906,7 +906,6 @@ export default function App(){
     snap.cbb_batchprofile=batchProfile;
     snap.cbb_locations=locations; // A3
     snap.cbb_quoteitems=items;
-    snap.cbb_maker=makerName;
     const blob=new Blob([JSON.stringify(snap,null,2)],{type:'application/json'});
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
@@ -932,7 +931,7 @@ export default function App(){
       BACKUP_KEYS.forEach(k=>{
         if(snap[k]!=null){
           try{
-            // cbb_template, cbb_maker, cbb_rate_date are stored as raw strings, not JSON.
+            // cbb_template, cbb_rate_date are stored as raw strings, not JSON.
             // JSON.stringify("abc") produces '"abc"' — the surrounding quotes corrupt base64
             // and string values. Only stringify objects/arrays; pass strings through as-is.
             const v=typeof snap[k]==='string'?snap[k]:JSON.stringify(snap[k]);
@@ -1084,7 +1083,6 @@ export default function App(){
   // affect every row. constructionLib is watched because paper layer edits change per-row costs.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(()=>{invalidateAllBatchResults();},[rates,freight,constructionLib]);
-  useEffect(()=>{try{if(makerName)localStorage.setItem('cbb_maker',makerName);}catch(e){}},[makerName]);
   useEffect(()=>{try{localStorage.setItem('cbb_quoteitems',JSON.stringify(items));}catch(e){}},[items]);
 
   const s=(k,v)=>setSpec(p=>{
@@ -2095,33 +2093,58 @@ export default function App(){
   const gradeCodes=["",...rates.map(r=>r.code)];
   const card={background:C.white,border:`1px solid ${C.border}`,borderRadius:7,padding:"10px 12px",marginBottom:7};
 
-  // ── HEADER ─────────────────────────────────────────────────────────────────
-  const hdr=(
-    <div style={{background:C.slate,display:"flex",alignItems:"center",padding:"0 16px",
-      height:48,borderBottom:`2px solid ${C.amber}`,flexShrink:0,gap:4}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginRight:16}}>
-        <div style={{width:28,height:28,background:C.amber,borderRadius:6,display:"flex",
+  // ── SIDEBAR (left nav) ────────────────────────────────────────────────────
+  const NAV_ITEMS=[
+    ["costing","📊","Costing"],
+    ["items","📋","Quote Items",items.length],
+    ["batch","🗂","Batch Entry"],
+    ["constrlib","📚","Construction Library",constructionLib.length],
+    ["rates","💰","Rate Master"],
+    ["freight","🚚","Freight Rates"],
+    ["defaults","🛠","Defaults"],
+    ...(role==="admin"?[["users","👥","Users"]]:[]),
+  ];
+  const sidebar=(
+    <div style={{background:C.slate,display:"flex",flexDirection:"column",flexShrink:0,
+      width:sidebarCollapsed?56:200,overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",
+        borderBottom:`2px solid ${C.amber}`,height:48,boxSizing:"border-box"}}>
+        <div style={{width:28,height:28,flexShrink:0,background:C.amber,borderRadius:6,display:"flex",
           alignItems:"center",justifyContent:"center",fontSize:14}}>📦</div>
-        <div style={{color:C.white,fontWeight:700,fontSize:13,lineHeight:1}}>
+        {!sidebarCollapsed&&<div style={{color:C.white,fontWeight:700,fontSize:12,lineHeight:1.2,whiteSpace:"nowrap"}}>
           CFB Quotation Master
-          <div style={{fontSize:9,color:"rgba(255,255,255,.4)",fontWeight:400}}>AVADHOOT PACKS</div>
-        </div>
+          <div style={{fontSize:8,color:"rgba(255,255,255,.4)",fontWeight:400}}>AVADHOOT PACKS</div>
+        </div>}
       </div>
-      {[["costing","Costing"],["items","Quote Items"+(items.length?` (${items.length})`:"")],
-        ["batch","Batch Entry"],["constrlib","Construction Library"+(constructionLib.length?` (${constructionLib.length})`:"")],
-        ["rates","Rate Master"],["freight","Freight Rates"],["defaults","Defaults"]].map(([t,l])=>(
-        <button key={t} onClick={()=>setTab(t)} style={{padding:"0 12px",height:"100%",border:"none",
-          background:"none",fontFamily:sans,fontSize:12,fontWeight:600,cursor:"pointer",
-          color:tab===t?C.amber:"rgba(255,255,255,.5)",
-          borderBottom:tab===t?`2px solid ${C.amber}`:"2px solid transparent"}}>{l}</button>))}
+      <div style={{flex:1,overflowY:"auto",padding:"8px 0"}}>
+        {NAV_ITEMS.map(([t,icon,l,count])=>(
+          <button key={t} onClick={()=>setTab(t)} title={sidebarCollapsed?l:undefined}
+            style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:sidebarCollapsed?"10px 0":"10px 16px",
+              justifyContent:sidebarCollapsed?"center":"flex-start",border:"none",background:tab===t?"rgba(217,123,46,.15)":"none",
+              borderLeft:tab===t?`3px solid ${C.amber}`:"3px solid transparent",
+              fontFamily:sans,fontSize:12,fontWeight:600,cursor:"pointer",
+              color:tab===t?C.amber:"rgba(255,255,255,.6)"}}>
+            <span style={{fontSize:15,flexShrink:0}}>{icon}</span>
+            {!sidebarCollapsed&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+              {l}{!!count&&` (${count})`}</span>}
+            {sidebarCollapsed&&!!count&&<span style={{position:"absolute",marginLeft:14,marginTop:-14,
+              background:C.amber,color:C.white,borderRadius:8,fontSize:8,padding:"1px 4px"}}>{count}</span>}
+          </button>))}
+      </div>
+      <button onClick={()=>setSidebarCollapsed(v=>!v)} title={sidebarCollapsed?"Expand sidebar":"Collapse sidebar"}
+        style={{padding:"10px 0",border:"none",borderTop:`1px solid rgba(255,255,255,.1)`,
+          background:"none",color:"rgba(255,255,255,.5)",cursor:"pointer",fontSize:13}}>
+        {sidebarCollapsed?"»":"« Collapse"}
+      </button>
+    </div>
+  );
+
+  // ── TOP BAR (account + backup/restore) ───────────────────────────────────
+  const topBar=(
+    <div style={{background:C.slate,display:"flex",alignItems:"center",padding:"0 16px",
+      height:48,borderBottom:`2px solid ${C.amber}`,flexShrink:0,gap:8}}>
       <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
-        <select value={role} onChange={e=>setRole(e.target.value)}
-          style={{padding:"4px 8px",borderRadius:5,fontSize:11,fontWeight:600,border:"none",
-            background:"rgba(255,255,255,.15)",color:C.white,cursor:"pointer"}}>
-          <option value="maker">👤 Maker</option>
-          <option value="checker">✓ Checker</option>
-          <option value="admin">⚙ Admin</option>
-        </select>
+        <AccountMenu onEditProfile={()=>setShowProfile(true)} onChangePassword={()=>setShowChangePassword(true)}/>
         <button onClick={handleBackup} title="Download a full backup of all app data (rates, freight, sectors, constructions, partitions)"
           style={{padding:"4px 10px",borderRadius:5,fontSize:11,fontWeight:600,border:"1px solid rgba(255,255,255,.25)",
             background:"rgba(255,255,255,.10)",color:"rgba(255,255,255,.80)",cursor:"pointer",fontFamily:sans}}>
@@ -4709,8 +4732,7 @@ export default function App(){
             <div style={{width:1,height:16,background:C.border}}/>
             <div style={{display:"flex",alignItems:"center",gap:4}}>
               <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase"}}>Maker</div>
-              <input value={makerName} onChange={e=>setMakerName(e.target.value)} placeholder="Your name"
-                style={{border:"none",background:"transparent",fontSize:11,color:C.slateM,width:90}}/>
+              <span style={{fontSize:11,color:C.slateM,width:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{makerName}</span>
             </div>
             <div style={{width:1,height:16,background:C.border}}/>
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:5,
@@ -4735,7 +4757,7 @@ export default function App(){
           </div>
           {items.length>0&&(()=>{
             const canExport=quoteRef.trim()&&makerName.trim();
-            const exportTip=!quoteRef.trim()?"Quote Ref is required before export":!makerName.trim()?"Maker Name is required before export":"";
+            const exportTip=!quoteRef.trim()?"Quote Ref is required before export":!makerName.trim()?"Your account has no display name set — contact an Admin":"";
             // Fix 11: Capacity limits — v7 template supports max 44 CBB data rows and 30 OFFER rows
             const CBB_MAX=44;
             const OFFER_MAX=30;
@@ -5349,26 +5371,32 @@ export default function App(){
           style={{padding:"3px 10px",borderRadius:4,border:"1px solid rgba(255,255,255,.4)",
             background:"transparent",color:C.white,fontSize:11,cursor:"pointer",fontFamily:sans}}>Dismiss</button>
       </div>)}
-    <div style={{display:"flex",flexDirection:"column",height:"100vh",overflow:"hidden",
+    <div style={{display:"flex",flexDirection:"row",height:"100vh",width:"100%",overflow:"hidden",
       background:C.cream,fontFamily:sans}}>
-      {hdr}
-      <div style={{flex:1,overflow:"hidden",position:"relative"}}>
-        {tab==="costing"&&(
-          <div style={{display:"grid",gridTemplateColumns:"380px 1fr",height:"100%",overflow:"hidden"}}>
-            <div style={{borderRight:`1px solid ${C.border}`,overflow:"hidden",
-              display:"flex",flexDirection:"column"}}>{specForm}</div>
-            <div style={{overflow:"hidden",display:"flex",flexDirection:"column"}}>{outputPanel}</div>
-          </div>)}
-        {tab==="items"&&itemsTab}
-        {tab==="batch"&&batchEntryTab}
-        {tab==="constrlib"&&constructionLibTab}
-        {tab==="rates"&&rateTab}
-        {tab==="defaults"&&defaultsTab}
-        {tab==="freight"&&freightTab}
-        {aiPanel}
+      {sidebar}
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
+        {topBar}
+        <div style={{flex:1,overflow:"hidden",position:"relative"}}>
+          {tab==="costing"&&(
+            <div style={{display:"grid",gridTemplateColumns:"380px 1fr",height:"100%",overflow:"hidden"}}>
+              <div style={{borderRight:`1px solid ${C.border}`,overflow:"hidden",
+                display:"flex",flexDirection:"column"}}>{specForm}</div>
+              <div style={{overflow:"hidden",display:"flex",flexDirection:"column"}}>{outputPanel}</div>
+            </div>)}
+          {tab==="items"&&itemsTab}
+          {tab==="batch"&&batchEntryTab}
+          {tab==="constrlib"&&constructionLibTab}
+          {tab==="rates"&&rateTab}
+          {tab==="defaults"&&defaultsTab}
+          {tab==="freight"&&freightTab}
+          {tab==="users"&&role==="admin"&&<UserManagementTab showToast={showToast}/>}
+          {aiPanel}
+        </div>
       </div>
     </div>
     {toasts.length>0&&<div style={{position:"fixed",top:68,right:20,zIndex:9999,display:"flex",flexDirection:"column",gap:7,pointerEvents:"none"}}>{toasts.map(t=>(<div key={t.id} style={{padding:"10px 18px",borderRadius:8,fontSize:12,fontWeight:700,color:"white",boxShadow:"0 4px 18px rgba(0,0,0,.2)",maxWidth:300,background:t.type==="success"?C.green:t.type==="error"?C.red:C.amberD}}>{t.msg}</div>))}</div>}
+    {showProfile&&<ProfileModal onClose={()=>setShowProfile(false)} showToast={showToast}/>}
+    {showChangePassword&&<ChangePasswordModal onClose={()=>setShowChangePassword(false)} showToast={showToast}/>}
   </>
   );
 }
