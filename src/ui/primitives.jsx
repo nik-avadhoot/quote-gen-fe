@@ -34,6 +34,8 @@ export const SH=({title,sub})=>(
     <div style={{fontSize:9,fontWeight:700,color:C.amber,textTransform:"uppercase",letterSpacing:"0.09em"}}>{title}</div>
     {sub&&<div style={{fontSize:10,color:C.slateL,marginTop:1}}>{sub}</div>}
   </div>);
+// latent: form-row wrapper. No call site today - the Costing tab lays its
+// fields out inline. Retained as a reachable export rather than deleted.
 export const FR=({label,required,children,hint,cols})=>(
   <div style={{marginBottom:5}}>
     <label style={{fontSize:10,fontWeight:600,color:C.slateM,textTransform:"uppercase",

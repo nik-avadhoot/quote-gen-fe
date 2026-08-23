@@ -10,6 +10,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { LOGO_WIDE_B64 } from "../assets/logos.js";
 
+// latent: single-SKU PDF from the Costing tab. Zero call sites since Fix 13,
+// when finalisation moved into Batch Entry. Retained, not dead - kept as a
+// re-wirable path rather than deleted. See Phase 2 retention policy.
 export const exportPDF=(spec,result)=>{
   const r=result;if(!r)return;
   const today=new Date().toLocaleDateString("en-IN");
