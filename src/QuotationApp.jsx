@@ -765,8 +765,6 @@ export default function App(){
   const[sidebarCollapsed,setSidebarCollapsed]=useState(()=>localStorage.getItem('qgos_sidebar_collapsed')==='1');
   useEffect(()=>{try{localStorage.setItem('qgos_sidebar_collapsed',sidebarCollapsed?'1':'0');}catch(e){}},[sidebarCollapsed]);
   const[tab,setTab]=useState("costing");
-  const[aiOpen,setAiOpen]=useState(false);
-  const[aiMode,setAiMode]=useState("pdf");
   const[spec,setSpec]=useState(()=>{
     try{
       const bp=JSON.parse(localStorage.getItem('cbb_batchprofile')||'{"plant":"","delivery":""}');
@@ -828,11 +826,7 @@ export default function App(){
   const[partitionsMaster,setPartitionsMaster]=useState(()=>{try{const s=localStorage.getItem('cbb_partitions');return s?JSON.parse(s):PARTITIONS_MASTER_DEFAULT;}catch(e){return PARTITIONS_MASTER_DEFAULT;}});
   const[items,setItems]=useState(()=>{try{const s=localStorage.getItem('cbb_quoteitems');return s?JSON.parse(s):[];}catch(e){return[];}}); // saved quote items
   const[savedQuotes,setSavedQuotes]=useState({}); // per-customer saved drafts
-  const[aiLoading,setAiLoading]=useState(false);
   const[aiNotes,setAiNotes]=useState("");
-  const[file,setFile]=useState(null);
-  const[desc,setDesc]=useState("");
-  const[editMasters,setEditMasters]=useState(false);
   // A3: locations must be a persisted master — every other master has all three mechanisms.
   // On init: read cbb_locations from localStorage, fallback to hardcoded array, then UNION
   // with location keys found in cbb_freight so already-orphaned rates resurface immediately.
@@ -852,9 +846,8 @@ export default function App(){
   });
   const[newLocation,setNewLocation]=useState("");
   const[newGrade,setNewGrade]=useState({code:"",desc:"",price:"",disc:1.5});
-  const fileRef=useRef(),importRef=useRef(),templateRef=useRef(),restoreRef=useRef();
+  const importRef=useRef(),templateRef=useRef(),restoreRef=useRef();
   const[templateLoaded,setTemplateLoaded]=useState(false);
-  const[addedFlash,setAddedFlash]=useState(false);
   const[toasts,setToasts]=useState([]);
   const showToast=(msg,type='success',dur=2800)=>{
     const id=Date.now();
@@ -1089,24 +1082,10 @@ export default function App(){
     if(ks[0]==="layers")return{...p,layers:{...p.layers,[ks[1]]:{...p.layers[ks[1]],[ks[2]]:v}}};
     return p;
   });
-  const mergeAI=d=>setSpec(p=>({...p,
-    client:d.client||p.client,product:d.product||p.product,
-    material_code:d.material_code||p.material_code,sector:d.sector||p.sector,
-    L:d.L||p.L,W:d.W||p.W,H:d.H||p.H,dimType:d.dimType||p.dimType,
-    boxType:d.boxType||p.boxType,ply:d.ply||p.ply,
-    flute_F1:d.flute_F1||p.flute_F1,flute_F2:d.flute_F2??p.flute_F2,
-    board_gsm:d.board_gsm||p.board_gsm,spec_bs:d.spec_bs||p.spec_bs,
-    spec_bct:d.spec_bct||p.spec_bct,spec_ect:d.spec_ect||p.spec_ect,
-    layers:{
-      TOP:{...p.layers.TOP,...(d.layers?.TOP||{})},F1:{...p.layers.F1,...(d.layers?.F1||{})},
-      L1:{...p.layers.L1,...(d.layers?.L1||{})},F2:{...p.layers.F2,...(d.layers?.F2||{})},
-      L2:{...p.layers.L2,...(d.layers?.L2||{})},}}));
 
   // Derived sector code list — always from sectors state so dynamic additions appear everywhere.
   // SECTORS constant from defaults.js is used only as the initial seed in DEFAULT_SECTORS_DATA.
   const sectorCodes=sectors.map(s=>s.code);
-  const handlePDF=()=>{setAiNotes("ℹ️ AI Assist is currently disabled. Enter specifications manually.");};
-  const handleSuggest=()=>{setAiNotes("ℹ️ AI Assist is currently disabled. Enter specifications manually.");};
 
   // wastePP/convRatePP: "" in spec means "no override — inherit sector default",
   // resolved fresh here (not baked into spec) so it stays live if sector changes.
@@ -2044,7 +2023,7 @@ export default function App(){
     }
     const newConstr={
       code:nextCode,
-      // name left blank — auto-derives from spec in CONSTR_SUMMARY; user can override
+      // name left blank — auto-derives from spec in constrAutoName; user can override
       name:"",
       boxType:spec.boxType||"RSC",ply:spec.ply||5,
       flute_F1:spec.flute_F1||"B",flute_F2:spec.flute_F2||"A",
@@ -3153,7 +3132,6 @@ export default function App(){
     // Order: [ply+flutes] · [active specs] · [grades+gsm layers]
     return [`${ply}p${flutes}`,specs,gradesGSM].filter(Boolean).join(' · ');
   };
-  const CONSTR_SUMMARY=c=>constrAutoName(c);
 
   const batchEntryTab=(
     <div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
@@ -5350,9 +5328,6 @@ export default function App(){
     </div>
   );
 
-  // ── AI ASSIST PANEL ───────────────────────────────────────────────────────
-  // AI Assist panel — disabled. Variable kept to avoid reference errors at render site.
-  const aiPanel=null;
 
   // ── MAIN RENDER ───────────────────────────────────────────────────────────
   return(
@@ -5388,7 +5363,6 @@ export default function App(){
           {tab==="defaults"&&defaultsTab}
           {tab==="freight"&&freightTab}
           {tab==="users"&&role==="admin"&&<UserManagementTab showToast={showToast}/>}
-          {aiPanel}
         </div>
       </div>
     </div>
