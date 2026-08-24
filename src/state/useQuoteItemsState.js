@@ -8,18 +8,19 @@
 // byte-identical to the monolith; only the surrounding closure changed.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useRef, useState } from "react";
+import { getItem, setItem } from "../lib/persist.js";
 
 export function useQuoteItemsState(st){
   const { profile } = st;
 
-  const[items,setItems]=useState(()=>{try{const s=localStorage.getItem('cbb_quoteitems');return s?JSON.parse(s):[];}catch(e){return[];}}); // saved quote items
+  const[items,setItems]=useState(()=>{try{const s=getItem('cbb_quoteitems');return s?JSON.parse(s):[];}catch(e){return[];}}); // saved quote items
   const[savedQuotes,setSavedQuotes]=useState({}); // per-customer saved drafts
   const importRef=useRef(),templateRef=useRef(),restoreRef=useRef();
   // Lazy init rather than a mount effect: setting state inside useEffect on
   // mount triggers a second render and trips react-hooks/set-state-in-effect.
   // Mirrors how templateB64 below already reads the same key.
   const[templateLoaded,setTemplateLoaded]=useState(()=>{
-    try{return !!localStorage.getItem('cbb_template');}catch(e){return false;}
+    try{return !!getItem('cbb_template');}catch(e){return false;}
   });
   const today=new Date().toISOString().split('T')[0];
   const[quoteDate,setQuoteDate]=useState(today);
@@ -30,8 +31,8 @@ export function useQuoteItemsState(st){
     return`QR-${String(d.getFullYear()).slice(-2)}${String(d.getMonth()+1).padStart(2,"0")}-001`;
   });
   const makerName=profile?.display_name||""; // sourced from the logged-in account, not free text
-  const[templateB64,setTemplateB64]=useState(()=>{try{return localStorage.getItem('cbb_template')||null;}catch(e){return null;}});
-  useEffect(()=>{try{localStorage.setItem('cbb_quoteitems',JSON.stringify(items));}catch(e){}},[items]);
+  const[templateB64,setTemplateB64]=useState(()=>{try{return getItem('cbb_template')||null;}catch(e){return null;}});
+  useEffect(()=>{try{setItem('cbb_quoteitems',JSON.stringify(items));}catch(e){}},[items]);
 
   return { effectiveFrom, effectiveTo, importRef, items, makerName, quoteDate, quoteRef, restoreRef, savedQuotes, setEffectiveFrom, setEffectiveTo, setItems, setQuoteDate, setQuoteRef, setSavedQuotes, setTemplateB64, setTemplateLoaded, templateB64, templateLoaded, templateRef, today };
 }

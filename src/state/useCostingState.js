@@ -9,11 +9,26 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState } from "react";
 import { INIT_SPEC } from "../data/defaults.js";
+import { getItem } from "../lib/persist.js";
 
 export function useCostingState(){
+  // CROSS-SLICE COUPLING, deliberate and load-bearing.
+  //
+  // This seeds plant/delivery from the batch profile by reading
+  // cbb_batchprofile via getItem() DIRECTLY, rather than from
+  // batchProfile state. That is not an oversight and must not be "cleaned up"
+  // into a state read: useCostingState composes BEFORE useBatchState (see
+  // AppStateProvider.jsx), so batchProfile does not exist yet at this point.
+  // The storage read is the only way this initialiser can see the profile.
+  //
+  // Verbatim from the monolith, so not a Phase 4 regression - but in the
+  // monolith it was one useState among many and read as incidental. Here it is
+  // a real dependency from the costing slice onto the batch slice's storage
+  // key, and it is why cbb_batchprofile cannot move to Supabase (plan item 4c
+  // / the persist seam) without revisiting this initialiser.
   const[spec,setSpec]=useState(()=>{
     try{
-      const bp=JSON.parse(localStorage.getItem('cbb_batchprofile')||'{"plant":"","delivery":""}');
+      const bp=JSON.parse(getItem('cbb_batchprofile')||'{"plant":"","delivery":""}');
       return{...INIT_SPEC,plant:bp.plant||"",delivery:bp.delivery||""};
     }catch(e){return{...INIT_SPEC,plant:"",delivery:""};}
   });

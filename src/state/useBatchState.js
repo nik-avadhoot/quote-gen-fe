@@ -8,13 +8,14 @@
 // byte-identical to the monolith; only the surrounding closure changed.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useState } from "react";
+import { getItem, setItem } from "../lib/persist.js";
 
 export function useBatchState(st){
   const { constructionLib, sectorCodes, setTab, showToast } = st;
 
   // ── BATCH ENTRY STATE ─────────────────────────────────────────────────────
   const[batchProfile,setBatchProfile]=useState(()=>{
-    try{const s=localStorage.getItem('cbb_batchprofile');return s?JSON.parse(s):{
+    try{const s=getItem('cbb_batchprofile');return s?JSON.parse(s):{
       client:'',sector:'',plant:'',delivery:'',
       margin:8,marginPP:8,interest:0.5,paymentDisc:'30',freightOverride:'',
       waste:5,convRate:7,wastePP:5,convRatePP:12.5,customerType:'existing',priceContext:'unknown',
@@ -23,13 +24,13 @@ export function useBatchState(st){
       waste:5,convRate:7,wastePP:5,convRatePP:12.5,customerType:'existing',priceContext:'unknown'};}
   });
   // Persist batchProfile on every change
-  useEffect(()=>{try{localStorage.setItem('cbb_batchprofile',JSON.stringify(batchProfile));}catch(e){};},[batchProfile]);
+  useEffect(()=>{try{setItem('cbb_batchprofile',JSON.stringify(batchProfile));}catch(e){};},[batchProfile]);
   const[pinnedAddOns,setPinnedAddOns]=useState(()=>{
-    try{const s=localStorage.getItem('cbb_pinned_addons');return s?JSON.parse(s):[];}catch(e){return[];}
+    try{const s=getItem('cbb_pinned_addons');return s?JSON.parse(s):[];}catch(e){return[];}
   });
   const togglePinAddOn=(k)=>setPinnedAddOns(prev=>{
     const next=prev.includes(k)?prev.filter(x=>x!==k):[...prev,k].slice(-2);
-    try{localStorage.setItem('cbb_pinned_addons',JSON.stringify(next));}catch(e){}
+    try{setItem('cbb_pinned_addons',JSON.stringify(next));}catch(e){}
     return next;
   });
   // expandedRows: set of row ids that have sub-row open
@@ -53,7 +54,7 @@ export function useBatchState(st){
   // Must be declared AFTER batchRows and batchProfile (both used in dep array).
   const[autosaveBanner,setAutosaveBanner]=useState(()=>{
     try{
-      const s=localStorage.getItem('cbb_batch_autosave');
+      const s=getItem('cbb_batch_autosave');
       if(!s)return null;
       const{ts,rows}=JSON.parse(s);
       // Fix ④: extended to 7 days (10080 min). Friday→Monday is 72h; was 480 min (8h).
@@ -70,16 +71,16 @@ export function useBatchState(st){
     // Only write if current rows are non-empty AND >= the saved row count (or no prior save exists).
     if(!batchRows.length){
       try{
-        const prev=localStorage.getItem('cbb_batch_autosave');
+        const prev=getItem('cbb_batch_autosave');
         if(prev){const{rows}=JSON.parse(prev);if(rows?.length>0)return;}
       }catch(e){}
     }
-    try{localStorage.setItem('cbb_batch_autosave',JSON.stringify({
+    try{setItem('cbb_batch_autosave',JSON.stringify({
       ts:Date.now(),rows:batchRows,profile:batchProfile}));}catch(e){}
   },[batchRows,batchProfile]);
   const restoreAutosave=()=>{
     try{
-      const s=localStorage.getItem('cbb_batch_autosave');
+      const s=getItem('cbb_batch_autosave');
       if(!s)return;
       const{rows,profile}=JSON.parse(s);
       if(rows?.length)setBatchRows(rows);

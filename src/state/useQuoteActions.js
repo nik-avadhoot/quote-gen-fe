@@ -18,6 +18,7 @@ import { applyAddOns, isPPType } from "../engine/rowType.js";
 import { parseImportedExcel } from "../export/importExcel.js";
 import { toB64 } from "../export/toB64.js";
 import { C } from "../theme.js";
+import { getItem, setItem } from "../lib/persist.js";
 
 export function useQuoteActions(st){
   const { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchProfile, batchResults, batchRows, boxTrim, constructionLib, freight, items, locations, missing, partitionsMaster, r, rates, restoreRef, sectors, setActiveBatchRowId, setAiNotes, setAutoCodeSeq, setBatchResults, setBatchRows, setConstructionLib, setItems, setSavedQuotes, setSetAutoFill, setSpec, setSpecCommitted, setTab, setTemplateB64, setTemplateLoaded, showToast, spec } = st;
@@ -33,7 +34,7 @@ export function useQuoteActions(st){
 
   const handleBackup=()=>{
     const snap={_version:1,_ts:new Date().toISOString()};
-    BACKUP_KEYS.forEach(k=>{try{const v=localStorage.getItem(k);if(v!=null)snap[k]=JSON.parse(v);}catch(e){snap[k]=null;}});
+    BACKUP_KEYS.forEach(k=>{try{const v=getItem(k);if(v!=null)snap[k]=JSON.parse(v);}catch(e){snap[k]=null;}});
     // Also include current in-memory state for anything not yet flushed to localStorage
     snap.cbb_rates=rates;
     snap.cbb_freight=freight;
@@ -73,7 +74,7 @@ export function useQuoteActions(st){
             // JSON.stringify("abc") produces '"abc"' — the surrounding quotes corrupt base64
             // and string values. Only stringify objects/arrays; pass strings through as-is.
             const v=typeof snap[k]==='string'?snap[k]:JSON.stringify(snap[k]);
-            localStorage.setItem(k,v);
+            setItem(k,v);
           }catch(err){}
         }
       });
@@ -394,7 +395,7 @@ export function useQuoteActions(st){
     const b64=await toB64(file);
     setTemplateB64(b64);
     setTemplateLoaded(true);
-    try{localStorage.setItem('cbb_template',b64);}catch(e){} // persist across refreshes if possible
+    try{setItem('cbb_template',b64);}catch(e){} // persist across refreshes if possible
     setAiNotes('✅ Master template loaded. All Excel exports will now use your master format with formulas and formatting intact.');
     e.target.value='';
   };

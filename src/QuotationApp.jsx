@@ -23,6 +23,7 @@ import { C, mono, sans } from "./theme.js";
 // ── State layer (Phase 4 refactor) ────────────────────────────────────────
 import { AppStateProvider } from "./state/AppStateProvider.jsx";
 import { useAppState } from "./state/AppStateContext.js";
+import { setItem } from "./lib/persist.js";
 
 /* ═══ MAIN APP ═════════════════════════════════════════════════════════════ */
 
@@ -3035,7 +3036,7 @@ function QuotationApp(){
           {role==="admin"&&<button onClick={()=>{
             const fresh={...DEFAULT_BOX_TRIM_DATA};
             setBoxTrim(fresh);
-            try{localStorage.setItem('cbb_boxtrim',JSON.stringify(fresh));}catch(e){}
+            try{setItem('cbb_boxtrim',JSON.stringify(fresh));}catch(e){}
             }} style={{padding:"4px 12px",borderRadius:5,border:`1px solid ${C.border}`,
               background:C.white,color:C.slateM,fontSize:11,cursor:"pointer",fontWeight:600}}>
             ↺ Reset to Defaults</button>}

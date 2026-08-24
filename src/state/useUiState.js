@@ -11,14 +11,15 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
+import { getItem, setItem } from "../lib/persist.js";
 
 export function useUiState(){
   const{profile,signOut}=useAuth();
   const role=profile?.role||"maker"; // maker | admin | checker — sourced from the logged-in account
   const[showChangePassword,setShowChangePassword]=useState(false);
   const[showProfile,setShowProfile]=useState(false);
-  const[sidebarCollapsed,setSidebarCollapsed]=useState(()=>localStorage.getItem('qgos_sidebar_collapsed')==='1');
-  useEffect(()=>{try{localStorage.setItem('qgos_sidebar_collapsed',sidebarCollapsed?'1':'0');}catch(e){}},[sidebarCollapsed]);
+  const[sidebarCollapsed,setSidebarCollapsed]=useState(()=>getItem('qgos_sidebar_collapsed')==='1');
+  useEffect(()=>{try{setItem('qgos_sidebar_collapsed',sidebarCollapsed?'1':'0');}catch(e){}},[sidebarCollapsed]);
   const[tab,setTab]=useState("costing");
   const[newLocation,setNewLocation]=useState("");
   const[newGrade,setNewGrade]=useState({code:"",desc:"",price:"",disc:1.5});

@@ -27,6 +27,7 @@ import { CREDIT_PCT, TAKEUP, TRIM, PLANTS, LOCATIONS } from "../data/defaults.js
 import { getTrimD } from "../engine/costing.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
 import { apiFetch } from "../lib/apiClient.js";
+import { getItem } from "../lib/persist.js";
 
 const exportExcelFull=(items,rates,freight)=>{
   const wb=XLSX.utils.book_new();
@@ -171,7 +172,7 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
 
   // Fallback: xlsx-js-style template clone
   let tmplB64=templateB64Arg;
-  if(!tmplB64){try{tmplB64=localStorage.getItem('cbb_template');}catch(e){}}
+  if(!tmplB64){try{tmplB64=getItem('cbb_template');}catch(e){}}
   if(!tmplB64){exportExcelFull(items,rates,freight);return;}
 
   // Decode to ArrayBuffer
