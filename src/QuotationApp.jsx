@@ -18,6 +18,10 @@ import { exportAllPDF } from "./export/pdf.js";
 import { Inp, Sel, Btn, SH, KN } from "./ui/primitives.jsx";
 import { inputSt } from "./ui/styles.js";
 import BoxDieline from "./components/BoxDieline.jsx";
+import { STATUS_DISPLAY, constrAutoName } from "./lib/constructionName.js";
+
+// ── Tabs (Phase 6 refactor) ───────────────────────────────────────────────
+import FreightTab from "./tabs/FreightTab.jsx";
 import { C, mono, sans } from "./theme.js";
 
 // ── State layer (Phase 4 refactor) ────────────────────────────────────────
@@ -55,7 +59,7 @@ function QuotationApp(){
     getBatchRowStatus, gradeCodes, gyPremHigh, gyPremLow, handleBackup, handleRestore,
     handleRestoreFile, handleTemplateLoad, importConstrFromSpec, invalidateAllBatchResults,
     invalidateBatchRow, items, loadBatchRowIntoCosting, loadItem, locations, makerName,
-    marginSugg, missing, newGrade, newLocation, newSector, osSaving, partitionsMaster,
+    marginSugg, missing, newGrade, newSector, osSaving, partitionsMaster,
     pinnedAddOns, pushCostingToBatchRow, quoteDate, quoteRef, r, rateUpdatedAt, rates,
     removeItem, restoreAutosave, restoreRef, role, s, savedQuotes, sectorCodes, sectors,
     sendAllToQuoteItems, sendCostingToBatch, setActiveBatchRowId, setAiNotes,
@@ -63,9 +67,8 @@ function QuotationApp(){
     setBatchConstrOverlayFilter, setBatchConstrOverlayQuery, setBatchConstrTargetRowId,
     setBatchProfile, setBatchResults, setBatchRows, setBlanketDisc, setBlanketInterest,
     setBoxTrim, setClTabExpandedConstr, setClTabFilter, setClTabQuery, setConstructionLib,
-    setCostingContext, setEffectiveFrom, setEffectiveTo, setExpandedRows, setFreight,
-    setFreightBands, setGyPremHigh, setGyPremLow, setItems, setLocations, setNewGrade,
-    setNewLocation, setNewSector, setPartitionsMaster, setQuoteDate, setQuoteRef, setRates,
+    setCostingContext, setEffectiveFrom, setEffectiveTo, setExpandedRows, setFreightBands, setGyPremHigh, setGyPremLow, setItems, setNewGrade,
+    setNewSector, setPartitionsMaster, setQuoteDate, setQuoteRef, setRates,
     setSavedQuotes, setSectors, setSetAutoFill, setShowChangePassword, setShowProfile,
     setSidebarCollapsed, setSpec, setSpecCommitted, setTab, showChangePassword, showProfile,
     showToast, sidebarCollapsed, spec, specCommitted, specForNewBatch, specFromProfile, tab,
@@ -1102,38 +1105,6 @@ function QuotationApp(){
   // ── QUOTE ITEMS TAB ───────────────────────────────────────────────────────
 
   // ── BATCH ENTRY TAB ───────────────────────────────────────────────────────
-  const STATUS_DISPLAY={
-    "incomplete":{icon:"🔴",label:"Incomplete",col:C.red},
-    "draft-uncalc":{icon:"⚪",label:"Not calculated",col:C.slateL},
-    "stale":{icon:"🔄",label:"Stale — recalculate",col:"#E8830A"},
-    "draft":{icon:"🟡",label:"Draft",col:C.amberD},
-    "reviewed":{icon:"🟢",label:"Reviewed",col:C.green},
-    "override":{icon:"🔵",label:"Override",col:"#2E6094"},
-    "spec-gap":{icon:"⚠️",label:"Spec gap",col:C.red},
-  };
-  // Spec-derived construction name — includes all applicable output parameters
-  // Format: [Ply][Flutes] · [ActiveSpecs: GSM/BS/BCT/ECT/Cobb] · [PaperGrades/GSM layers]
-  const constrAutoName=(c)=>{
-    const ply=c.ply||5;
-    const flutes=`${c.flute_F1||'B'}${ply===5&&c.flute_F2?c.flute_F2:''}`;
-    const bfLayers=[c.layers?.TOP?.code,c.layers?.F1?.code,c.layers?.L1?.code,
-      ...(ply===5?[c.layers?.F2?.code,c.layers?.L2?.code]:[])].filter(Boolean);
-    const bfStr=bfLayers.length?bfLayers.join('/'):'—';
-    // Layer GSM summary e.g. 180/150/180/150/180
-    const gsmLayers=[c.layers?.TOP?.gsm,c.layers?.F1?.gsm,c.layers?.L1?.gsm,
-      ...(ply===5?[c.layers?.F2?.gsm,c.layers?.L2?.gsm]:[])].filter(Boolean);
-    const gsmStr=gsmLayers.length?gsmLayers.join('/'):null;
-    const gradesGSM=[bfStr,gsmStr].filter(Boolean).join(' ');
-    // Active specs (board-level)
-    const gsm=c.board_gsm&&+c.board_gsm>0?`${+c.board_gsm}gsm`:'';
-    const bs=c.spec_bs&&+c.spec_bs>0?`BS${(+c.spec_bs).toFixed(1)}`:'';
-    const bct=c.spec_bct&&+c.spec_bct>0?`BCT${(+c.spec_bct).toFixed(0)}`:'';
-    const ect=c.spec_ect&&+c.spec_ect>0?`ECT${(+c.spec_ect).toFixed(1)}`:'';
-    const cobb=c.spec_cobb&&+c.spec_cobb>0?`Cobb≤${+c.spec_cobb}`:'';
-    const specs=[gsm,bs,bct,ect,cobb].filter(Boolean).join(' ');
-    // Order: [ply+flutes] · [active specs] · [grades+gsm layers]
-    return [`${ply}p${flutes}`,specs,gradesGSM].filter(Boolean).join(' · ');
-  };
 
   const batchEntryTab=(
     <div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
@@ -3278,67 +3249,6 @@ function QuotationApp(){
     </div>
   );
   // ── FREIGHT RATES TAB ─────────────────────────────────────────────────────
-  const freightTab=(
-    <div style={{padding:20,overflowY:"auto",height:"100%"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <div>
-          <div style={{fontSize:16,fontWeight:700,color:C.slate,marginBottom:2}}>Freight Rate Matrix</div>
-          <div style={{fontSize:11,color:C.slateL}}>Rs/kg from plant to delivery location. 3 plants: Nagpur · Pune · Kolkata</div>
-        </div>
-        {role==="admin"
-          ?<span style={{fontSize:11,color:C.green,fontWeight:600}}>⚙ Admin — add/edit/delete enabled</span>
-          :<span style={{fontSize:11,color:C.slateL}}>Switch to Admin to edit</span>}
-      </div>
-      {role==="admin"&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,
-        padding:"10px 12px",background:C.cream,borderRadius:7,border:`1px solid ${C.border}`}}>
-        <span style={{fontSize:11,fontWeight:600,color:C.slateM}}>Add Location:</span>
-        <input value={newLocation} onChange={e=>setNewLocation(e.target.value)}
-          placeholder="e.g. Surat" style={{padding:"5px 9px",borderRadius:5,
-            border:`1px solid ${C.border}`,fontSize:12,width:140}}/>
-        <Btn ch="+ Add Row" v="success" sm disabled={!newLocation||locations.includes(newLocation)}
-          onClick={()=>{
-            setLocations(prev=>[...prev,newLocation]);
-            setFreight(prev=>{const nf={...prev};
-              PLANTS.forEach(p=>{nf[p]={...(nf[p]||{}),[newLocation]:0};});return nf;});
-            setNewLocation("");}}/>
-        <span style={{fontSize:10,color:C.slateL}}>Click cell to edit rates. × to delete a row.</span>
-      </div>}
-      <table style={{borderCollapse:"collapse",fontSize:12}}>
-        <thead><tr>
-          <th style={{padding:"7px 14px",background:C.slateM,color:C.white,textAlign:"left",
-            fontSize:10,fontWeight:600,minWidth:140}}>Delivery ↓ / Plant →</th>
-          {PLANTS.map(p=><th key={p} style={{padding:"7px 14px",background:C.amber,color:C.white,
-            fontSize:10,fontWeight:600,minWidth:96,textAlign:"center"}}>{p}</th>)}
-          {role==="admin"&&<th style={{padding:"7px 8px",background:C.slateM,color:"transparent",
-            fontSize:10,width:30}}> </th>}
-        </tr></thead>
-        <tbody>{locations.map((loc,li)=>(
-          <tr key={loc} style={{background:li%2?C.cream:C.white}}>
-            <td style={{padding:"5px 14px",fontWeight:600,color:C.slateM}}>{loc}</td>
-            {PLANTS.map(plant=>(
-              <td key={plant} style={{padding:"3px 8px",textAlign:"center"}}>
-                {role==="admin"
-                  ?<input type="number" step="0.5" value={freight[plant]?.[loc]??0}
-                     onChange={e=>setFreight(prev=>({...prev,[plant]:{...(prev[plant]||{}),[loc]:+e.target.value}}))}
-                     style={{width:68,padding:"3px 6px",border:`1px solid ${C.border}`,borderRadius:4,
-                       fontSize:12,textAlign:"center",fontFamily:mono}}/>
-                  :<span style={{fontFamily:mono,color:C.slateM,fontSize:12}}>{freight[plant]?.[loc]??0}</span>}
-              </td>))}
-            {role==="admin"&&<td style={{padding:"3px 4px",textAlign:"center"}}>
-              <button onClick={()=>{
-                  setLocations(prev=>prev.filter(l=>l!==loc));
-                  setFreight(prev=>{const nf={...prev};
-                    PLANTS.forEach(p=>{const pl={...(nf[p]||{})};delete pl[loc];nf[p]=pl;});return nf;});}}
-                style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>
-            </td>}
-          </tr>))}
-        </tbody>
-      </table>
-      {role!=="admin"&&<div style={{marginTop:10,fontSize:11,color:C.amberD,
-        padding:"7px 10px",background:"#FFF8ED",borderRadius:6}}>
-        Switch to Admin role to add, edit or delete locations.</div>}
-    </div>
-  );
 
 
   // ── MAIN RENDER ───────────────────────────────────────────────────────────
@@ -3373,7 +3283,7 @@ function QuotationApp(){
           {tab==="constrlib"&&constructionLibTab}
           {tab==="rates"&&rateTab}
           {tab==="defaults"&&defaultsTab}
-          {tab==="freight"&&freightTab}
+          {tab==="freight"&&<FreightTab/>}
           {tab==="users"&&role==="admin"&&<UserManagementTab showToast={showToast}/>}
         </div>
       </div>
