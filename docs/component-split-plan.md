@@ -134,7 +134,7 @@ change. Hence the rule now in the decisions table.
 | 4 | ✅ **D-1 Glass SKU Type** | forward leg written; user verifies on a restored surface |
 | 4b | 🚨 **D-5 autosave overwrite** | **BETA BLOCKER — jumps the queue.** Propose before writing |
 | 4c | **buildSpecFromRow return leg** | own commit |
-| 4d | **KEYS registry + D-3 + two cosmetics** | own commit, proposal first |
+| 4d | **KEYS registry + D-3 + D-6 + two cosmetics** | own commit, proposal first |
 | 5 | Phase 5 — memoise `useCostingResult` | |
 | 6 | Phase 6 — leaf tabs | 6c needs the persist wrapper already in place |
 | 7 | Phase 7 — prerequisite commit lifts New Batch | **D-2 fixed there** |
@@ -192,8 +192,26 @@ import directly into Node.
    adds 1. *(An earlier draft of this plan labelled the 118 figure as the `eslint src` total — it was
    the single-file count. Corrected in Phase 0.)* Any *new* rule violation in
    a later phase is a regression.
-3. Click **⬇ Backup**; keep the JSON as a data fixture.
-4. Export one Excel (backend up) and one PDF; keep both for byte comparison.
+3. ~~Click **⬇ Backup**; keep the JSON as a data fixture.~~ **NEVER CAPTURED.**
+4. ~~Export one Excel (backend up) and one PDF; keep both for byte comparison.~~ **NEVER CAPTURED.**
+
+> 🛑 **Phase 0 produced TWO artifacts, not four. Do not cite four.**
+>
+> | # | Artifact | Status |
+> |---|---|---|
+> | 1 | `scripts/costing-fixtures.mjs` + `costing-golden.json` | ✅ real — has gated every phase |
+> | 2 | `scripts/eslint-baseline.txt` | ✅ real — diffed at every gate |
+> | 3 | Backup JSON data fixture | ❌ never captured |
+> | 4 | Excel + PDF reference exports | ❌ never captured |
+>
+> No `CFB_QOS_Backup_20260823.json` exists on disk. This did not cost anything, because the golden
+> numbers come from the Node harness rather than any backup, and that check has carried every phase
+> — including reproducing all five goldens through the UI on real data.
+>
+> This is the **second** Phase 0 artifact softer than assumed. The first was that a Phase 0 backup
+> would have been **partial anyway**, since D-3 silently drops `cbb_template` and `cbb_rate_date`.
+> The lesson is the one already in the decisions table: **capability is demonstrated, not
+> described** — an artifact nobody has opened is not an artifact.
 
 The harness covers the engine. It does **not** cover the UI or bridge guards — those need the
 negative-case checks in the Phase 4 hard stop, all four of which are manual.
@@ -955,6 +973,29 @@ consented to four things and lost five.
 >
 > **Propose options then, not now** — add the scratchpad to the confirm text; preserve the spec and
 > clear only the batch; or offer a third choice. The user decides.
+
+### D-6 — Backup filenames cannot distinguish two snapshots from the same day
+
+`state/useQuoteActions.js`, in `handleBackup`:
+
+```js
+a.download=`CFB_QOS_Backup_${d.getFullYear()}${MM}${DD}.json`;
+```
+
+No time component. Every backup taken on the same day gets an identical filename. Nothing is
+overwritten — the browser saves the second as `…(1).json` — but **provenance becomes guesswork
+within hours.**
+
+Not hypothetical: it is exactly the confusion that arose during D-5 recovery. A `20260824` file
+timestamped 09:14 turned out to be masters-only (0 rows, 0 items, 0 constructions), while the
+restore that had actually populated the test pane came from something else. With only a date in the
+name there was no way to tell the two apart from the filesystem.
+
+Low severity and a trivial fix — add `HHMM`, or use the `_ts` already written inside the file. But
+**the entire safety story for this refactor rests on these files**, and a name that cannot separate
+two snapshots taken an hour apart undermines it.
+
+> **Fix window: the KEYS-registry / backup commit, alongside D-3.** Same file, same concern.
 
 ### D-4 — Identity freeze is lost on reload while the batch survives
 
