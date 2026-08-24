@@ -940,6 +940,62 @@ overwrite: `cbb_template`, `cbb_rate_date`, `cbb_batch_autosave`. The loss is th
 > but the proposal must also answer what happens to backup files **already written with nulls in
 > them**. Do not fix before then; pre-existing, not a refactor regression.
 
+### D-9 — Selecting a sector silently converts inheritance into an override
+
+Pre-existing, in Costing's spec form. **Not a Phase 6 regression** — nothing in the split touched it.
+
+Selecting a sector writes that sector's defaults straight into `spec`
+(`QuotationApp.jsx:193–194`):
+
+```js
+setSpec(p=>({...p, sector:v,
+  ...(sd?{waste:sd.wasteCBB, convRate:sd.convBox,
+          wastePP:sd.wastePP, convRatePP:sd.convPP}:{})}))
+```
+
+That contradicts the design stated ~200 lines below in `numField`: *"Input stays blank = inherit.
+Explicit entry = override (amber border)."* The field now holds a literal number, so by the app's own
+definition it **is** an override.
+
+**It does not look like one.** The override indicators `_isOvW`/`_isOvC` require
+`+spec[key] !== +_effWaste`, and immediately after selection those are equal — no amber border, no
+`↑` marker. A silent override presenting as inheritance.
+
+#### Two documented guarantees break
+
+**1. Liveness.** `useCostingResult`'s own comment: *"resolved fresh here (not baked into spec) so it
+stays live if sector changes."* Once copied in, the value is frozen — edit that sector in Defaults
+and Costing keeps the stale number.
+
+**2. Batch Profile authority — the sharper one.** The `_hasCommittedBatch` branching exists so the
+Batch Profile is authoritative for waste/conv once a batch exists. That only works while the spec
+field is **blank**. Sector selection fills it, so the spec value wins and the profile is silently
+bypassed. A Maker believes the Batch Profile governs their batch; it does not.
+
+#### Does NOT break Case 4
+An explicit `0` differs from the sector default, so it flags amber and behaves correctly. But it does
+mean **"blank = inherit" almost never occurs in normal use**, so the inherit path — the one Case 4
+exercises — is largely untested in practice.
+
+#### The full write-site set must be derived before any fix
+Two contradictory conventions already coexist. A partial fix produces inconsistent behaviour between
+paths, which is worse than the current uniform wrongness. Sites seen so far, **not an exhaustive
+survey**:
+
+| Site | Shape |
+|---|---|
+| `QuotationApp.jsx:193–194` | Costing sector `<Sel>` — copies sector defaults into `spec` (**the reported case**) |
+| `QuotationApp.jsx:1138–1139` | Batch Profile sector `<select>` — same copy shape, into `batchProfile` |
+| `QuotationApp.jsx:1331–1332` | `spec.waste ?? p.waste ?? 5` — coalescing fallback, a third shape |
+| `useCostingBatchBridge.js:83` | `waste:"", convRate:"", wastePP:"", convRatePP:""` — **blank = inherit, done correctly** |
+
+> **Severity: HIGH.** Not data loss (D-5) nor wrong-quote-by-typo (D-8), but it **silently defeats a
+> documented authority model.**
+
+> **NO FIX WINDOW. Do not propose a fix.** Post-Phase-8 this needs a product decision first: should
+> selecting a sector pre-fill visible values (arguably friendlier) or leave them blank with the
+> default shown as placeholder (what the design says)? That is a domain question, not a code one.
+
 ### D-8 — 🚨 BETA BLOCKER — unguarded master-data edits (CATEGORY, not one bug)
 
 **A different class from D-1…D-7.** Those are code not matching intent. This is **intent that was
