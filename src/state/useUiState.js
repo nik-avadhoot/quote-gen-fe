@@ -3,7 +3,7 @@
 //
 // App chrome + transient tab-local UI state.
 // Must be composed FIRST: showToast is referenced by handlers across every
-// other slice. newGrade/newSector and the clTab* trio live here
+// other slice. newSector and the clTab* trio live here
 // only until Phase 6 makes them local state inside their extracted tabs.
 //
 // Extracted verbatim from QuotationApp.jsx (Phase 4). The bodies below are
@@ -21,7 +21,6 @@ export function useUiState(){
   const[sidebarCollapsed,setSidebarCollapsed]=useState(()=>getItem('qgos_sidebar_collapsed')==='1');
   useEffect(()=>{try{setItem('qgos_sidebar_collapsed',sidebarCollapsed?'1':'0');}catch(e){}},[sidebarCollapsed]);
   const[tab,setTab]=useState("costing");
-  const[newGrade,setNewGrade]=useState({code:"",desc:"",price:"",disc:1.5});
   const[toasts,setToasts]=useState([]);
   const showToast=(msg,type='success',dur=2800)=>{
     const id=Date.now();
@@ -33,5 +32,5 @@ export function useUiState(){
   const[clTabExpandedConstr,setClTabExpandedConstr]=useState(null);
   const[newSector,setNewSector]=useState({code:"",name:"",wasteCBB:5,wastePP:5,convBox:7,convPP:12.5,specLang:"BS"});
 
-  return { clTabExpandedConstr, clTabFilter, clTabQuery, newGrade, newSector, profile, role, setClTabExpandedConstr, setClTabFilter, setClTabQuery, setNewGrade, setNewSector, setShowChangePassword, setShowProfile, setSidebarCollapsed, setTab, setToasts, showChangePassword, showProfile, showToast, sidebarCollapsed, signOut, tab, toasts };
+  return { clTabExpandedConstr, clTabFilter, clTabQuery, newSector, profile, role, setClTabExpandedConstr, setClTabFilter, setClTabQuery, setNewSector, setShowChangePassword, setShowProfile, setSidebarCollapsed, setTab, setToasts, showChangePassword, showProfile, showToast, sidebarCollapsed, signOut, tab, toasts };
 }
