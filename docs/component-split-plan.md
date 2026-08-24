@@ -48,6 +48,7 @@ Goal: real components, one mounted tab at a time, with a shared state layer — 
 | UI verification | **Cannot be automated. Permanently the user's.** See *Standing constraint* below — schedule around it, do not rediscover it at each gate |
 | Defects | 🛑 **RECORD, DON'T FIX — until Phase 8 lands.** Register the defect with severity and a reachability note, then stop. No fix, no proposal, no fix window. **Do not ask whether to fix it; the answer is no.** Only exception: something that blocks *the split itself* — say so once and stop |
 | Capability | **Demonstrated, not described.** Before either party plans around something working, one of us produces it. Covers tool capabilities and covers reporting a check as run |
+| Assertions | **Read them from the source or the rendered output — never write them from expectation.** Twice this refactor a check list asserted behaviour that was never true (label propagation; PDF wording), and the code was right both times. A wrong assertion costs a false failure or, worse, a false pass |
 | Asking | **Ask, then WAIT.** If a question is worth asking before acting, it is worth not acting until it is answered. Raising a concern and proceeding anyway is not asking — it is narrating |
 
 ### Standing constraint — UI verification is the user's, always
@@ -972,6 +973,11 @@ divergence is real but is **not** what produced these rows.
 | 3 | `ConstructionLibTab.jsx:264` — tab's inline `importConstrFromSpec` | 6 fields: STDs + **spec_cobb** + **sector** |
 | 4 | `ConstructionLibTab.jsx:196` — **"+ New Construction"** | **NONE.** Appends a blank entry unconditionally |
 
+> 🛑 **THE OBVIOUS FIX FIXES NOTHING OBSERVABLE.** "The two predicates disagree" reads as
+> *"unify the two `importConstrFromSpec` copies"* — and that leaves **path 4 untouched**, which is
+> the path most likely producing the duplicates. Do the work, and the library keeps duplicating.
+> This is the trap to avoid.
+
 **Path 4 is the unguarded one.** It creates a blank row which the user fills in afterwards, so no
 check is possible at creation and none happens later. Any construction built this way that matches
 an existing one becomes a permanent duplicate — the most probable origin of the observed groups, and
@@ -980,6 +986,23 @@ it requires no predicate disagreement at all.
 **Second duplicate-producing route, by design:** the bridge's STD-tier prompt (`:425–444`) offers
 *"OK = Reuse [X] — your Costing paper grades are discarded"*. **Cancel** means "keep my grades",
 which creates a new entry.
+
+#### TWO COMPETING HYPOTHESES — equal standing, BOTH UNTESTED
+
+Whoever investigates after Phase 8 **must test both**. Neither is proven.
+
+**Hypothesis A — path 4, the unguarded blank-create.** "+ New Construction" appends a blank entry
+the user then fills in. Explains a duplicate arising from manual entry.
+*Weakness:* it explains a filled-in-later entry, but explains **poorly** why G/U/V/W are identical
+on **every** field. That pattern fits a fully-formed duplicate created in one action, not four
+independent manual fill-ins converging exactly.
+
+**Hypothesis B — session boundaries breaking the match-back.** Batch Entry → Deep Dive → Costing
+rehydrates a spec that came FROM an existing construction. If the send path then fails to match it
+back — across a reload, a session restore, or a `costingContext` change — Costing creates a new
+construction that is an **exact copy** of the one the row already pointed at.
+*Strength:* fits the evidence better. Identical on every field, clustered in pairs and groups, and
+reachable through the workflow used constantly (Deep Dive → edit → send).
 
 #### The predicate divergence is real and still a defect — just not this one
 Overlap between tab and bridge is only the four STD fields. Each compares five the other ignores, so
@@ -1009,6 +1032,26 @@ bug "Fix 14" corrected for the letters.
 > **NO FIX WINDOW. Do not propose a fix.** Resolution needs a product decision on what *constitutes*
 > the same construction — whether sector/client are identity or metadata, and whether layers must
 > match or only board specs.
+
+#### Provenance, not timestamps — what the register actually needs
+
+⚠️ **A `createdAt` timestamp alone would NOT distinguish hypothesis A from B.** Both produce an entry
+at some time; neither is identifiable by when it appeared.
+
+**The requirement is recording WHICH PATH wrote the entry** — path 4 blank-create vs bridge send vs
+tab import vs app-level import. A `createdVia` field (plus `createdAt` for ordering) is the cheap
+enabler that makes this decidable. **That is an enabler, not a fix** — it does not prevent a single
+duplicate.
+
+#### Cleaning the EXISTING duplicates is separate work
+
+Whatever gets built post-Phase-8 **prevents new duplicates. It does not remove the ones already
+there** — currently **6 of 24 entries across two groups** (G/U/V/W, O/T).
+
+Consolidating them needs a merge tool or manual work, and it is not just the library: **every batch
+row and quote item pointing at a duplicate code has to be repointed**, or those rows resolve to an
+entry that no longer exists. Scope this as its own task. Otherwise it gets discovered after the
+prevention fix ships and the library still looks wrong.
 
 #### Not reproducible on demand from the current fixture
 A spec loaded via Deep Dive matches its own construction on all 9 fields, as expected — that test is
