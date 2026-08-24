@@ -800,11 +800,59 @@ to do. No backfill.
 reaches the backend, and `costing.js:213` is its only occurrence in the engine. Trivially safe.
 **Own commit**, separate from the forward leg.
 
+#### Test surface note — ALCOBEV is available
+
+The working data restored into the implementer's profile carries a batch profile on sector
+**ALCOBEV** with 23 construction entries. ALCOBEV is the Glass SKU sector, so this surface can
+actually exercise the D-1 path; the defaults surface could not (no constructions, no ALCOBEV
+batch). Useful accident — note it before choosing a different fixture.
+
 #### D-1-follow-up — seed the Box row (NOT part of the bugfix)
 Once send-ordering is properly understood, `sendCostingToBatch` could also seed the parent Box so the
 SET head becomes authoritative and every sibling Part inherits. Deferred deliberately: it expands
 `sendCostingToBatch` to write rows the user did not send, and it needs the ordering question answered
 first. **Enhancement, not bugfix. Do not build it as part of D-1.**
+
+### D-3 — Backup silently discards the two raw-string keys
+
+`handleBackup` (`state/useQuoteActions.js:37`):
+
+```js
+BACKUP_KEYS.forEach(k=>{try{const v=getItem(k);if(v!=null)snap[k]=JSON.parse(v);}catch(e){snap[k]=null;}});
+```
+
+`cbb_rate_date` holds a raw string (`"11 Aug 2026"`) and `cbb_template` holds raw base64. Neither is
+JSON, so `JSON.parse` throws, the catch writes `snap[k]=null`, and `handleRestoreFile:9`
+(`if(snap[k]!=null)`) skips nulls. The keys never round-trip.
+
+**The restore leg is already correct** — line 14 reads
+`typeof snap[k]==='string' ? snap[k] : JSON.stringify(snap[k])`, with a comment explaining that
+stringifying a string adds quotes and corrupts base64. Whoever fixed that leg did not fix backup.
+
+**Why exactly two keys and not three.** Lines 39–47 overwrite `snap` for nine keys from in-memory
+state *after* the loop, masking the line-37 failure for all of them. Only three keys escape that
+overwrite: `cbb_template`, `cbb_rate_date`, `cbb_batch_autosave`. The loss is the intersection of
+**raw-string AND not-overwritten** — the first two die, the third survives because it is JSON.
+
+**Detection signature:** an affected backup file literally contains `"cbb_template": null`. Existing
+files can be checked without restoring them.
+
+#### Severity — higher than `cbb_pinned_addons`
+* **Silent.** The exception is swallowed, the toast reports success, the file looks well-formed.
+* **`cbb_template` is the real cost.** Restore onto a fresh machine and the Excel master is gone, so
+  every export drops into `exportExcelFull` — the pre-existing `qty`/`locations` `ReferenceError`
+  from Phase 3. **A restored profile cannot export at all.**
+* `cbb_rate_date` is display-only (the "Rate Master last updated" string, written by
+  `touchRateDate()`, shown once in the Rate Master header). Nothing costing-related reads it.
+
+> **The Phase 0 backup was therefore never a complete snapshot — record it as a PARTIAL fixture.**
+> The golden numbers are unaffected: they come from the Node harness, not from any backup.
+
+> **Fix window: the KEYS-registry commit.** Same file, same backup/restore concern, already opening
+> for `cbb_pinned_addons`. One commit covers all three. **Propose before writing.** The obvious fix
+> mirrors line 14 into line 37 — attempt `JSON.parse`, fall back to the raw string rather than null —
+> but the proposal must also answer what happens to backup files **already written with nulls in
+> them**. Do not fix before then; pre-existing, not a refactor regression.
 
 ### D-2 — New Batch silently discards the Costing scratchpad
 
