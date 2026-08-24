@@ -46,6 +46,7 @@ Goal: real components, one mounted tab at a time, with a shared state layer — 
 | Commit discipline | **One concern per commit.** Structural moves and behaviour changes never share one |
 | Verification | **No phase commits with its own verification outstanding** — whether or not the plan spells out a hard stop for it. Phase 5 broke this rule; see below |
 | UI verification | **Cannot be automated. Permanently the user's.** See *Standing constraint* below — schedule around it, do not rediscover it at each gate |
+| Capability | **Demonstrated, not described.** Before either party plans around something working, one of us produces it. Covers tool capabilities and covers reporting a check as run |
 
 ### Standing constraint — UI verification is the user's, always
 
@@ -57,46 +58,53 @@ behaviour that the guards protect.**
 This is not a per-phase surprise. Each remaining phase below names which checks require a human at
 the browser. Plan the handoff into the phase rather than discovering it at the gate.
 
-#### Session handoff — how the implementer drives the UI at all
+#### Why the implementer cannot run UI checks — a property of the tools, not a temporary failure
 
-The implementer **cannot type a password into a login form** (standing prohibition covering
-passwords, keys and tokens; it does not relax for a low-privilege account). So credentials are never
-handed over. Instead: **the user logs in once, in the browser the implementer is driving.** The
-Supabase session persists in `localStorage` under `apiClient.js`'s own key, so it survives reloads
-and HMR, and the implementer drives the authenticated session without ever seeing the secret.
+Two independent blocks, both permanent:
 
-> That this works at all is a side effect of scoping `apiClient.js` **out** of the persist seam in
-> 4c — the auth session was excluded because it is not part of the `cbb_*` data model. Unplanned
-> benefit, worth not undoing later.
+**1. No password entry.** A standing prohibition covers passwords, keys and tokens. It does not relax
+for a low-privilege or throwaway account, so credentials are never handed over and the implementer
+cannot authenticate itself.
 
-**Isolation: a separate browser profile. NOT Backup-first.**
-`localStorage` is per-origin **per browser profile**, so a second Chrome profile pointed at
-`localhost:5173`, logged in once, gives the implementer a wholly separate data space — create,
-clear and destroy freely with zero reach into the user's working data.
+**2. The in-app browser pane is headless.** It supports DOM and JavaScript access — navigation,
+accessibility-tree reads, console and network reads, `javascript_tool` evaluation — and all of that
+works fine without a display. But it produces **no visible surface**: screenshots fail with
+*"the Browser pane is not displayed, so the page is not compositing frames"*, including after
+explicitly fronting the tab. **There is no window for the user to click into or type into.**
 
-Backup/Restore is *recovery*, not isolation: Restore is a full-state overwrite, so recovering from a
-mid-flow `Clear Quote Items` would also roll back everything done after the snapshot. The profile
-split removes the entire category instead of mitigating it.
+> ⚠️ **A "session handoff" — the user logging in once to a pane the implementer then drives — is
+> therefore impossible, and was recorded here in error.** It was described before it was tested;
+> it never worked. Do not reach for it again. A real-Chrome route via the `claude-in-chrome`
+> extension exists in principle (a **named** profile — Chrome **Guest** mode disables all extensions
+> and discards data on close, so Guest cannot work either), but it requires the user to install and
+> sign into an extension purely to save the implementer a round trip. That trade was judged not
+> worth it: Phases 0–5 all landed without it, and arranging it cost more exchanges than it saved.
 
-**Never drive the user's primary profile.** If the session in the implementer's profile expires, say
-so and wait for the user to re-authenticate there — do not fall back to the primary profile.
+#### What the implementer runs, and what it does not
 
-#### What the implementer runs, and what it must NOT touch
-
-| Runs (self-checking, catches own breakage early) | Never runs, never reports on |
+| Runs | Cannot run — the user's, always |
 |---|---|
-| Happy-path flows: Costing → Send → Calculate All → Deep Dive → Push → Send All | **The four negative cases** |
-| Persistence round-trips (edit → refresh → confirm) | **The Case 4 number check** (₹2.10 / MOQ 82,200) |
-| Console and network reads; drive up to the Export click | |
+| `npm run test:costing` | Every UI flow, without exception |
+| `eslint src` diffed rule-by-rule against the Phase 0 baseline | The four negative cases |
+| `npm run build` | The Case 4 number check (₹2.10 / MOQ 82,200) |
+| Static dependency / free-variable analysis via ESLint scope | Persistence round-trips (edit → refresh → confirm) |
+| Headless console and network reads; `localStorage` inspection | Excel and PDF export, and the Phase 0 byte comparison |
 
-**The four guards must stay genuinely first-touch — do not run them even informally, and do not
-report on them.** This is not about trust. A report that "Case 3 blocks correctly" makes the user
-read their own run looking for confirmation rather than looking at what actually happened. An
+**The four guards must stay genuinely first-touch.** The implementer does not run them even
+informally and does not report on them. Not a trust matter: a report that "Case 3 blocks correctly"
+makes the user read their own run looking for confirmation rather than at what actually happened. An
 accurate report still corrupts the check.
 
-Export ends in a file download, which is gated on the implementer's side and typically blocked in
-the preview sandbox. Drive up to the click and report the network request and console; confirming a
-well-formed workbook is the user's Phase 0 byte comparison.
+**The obligation that replaces browser access: state explicitly which checks were NOT run, in the
+summary and not only in the commit body.** This has caught more real problems than browser access
+would have.
+
+#### Unrelated note kept from the same review: `apiClient.js` and the persist seam
+
+`apiClient.js` was deliberately scoped **out** of the `lib/persist.js` seam in 4c, because the
+Supabase auth session is not part of the `cbb_*` data model. That reasoning stands on its own and
+should not be undone for tidiness — it keeps session persistence and app-data persistence separable,
+which matters when the `cbb_*` keys move to a backend and the session does not.
 
 **Why Phase 5 is the cautionary case:** it was committed with steps 3 and 4 of its own verification
 unrun, and the disclosure sat in the commit body rather than the summary. The concrete risk was
