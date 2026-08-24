@@ -993,6 +993,42 @@ consented to four things and lost five.
 > **Propose options then, not now** — add the scratchpad to the confirm text; preserve the spec and
 > clear only the batch; or offer a third choice. The user decides.
 
+### D-7 — SET Code case normalisation is asymmetric, breaking parent resolution
+
+Two entry points normalise differently, and the two consumers compare differently:
+
+| Site | Behaviour |
+|---|---|
+| Costing SET Code input — `QuotationApp.jsx:250` | `s("setCode", v.toUpperCase())` — **forces uppercase** |
+| Costing's own parent lookup — `:284–289` | `.trim().toUpperCase()===` on both sides — **case-insensitive** ✓ |
+| Grid SET Code input — `:1860` | `upd("setCode", e.target.value)` — **no normalisation** |
+| Grid parent predicates — `:1805`, `:2149` | `.trim()===` — **case-sensitive** ✗ |
+
+So a SET created in the grid as `Glass180` can **never** be matched by a row sent from Costing,
+which stores `GLASS180`. Costing's own auto-dims lookup would match it; the grid's Glass-SKU parent
+resolution will not.
+
+**Observed in live data.** After sending a Part-L from Costing under SET `Glass180`, the batch held:
+
+```
+Glass180     Box      setCode "Glass180"   glassSKUType "Nip 180"
+Glass180-P   Plate    setCode "Glass180"   glassSKUType null
+ZZTEST-A     Part-L   setCode "GLASS180"   glassSKUType "Pint 375"
+```
+
+The Part-L is visually in the same SET and is not, as far as `:1805`/`:2149` are concerned.
+
+> **Interaction with D-1, worth knowing.** D-1's `parentBox?.glassSKUType||row.glassSKUType||""`
+> fallback **masks this**: with no parent matched, the row's own value is used and the display reads
+> *"(from Costing — Main Box not yet set)"* — which is accurate but attributes the miss to the Box
+> being unset rather than to a case mismatch. Nos/Set still auto-fills correctly. So D-7 degrades
+> quietly rather than failing loudly, and only because D-1 landed first.
+
+> **Fix window: not assigned.** Pre-existing, unrelated to the split. The obvious fix is to
+> normalise in one place — either uppercase at both inputs, or compare case-insensitively at both
+> predicates (Costing already does the latter at `:288`). Choosing between them affects existing
+> stored data, which carries mixed case today.
+
 ### D-6 — Backup filenames cannot distinguish two snapshots from the same day
 
 `state/useQuoteActions.js`, in `handleBackup`:
