@@ -44,6 +44,24 @@ Goal: real components, one mounted tab at a time, with a shared state layer — 
 | Costing↔Batch bridge | Its own module. The most important business logic in the app |
 | **Phase 4** | **Hard stop.** Ships alone, uncommitted, hand off for manual guard verification |
 | Commit discipline | **One concern per commit.** Structural moves and behaviour changes never share one |
+| Verification | **No phase commits with its own verification outstanding** — whether or not the plan spells out a hard stop for it. Phase 5 broke this rule; see below |
+| UI verification | **Cannot be automated. Permanently the user's.** See *Standing constraint* below — schedule around it, do not rediscover it at each gate |
+
+### Standing constraint — UI verification is the user's, always
+
+The implementer has **no login**, so no guard check, negative case, persistence check or
+end-to-end flow can be run automatically. `test:costing`, `eslint`, `vite build`, dep-completeness
+analysis and console reads cover the engine and the module graph — **they cover none of the
+behaviour that the guards protect.**
+
+This is not a per-phase surprise. Each remaining phase below names which checks require a human at
+the browser. Plan the handoff into the phase rather than discovering it at the gate.
+
+**Why Phase 5 is the cautionary case:** it was committed with steps 3 and 4 of its own verification
+unrun, and the disclosure sat in the commit body rather than the summary. The concrete risk was
+real — those steps test whether the memoised resolver goes stale on the send path, and D-1 modifies
+that same path. Stacked, a wrong waste/conv on a batch row could not have been attributed to either
+change. Hence the rule now in the decisions table.
 
 ### Sequence from here
 | # | Commit | Notes |
@@ -483,6 +501,12 @@ object-returning arrow — memoising it buys nothing and is the entire source of
 
 ## Phase 6 — Extract the five self-contained tabs (~1,068 lines)
 
+> 👤 **Requires a human at the browser.** Per extracted tab: open it, edit one value, refresh,
+> confirm persistence. For **6c** specifically: add a sector, confirm it appears in both the Costing
+> and Batch Profile dropdowns, then try to delete a sector referenced by `batchProfile.sector` and
+> confirm the guard fires. For **6d**, the Construction Library is the least-tested area in the app —
+> its cross-tab interactions have no automated coverage at all.
+
 > ⛔ **Blocked until the Phase 4 hard stop clears.**
 
 Prerequisite: `src/lib/constructionName.js` ← `constrAutoName` (3137–3157) and `STATUS_DISPLAY`
@@ -529,6 +553,12 @@ dropdowns, then try deleting a sector referenced by `batchProfile.sector` and co
 
 ## Phase 7 — Extract Costing and Batch Entry (~2,077 lines)
 
+> 👤 **Requires a human at the browser — the heaviest verification load of any phase.** The full
+> flow (Costing → Send → Calculate All → Deep Dive → Push → Send All → Export) **plus all four
+> negative cases**, because this phase moves the JSX that renders every guard's UI. Also: slide-over
+> overlay opens per-row and from the toolbar; pin/unpin an add-on column; expand a row. Budget for
+> this handoff — it is not a quick pass.
+
 **Prerequisite commit — alone.** Two cross-cutting actions are inline JSX inside `batchEntryTab` and
 must be lifted into `useCostingBatchBridge`:
 - **`+ New Batch`** — the `onClick` handler body opens at **3404** and runs to 3424.
@@ -565,6 +595,10 @@ slide-over overlay opens per-row and from the toolbar; pin/unpin an add-on colum
 ---
 
 ## Phase 8 — Shell cleanup and docs
+
+> 👤 **Requires a human at the browser.** Sidebar collapse/expand persists across refresh; Backup
+> downloads and Restore round-trips (the hidden file input moves with `restoreRef` in this phase, so
+> a silent break here is invisible to every automated check).
 
 - `ui/Sidebar.jsx` (2107–2140, plus `NAV_ITEMS` 2097–2106) and `ui/TopBar.jsx` (2143–2162, **with**
   `restoreRef` and the hidden restore `<input>` — they must not be separated).
@@ -622,22 +656,93 @@ behaviour changes never share a commit. If a guard breaks, it must be unambiguou
 
 ### D-1 — Glass SKU Type never reaches the batch grid
 
-Costing captures the value as **`spec.skuType`** (the Glass SKU Type dropdown calls
-`s("skuType", v)` at `QuotationApp.jsx:313`). The batch grid reads and writes **`row.glassSKUType`**
-(`QuotationApp.jsx:1805, 1812, 1884–1889, 2116–2123`). `sendCostingToBatch` writes **neither** — the
-only occurrence of `skuType` anywhere in the 579-line bridge is the comment at
-`state/useCostingBatchBridge.js:138`, which lists it among the fields explicitly *not* carried.
+Costing captures the value as **`spec.skuType`** (dropdown at `QuotationApp.jsx:309`, shown only when
+`spec.rowType` is Part-L/Part-W). The batch grid uses **`row.glassSKUType`** (editable dropdown at
+`:2117`, shown only when `row.itemType==="Box"`). `sendCostingToBatch` writes neither — its only
+mention of `skuType` is the comment at `useCostingBatchBridge.js:138` listing fields *not* carried.
 
-Effect: the grid always shows "— set on Main Box row —" and every SKU needs manual re-entry. The
-grid's Part-row inheritance from `parentBox.glassSKUType` works correctly; it just never gets a seed.
+**Ownership is inverted between the layers.** In Costing the *Part* row owns the value; in the grid
+the *Box* row owns it and Part rows inherit. So the obvious one-line copy onto the row being sent
+lights the badge but does **not** fix the symptom, because Nos/Set auto-fill reads
+`parentBox.glassSKUType`.
 
-> **Fix window: the commit immediately after Phase 4 lands.**
-> **Do not touch `useCostingBatchBridge.js` before then** — the byte-identical diff against the
-> original ranges is the only evidence Phase 4 is correct, and editing the file destroys it.
+Same shape as the already-fixed **B1** (`nosPerSet` lost on the Deep-Dive→Push path).
+
+#### Three Part-row read sites — only two need the fallback
+| Line | Reads | Change |
+|---|---|---|
+| `1806–1813` | `parentBox.glassSKUType` — Nos/Set auto-fill on SET-code confirm | **fallback** |
+| `2148–2154` | `parentBox?.glassSKUType` — read-only display in expanded row | **fallback** |
+| `1885–1890` | `row.glassSKUType` — 🍶 badge in the Nos/Set cell | **none** — starts working once the row carries a value |
+
+#### Decision: Part-row write + consumer fallback
+
+`sendCostingToBatch` writes `glassSKUType` onto **the row it is already sending**. No sibling write.
+Consumers resolve `parentBox?.glassSKUType || row.glassSKUType || ""` — **parent wins, row is
+fallback.** That is a precedence rule, not a second source of truth: "SET-level context" still holds,
+and the Part row carries the SET's value forward until the head exists.
+
+> **Why NOT seed the parent Box (the original recommendation) — the ordering hole.**
+> Seeding requires a confirmed matching Box to already exist. It fails two ways, both likely:
+> * **Part sent first.** Nothing enforces Box-before-Part, and costing a partition set starting from
+>   Part-L is entirely natural. There is no parent to seed.
+> * **Box present but `setCodeAssumed === true`.** The parent predicate excludes it — and an
+>   unconfirmed SET Code is exactly what negative Case 3 blocks.
 >
-> **Propose the fix before writing it.** Two open questions are the user's call, not the
-> implementer's: (a) does it write to the Main Box row only, or to Part rows too? (b) should the
-> field be renamed to a single name across both layers?
+> So it works on the happy path and fails silently on the ordering a user is most likely to hit
+> first. The fallback works regardless of send order, and keeps `sendCostingToBatch` free of sibling
+> writes — preserving the property that makes that file's history our correctness evidence.
+
+#### Two competing parent-resolution strategies live in this grid
+
+Worth recording, because they disagree and neither is documented as canonical:
+
+| Site | Predicate |
+|---|---|
+| Glass SKU consumers `1804`, `2141` | `itemType==="Box" && !setCodeAssumed && trimmed setCode matches` |
+| SET-checkbox handler `1842` | nearest **preceding** Box by position: `[...batchRows.slice(0,ri2)].reverse().find(r=>r.itemType==="Box"&&r.matCode&&!r.setCodeAssumed)` |
+
+Match-by-SET-code vs nearest-preceding-by-position. They can resolve to different rows. Not in scope
+for D-1; flagged so it is not mistaken for a fix opportunity mid-bugfix.
+
+#### Known limitation of the fix (accepted, do not fix)
+
+`pushCostingToBatchRow` will carry `glassSKUType:spec.skuType||row.glassSKUType`, so **clearing the
+Glass SKU in Costing will not clear it on push.** Identical to B1's behaviour and consistent with it,
+but sharper here: Part rows have no editable Glass SKU control in the grid (`2143` is read-only), so
+a wrong value can be corrected by pushing a different one, never by clearing. Accepted.
+
+#### A Box row sent from Costing will now carry `glassSKUType`
+
+Correct and desirable — it pre-fills the grid's Box dropdown, which is discoverable and editable.
+The path is narrow: the Costing dropdown renders only for Part-L/Part-W (`:309`), so the value can
+only be *set* while `rowType` is Part, then carried across a switch to Box per `:258`
+("SET-level context, persists across role changes"). Still only the row being sent — no sibling write.
+
+#### Naming: map now, rename later
+Keep both names and map between them in the bridge. `skuType` currently means three things —
+`partitionsMaster[].skuType` (the master's admin-editable primary key), `spec.skuType`, and the
+grid's `glassSKUType`. Collapsing to `glassSKUType` is right, but not in this commit: `spec` objects
+are persisted inside `cbb_quoteitems` (`useQuoteActions.js:106,113` store `{...spec}`), so a rename
+orphans the field in every saved quote. Do it later with a read-both/write-one shim.
+
+#### Existing saved rows: graceful, no migration
+Every guard is falsy-safe — `row.glassSKUType||""`, `isAlcoPart && row.glassSKUType`,
+`if(parentBox && parentBox.glassSKUType)`. Old rows behave after the fix exactly as all rows behave
+today, and the existing *"⚠️ Glass SKU Type not yet set on the parent Box"* toast already says what
+to do. No backfill.
+
+#### Return leg — `buildSpecFromRow` hardcodes `skuType:""`
+`engine/costing.js:213` blanks the field, so Deep Dive from a row that has `glassSKUType` loses it.
+**No mirroring risk: `server.py` has zero references to `skuType` or `glass`** — the field never
+reaches the backend, and `costing.js:213` is its only occurrence in the engine. Trivially safe.
+**Own commit**, separate from the forward leg.
+
+#### D-1-follow-up — seed the Box row (NOT part of the bugfix)
+Once send-ordering is properly understood, `sendCostingToBatch` could also seed the parent Box so the
+SET head becomes authoritative and every sibling Part inherits. Deferred deliberately: it expands
+`sendCostingToBatch` to write rows the user did not send, and it needs the ordering question answered
+first. **Enhancement, not bugfix. Do not build it as part of D-1.**
 
 ### D-2 — New Batch silently discards the Costing scratchpad
 
