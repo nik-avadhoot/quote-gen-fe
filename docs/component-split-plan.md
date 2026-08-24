@@ -47,6 +47,7 @@ Goal: real components, one mounted tab at a time, with a shared state layer — 
 | Verification | **No phase commits with its own verification outstanding** — whether or not the plan spells out a hard stop for it. Phase 5 broke this rule; see below |
 | UI verification | **Cannot be automated. Permanently the user's.** See *Standing constraint* below — schedule around it, do not rediscover it at each gate |
 | Capability | **Demonstrated, not described.** Before either party plans around something working, one of us produces it. Covers tool capabilities and covers reporting a check as run |
+| Asking | **Ask, then WAIT.** If a question is worth asking before acting, it is worth not acting until it is answered. Raising a concern and proceeding anyway is not asking — it is narrating |
 
 ### Standing constraint — UI verification is the user's, always
 
@@ -79,6 +80,18 @@ explicitly fronting the tab. **There is no window for the user to click into or 
 > and discards data on close, so Guest cannot work either), but it requires the user to install and
 > sign into an extension purely to save the implementer a round trip. That trade was judged not
 > worth it: Phases 0–5 all landed without it, and arranging it cost more exchanges than it saved.
+
+#### Guard-adjacent data is out of bounds
+
+Beyond not running the four negative cases: **do not inspect or report on the data those cases rest
+on.** Concretely, sector `wastePP` values — the rows carrying `wastePP: 0` are exactly what Case 4
+tests. Noticing them incidentally while looking at something else is unavoidable; going to look, or
+reporting what is there, is not.
+
+The account matters for the same reason. **An admin session is not acceptable, and convention is not
+sufficient protection** — an admin can edit or delete the very master rows the acceptance test
+depends on. The implementer works from a maker account, where the boundary is enforced rather than
+promised.
 
 #### What the implementer runs, and what it does not
 
