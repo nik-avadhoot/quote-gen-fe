@@ -940,6 +940,48 @@ overwrite: `cbb_template`, `cbb_rate_date`, `cbb_batch_autosave`. The loss is th
 > but the proposal must also answer what happens to backup files **already written with nulls in
 > them**. Do not fix before then; pre-existing, not a refactor regression.
 
+### D-8 — 🚨 BETA BLOCKER — unguarded master-data edits (CATEGORY, not one bug)
+
+**A different class from D-1…D-7.** Those are code not matching intent. This is **intent that was
+never specified** — no code inspection finds it, because nothing is behaving contrary to how it was
+written.
+
+Admin edits to master data are direct writes: **no confirmation, no validation, no undo.** A typo —
+an extra digit on a paper rate, ₹450 for ₹45 — is accepted silently and flows into every subsequent
+quote.
+
+#### Why it is worse than ordinary missing validation
+
+**1. Writes are immediate and per-keystroke.** `onChange` fires `setRates` (or the equivalent) plus
+`touchRateDate`, persists through the seam, and returns. There is no commit step, no undo, and no
+record of the prior value. Verified at source in `RateMasterTab.jsx`.
+
+**2. It propagates BACKWARDS.** `useBatchInvalidation.js:34` —
+`useEffect(()=>{invalidateAllBatchResults();},[rates,freight,constructionLib])` — wipes every cached
+batch result on any rate change, so **previously calculated rows recalculate against the new
+number.** A quote costed this morning gives a different answer this afternoon and nothing explains
+why. The typo is invisible at the point of damage.
+
+#### Scope — a category, present in four places
+| Surface | Fields |
+|---|---|
+| Rate Master | grade price, discount, interest, freight — **plus the blanket operations** (`blanketDisc`, `blanketInterest`, GY premium) which write across **ALL grades at once** |
+| Freight Rates | the plant × location matrix |
+| Defaults | sector values including waste/conv — which feed the `wastePP` resolution |
+| Partitions master | partition counts |
+
+**The blanket operations are the sharpest case:** one wrong number applied to every grade, one click,
+no confirmation.
+
+> **Severity: BETA BLOCKER, alongside D-5.** D-5 loses work you know you had. **D-8 produces wrong
+> quotes you have no reason to doubt** — worse, because it is undetectable from inside the app.
+
+> **NO FIX WINDOW. Do not propose a fix.**
+> When this is taken up after Phase 8 it is a **design question before it is a code one** —
+> plausible-range warnings, an explicit save step, change history, or some combination. It needs the
+> product owner's domain input, not the implementer's judgement. **Record it as needing a design
+> decision, not a patch.**
+
 ### D-5 — 🚨 BETA BLOCKER — autosave silently overwrites a larger batch
 
 `state/useBatchState.js:69–80`. The comment and the code disagree:
