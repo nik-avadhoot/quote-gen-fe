@@ -9,11 +9,20 @@
 // MUST be composed BEFORE useCostingBatchBridge and useQuoteActions: both
 // consume resolveSpecWasteConv from here.
 //
-// NOT memoised yet - that is Phase 5, as its own single-variable commit.
+// MEMOISATION (Phase 5)
+// calcCosting and the diagnostics run inside a useMemo. resolveSpecWasteConv
+// is deliberately left OUTSIDE it: it is a trivial object-returning arrow, so
+// memoising buys nothing, and it is the one value here that is a CLOSURE
+// rather than data. The bridge calls it at send time
+// (useCostingBatchBridge.js:166 and :481), so a stale copy would write
+// waste/conv from an old spec into the batch row - with Final Rate still
+// correct on screen, because the panel renders `r`, not the resolver.
+// Rebuilding it every render makes that failure impossible by construction.
 //
 // Extracted verbatim from QuotationApp.jsx (Phase 4). The bodies below are
 // byte-identical to the monolith; only the surrounding closure changed.
 // ═══════════════════════════════════════════════════════════════════════════
+import { useMemo } from "react";
 import { calcCosting, checkMissingInfo, checkSpecCompliance, estimateOverspecSaving, suggestMargin } from "../engine/costing.js";
 import { isPPType } from "../engine/rowType.js";
 
@@ -24,26 +33,54 @@ export function useCostingResult(st){
   // resolved fresh here (not baked into spec) so it stays live if sector changes.
   // An explicit 0 (or any other typed number) is NOT blank and passes through as-is
   // — this is what lets a genuine 0% override actually take effect.
-  const _sectorForCalc=sectors.find(x=>x.code===spec.sector);
-  // When a batch exists, the Batch Profile is the committed context for waste/conv defaults.
-  // When the batch is empty, the sector master is the only authority.
-  // This ensures Costing's display and Calculate All use the same effective value.
-  const _hasCommittedBatch=batchRows.length>0&&costingContext==="same-batch"; // false in new-batch context — Costing uses sector master for defaults, not parked batch profile
-  const _wasteDefBox =_hasCommittedBatch?(batchProfile.waste??_sectorForCalc?.wasteCBB??5):(_sectorForCalc?.wasteCBB??5);
-  const _convDefBox  =_hasCommittedBatch?(batchProfile.convRate??_sectorForCalc?.convBox??7):(_sectorForCalc?.convBox??7);
-  const _wasteDefPP  =_hasCommittedBatch?(batchProfile.wastePP??_sectorForCalc?.wastePP??5):(_sectorForCalc?.wastePP??5);
-  const _convDefPP   =_hasCommittedBatch?(batchProfile.convRatePP??_sectorForCalc?.convPP??12.5):(_sectorForCalc?.convPP??12.5);
+  // Primitives pulled out so the memo depends on VALUES, not on object identity.
+  // batchProfile is replaced on every profile-bar keystroke and batchRows on every
+  // grid edit; depending on either object would bust the memo constantly. Only
+  // these five scalars actually feed the computation.
+  const batchRowCount=batchRows.length;
+  const{waste:bpWaste,convRate:bpConvRate,wastePP:bpWastePP,convRatePP:bpConvRatePP}=batchProfile;
 
-  const _calcSpec=(spec.wastePP===""||spec.wastePP==null||spec.convRatePP===""||spec.convRatePP==null
-                 ||spec.waste===""||spec.waste==null||spec.convRate===""||spec.convRate==null)
-    ?{...spec,
-       waste:(spec.waste===""||spec.waste==null)?_wasteDefBox:spec.waste,
-       convRate:(spec.convRate===""||spec.convRate==null)?_convDefBox:spec.convRate,
-       wastePP:(spec.wastePP===""||spec.wastePP==null)?_wasteDefPP:spec.wastePP,
-       convRatePP:(spec.convRatePP===""||spec.convRatePP==null)?_convDefPP:spec.convRatePP,
-      }:spec;
+  const _derived=useMemo(()=>{
+    // wastePP/convRatePP: "" in spec means "no override — inherit sector default",
+    // resolved fresh here (not baked into spec) so it stays live if sector changes.
+    // An explicit 0 (or any other typed number) is NOT blank and passes through as-is
+    // — this is what lets a genuine 0% override actually take effect.
+    const _sectorForCalc=sectors.find(x=>x.code===spec.sector);
+    // When a batch exists, the Batch Profile is the committed context for waste/conv defaults.
+    // When the batch is empty, the sector master is the only authority.
+    // This ensures Costing's display and Calculate All use the same effective value.
+    const _hasCommittedBatch=batchRowCount>0&&costingContext==="same-batch"; // false in new-batch context — Costing uses sector master for defaults, not parked batch profile
+    const _wasteDefBox =_hasCommittedBatch?(bpWaste??_sectorForCalc?.wasteCBB??5):(_sectorForCalc?.wasteCBB??5);
+    const _convDefBox  =_hasCommittedBatch?(bpConvRate??_sectorForCalc?.convBox??7):(_sectorForCalc?.convBox??7);
+    const _wasteDefPP  =_hasCommittedBatch?(bpWastePP??_sectorForCalc?.wastePP??5):(_sectorForCalc?.wastePP??5);
+    const _convDefPP   =_hasCommittedBatch?(bpConvRatePP??_sectorForCalc?.convPP??12.5):(_sectorForCalc?.convPP??12.5);
+
+    const _calcSpec=(spec.wastePP===""||spec.wastePP==null||spec.convRatePP===""||spec.convRatePP==null
+                   ||spec.waste===""||spec.waste==null||spec.convRate===""||spec.convRate==null)
+      ?{...spec,
+         waste:(spec.waste===""||spec.waste==null)?_wasteDefBox:spec.waste,
+         convRate:(spec.convRate===""||spec.convRate==null)?_convDefBox:spec.convRate,
+         wastePP:(spec.wastePP===""||spec.wastePP==null)?_wasteDefPP:spec.wastePP,
+         convRatePP:(spec.convRatePP===""||spec.convRatePP==null)?_convDefPP:spec.convRatePP,
+        }:spec;
+    const result=calcCosting(_calcSpec,rates,freight,boxTrim);
+    const r=result;
+    const missing=checkMissingInfo(spec,r);
+    const compliance=checkSpecCompliance(spec,r);
+    const marginSugg=suggestMargin(spec,r?.calcMOQ);
+    const osSaving=r&&compliance.find(c=>c.type==="over"&&c.field.includes("Burst"))
+      ?estimateOverspecSaving(spec,r,rates):null;
+    return{_sectorForCalc,_hasCommittedBatch,_wasteDefBox,_convDefBox,_wasteDefPP,_convDefPP,
+      _calcSpec,result,r,missing,compliance,marginSugg,osSaving};
+  },[spec,sectors,rates,freight,boxTrim,costingContext,batchRowCount,
+     bpWaste,bpConvRate,bpWastePP,bpConvRatePP]);
+
+  const{_sectorForCalc,_hasCommittedBatch,_wasteDefBox,_convDefBox,_wasteDefPP,_convDefPP,
+    _calcSpec,result,r,missing,compliance,marginSugg,osSaving}=_derived;
+
   // A1: single resolver — same blank→authority logic as _calcSpec above.
   // isWasteBlank/isConvBlank preserved so delta computation never writes 0 overrides.
+  // NOT memoised, on purpose — see the header note.
   const resolveSpecWasteConv=(forPP)=>({
     waste: forPP
       ? ((spec.wastePP===""||spec.wastePP==null)?_wasteDefPP:+spec.wastePP)
@@ -54,13 +91,6 @@ export function useCostingResult(st){
     isWasteBlank: forPP?(spec.wastePP===""||spec.wastePP==null):(spec.waste===""||spec.waste==null),
     isConvBlank:  forPP?(spec.convRatePP===""||spec.convRatePP==null):(spec.convRate===""||spec.convRate==null),
   });
-  const result=calcCosting(_calcSpec,rates,freight,boxTrim);
-  const r=result;
-  const missing=checkMissingInfo(spec,r);
-  const compliance=checkSpecCompliance(spec,r);
-  const marginSugg=suggestMargin(spec,r?.calcMOQ);
-  const osSaving=r&&compliance.find(c=>c.type==="over"&&c.field.includes("Burst"))
-    ?estimateOverspecSaving(spec,r,rates):null;
 
   // ── Send-to-Batch readiness (hoisted so both panels share the same computation) ──
   const _sendLayers=spec.layers||{};

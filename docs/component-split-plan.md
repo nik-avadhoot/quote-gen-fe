@@ -455,7 +455,29 @@ Honest expectation: `spec` is replaced wholesale by `s()` on every Costing keyst
 nothing for typing *in Costing*. It helps renders caused by other state — toasts, batch grid edits,
 tab switches, sidebar collapse. **The primary perf win is Phase 7, not this.**
 
-**Verify:** `npm run test:costing`; type in Costing and watch Final Rate update.
+### Verify — the on-screen check is NOT sufficient
+
+`resolveSpecWasteConv` is returned from this hook and consumed at
+`useCostingBatchBridge.js:166` and `:481`, both inside `sendCostingToBatch`. Memoising the block
+captures that closure. **A wrong dep list yields a stale resolver, and the waste/conv values written
+into the batch row at send time come from an old spec.**
+
+That failure is invisible on screen: the Costing panel renders `r`, not the resolver, so Final Rate
+stays correct while the row silently receives wrong values. It is Case 4's failure class one layer
+deeper, with no number on screen to catch it.
+
+1. `npm run test:costing` passes.
+2. Type in Costing — Final Rate updates.
+3. **Change `wastePP` in Costing → Send to Batch → open the row → confirm the row carries the value
+   just typed, not the previous one.**
+4. **Re-run negative Case 4 end-to-end** (₹2.10 / MOQ 82,200).
+
+Run steps 3 and 4 for **both the Box and the PP path** — `:166` and `:481` branch on
+`isPPRowType` / `isPPItem`, so a stale resolver can surface on one path and not the other.
+
+**Implementation note:** the safest way to satisfy this is to keep `resolveSpecWasteConv` itself
+*outside* the `useMemo`, rebuilt every render from the memoised scalars. It is a trivial
+object-returning arrow — memoising it buys nothing and is the entire source of the staleness risk.
 
 ---
 
