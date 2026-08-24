@@ -46,6 +46,7 @@ Goal: real components, one mounted tab at a time, with a shared state layer — 
 | Commit discipline | **One concern per commit.** Structural moves and behaviour changes never share one |
 | Verification | **No phase commits with its own verification outstanding** — whether or not the plan spells out a hard stop for it. Phase 5 broke this rule; see below |
 | UI verification | **Cannot be automated. Permanently the user's.** See *Standing constraint* below — schedule around it, do not rediscover it at each gate |
+| Defects | 🛑 **RECORD, DON'T FIX — until Phase 8 lands.** Register the defect with severity and a reachability note, then stop. No fix, no proposal, no fix window. **Do not ask whether to fix it; the answer is no.** Only exception: something that blocks *the split itself* — say so once and stop |
 | Capability | **Demonstrated, not described.** Before either party plans around something working, one of us produces it. Covers tool capabilities and covers reporting a check as run |
 | Asking | **Ask, then WAIT.** If a question is worth asking before acting, it is worth not acting until it is answered. Raising a concern and proceeding anyway is not asking — it is narrating |
 
@@ -80,6 +81,18 @@ explicitly fronting the tab. **There is no window for the user to click into or 
 > and discards data on close, so Guest cannot work either), but it requires the user to install and
 > sign into an extension purely to save the implementer a round trip. That trade was judged not
 > worth it: Phases 0–5 all landed without it, and arranging it cost more exchanges than it saved.
+
+#### 🛑 D-5 operational mitigation — ALWAYS Restore, NEVER Dismiss
+
+For the remainder of the split, on the *"Unsaved batch work found … Restore it?"* banner:
+**always click Restore. Never click Dismiss.** If the banner is in the way, click Restore and carry on.
+
+`Dismiss` leaves `batchRows` empty in state while the rows remain in storage, and the next write
+persists that state over the larger saved batch (D-5). Phases 6 and 7 involve constant reloading, so
+the banner will appear often; the destructive button sits directly beside the safe one, and this was
+nearly hit twice during Phase 5 verification — once successfully, destroying a 6-row batch.
+
+Restoring always is a **complete mitigation for the duration, with no code change.**
 
 #### Guard-adjacent data is out of bounds
 
@@ -762,8 +775,20 @@ Not designed here. But the split should not obstruct it, so three cheap accommod
 
 ## Defect register — pre-existing bugs found during Phase 4 testing
 
-Neither is a Phase 4 regression; both exist in the original monolith. Recorded here so they are
-fixed in the right commit, at the right time, and never bundled with a structural move.
+None of these is a refactor regression; all predate Phase 0. **All are FROZEN until Phase 8 lands** —
+see the *Defects* row in the decisions table. Fix windows recorded below are historical intent, not
+scheduling; nothing here is actioned before the split completes.
+
+Deferring is cheaper as well as faster: Phases 6 and 7 relocate most of this code. D-2's handler
+lifts into the bridge, the Glass SKU consumer sites move into `BatchGrid.jsx`. Fixing now means every
+fix travels through those moves and has to survive them; fixing after means fixing once, in the final
+location, against stable line numbers.
+
+D-1 is the exception and stays as committed — written and verified before the freeze.
+
+> **Why the freeze exists:** D-7 was found while verifying D-1's fix. Fixing produces verification,
+> verification produces discovery, and there is no natural end to that loop — the app carries months
+> of accumulated defects and this refactor has just built the first surface capable of finding them.
 
 **Standing rule for every commit from here: one concern per commit.** Structural moves and
 behaviour changes never share a commit. If a guard breaks, it must be unambiguous which change did it.
