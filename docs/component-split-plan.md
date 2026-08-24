@@ -338,6 +338,15 @@ Then:
 > The fallback is only reachable by passing `templateB64Arg = null` explicitly, or by reloading
 > after clearing the key.
 >
+> 🛑 **The trace shows only ONE of the two bugs.** `qty` at `:107` throws inside the item-row map,
+> so `locations` at `:129` never executes. Anyone fixing from this trace alone will fix `qty`,
+> re-run, and immediately hit the second one.
+>
+> **And the second one carries a trap:** line 129 reads `(locations||LOCATIONS)`, which *looks*
+> defensive and is not. `locations` is an undeclared identifier, so evaluating it throws a
+> `ReferenceError` **before** `||` is ever applied. A short-circuit only guards a declared variable
+> holding a falsy value. Read casually this line will scan as already-handled — it is not.
+>
 > ⚠️ **Two known `no-undef` bugs, moving as-is by decision.** `exportExcelFull` references undefined
 > `qty` (line 108, twice) and undefined `locations` (line 130) — so it throws `ReferenceError` on
 > every call, and it is reachable at 201 and 211 (no template loaded / template missing its `CBB+PP`
