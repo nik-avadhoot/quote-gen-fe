@@ -940,6 +940,82 @@ overwrite: `cbb_template`, `cbb_rate_date`, `cbb_batch_autosave`. The loss is th
 > but the proposal must also answer what happens to backup files **already written with nulls in
 > them**. Do not fix before then; pre-existing, not a refactor regression.
 
+### D-11 — 🚨 Construction Library duplicates instead of matching (FOUR predicates, one absent)
+
+**Hypothesis tested and REFUTED.** The proposed cause was that the two `importConstrFromSpec` copies
+disagree — the tab compares `spec_cobb`, the bridge does not — and that `JSON.stringify(c.layers)`
+is key-order / type sensitive. **Neither explains the observed duplicates.**
+
+#### Evidence — the duplicates match on EVERY field BOTH predicates compare
+
+Live fixture, 24 entries. Grouping by the bridge's full 9-field predicate finds **two duplicate
+groups covering 6 of 24 entries (25%)**:
+
+```
+G, U, V, W    identical on all 9 bridge fields, including JSON.stringify(layers)
+O, T          identical on all 9 bridge fields
+```
+
+Field-by-field on U/V/W: board_gsm "400" (string), spec_bs "4.5" (string), spec_bct "", spec_ect "",
+spec_cobb **undefined on all three**, sector "ALCOBEV", ply 3 (number), flute_F1 "B", flute_F2 "A",
+boxType "PP", and byte-identical layers JSON with identical key order TOP,F1,L1,F2,L2.
+
+Both predicates return **match** for every pair (U↔V, U↔W). The stringify comparison **passes**. The
+divergence is real but is **not** what produced these rows.
+
+#### The actual finding — FOUR creation paths, FOUR different checks, one absent
+
+| # | Path | Duplicate check |
+|---|---|---|
+| 1 | `useCostingBatchBridge.js:467` — Send to Batch Entry | 9 fields: STDs + ply + flutes + boxType + layers JSON. **No spec_cobb, no sector** |
+| 2 | `useQuoteActions.js:389` — App-level `importConstrFromSpec` | 5 fields: STDs + sector. **No cobb, no ply/flutes/boxType/layers.** Its own comment: *"Fix 14: duplicate check (was missing from this path; the Construction Library tab has it, this didn't)"* |
+| 3 | `ConstructionLibTab.jsx:264` — tab's inline `importConstrFromSpec` | 6 fields: STDs + **spec_cobb** + **sector** |
+| 4 | `ConstructionLibTab.jsx:196` — **"+ New Construction"** | **NONE.** Appends a blank entry unconditionally |
+
+**Path 4 is the unguarded one.** It creates a blank row which the user fills in afterwards, so no
+check is possible at creation and none happens later. Any construction built this way that matches
+an existing one becomes a permanent duplicate — the most probable origin of the observed groups, and
+it requires no predicate disagreement at all.
+
+**Second duplicate-producing route, by design:** the bridge's STD-tier prompt (`:425–444`) offers
+*"OK = Reuse [X] — your Costing paper grades are discarded"*. **Cancel** means "keep my grades",
+which creates a new entry.
+
+#### The predicate divergence is real and still a defect — just not this one
+Overlap between tab and bridge is only the four STD fields. Each compares five the other ignores, so
+they disagree **in both directions**:
+* **Tab says duplicate, bridge says new** — same STDs and sector, different ply/flutes/boxType/layers.
+* **Bridge says match, tab says new** — identical board and layers, different spec_cobb or sector; the
+  bridge silently reuses an entry the tab treats as distinct.
+
+`spec_cobb` is **undefined** on the sampled entries, so the tab's cobb comparison is currently a
+no-op. It starts biting once cobb values are populated.
+
+#### Code allocation compounds it
+All paths allocate A–Z then fall back to `C${constructionLib.length}`. Duplicates burn the readable single
+letters, and the fallback is **length-based**, so it can collide after deletions — the same class of
+bug "Fix 14" corrected for the letters.
+
+> **Severity: outranks D-5 for roadmap purposes.** The library is meant to become a deep reference
+> set — the stated reason for retaining untested code in Phase 2. A library that duplicates instead
+> of matching destroys its own value as a source of truth.
+
+> **Phase 2's "do not unify the two copies" was CORRECT as a refactor rule** — the divergence must
+> survive the split unchanged so it stays diagnosable. **But it is now a known defect to resolve
+> after Phase 8, not to preserve indefinitely.** Any resolution must reconcile **all four** paths:
+> unifying the two `importConstrFromSpec` copies while leaving path 4 unguarded would fix nothing
+> observable.
+
+> **NO FIX WINDOW. Do not propose a fix.** Resolution needs a product decision on what *constitutes*
+> the same construction — whether sector/client are identity or metadata, and whether layers must
+> match or only board specs.
+
+#### Not reproducible on demand from the current fixture
+A spec loaded via Deep Dive matches its own construction on all 9 fields, as expected — that test is
+circular, since `buildSpecFromRow` builds the spec *from* the construction. Constructions carry **no
+timestamps**, so stored data cannot say whether an entry was duplicated at creation or edited into
+identity afterwards. A `createdAt` field would make this diagnosable.
+
 ### D-9 — Selecting a sector silently converts inheritance into an override
 
 Pre-existing, in Costing's spec form. **Not a Phase 6 regression** — nothing in the split touched it.
