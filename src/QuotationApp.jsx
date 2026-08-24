@@ -1803,12 +1803,18 @@ function QuotationApp(){
                                 const confirmedSetCode=(row.setCode||"").trim();
                                 const parentBox=batchRows.find(r=>
                                   r.itemType==="Box"&&!r.setCodeAssumed&&(r.setCode||"").trim()===confirmedSetCode);
-                                if(parentBox&&parentBox.glassSKUType){
-                                  const pm=partitionsMaster.find(x=>x.skuType===parentBox.glassSKUType);
+                                // D-1: parent wins, this row is the fallback. Parts can be sent from
+                                // Costing before the Box exists, and a Box with setCodeAssumed===true is
+                                // excluded by the predicate above — so the parent is often simply absent.
+                                // Precedence rule, not a second source of truth: the Part carries the SET's
+                                // value forward until the head exists.
+                                const effGlassSKU=parentBox?.glassSKUType||row.glassSKUType||"";
+                                if(effGlassSKU){
+                                  const pm=partitionsMaster.find(x=>x.skuType===effGlassSKU);
                                   if(pm){
                                     const nos=row.itemType==="Part-L"?pm.lwise:pm.wwise;
                                     updC("nosPerSet",nos); // row-scoped: nosPerSet changes this row's SET rate
-                                    showToast(`🍶 Nos/Set auto-filled: ${nos} (${parentBox.glassSKUType})`,'success',3000);
+                                    showToast(`🍶 Nos/Set auto-filled: ${nos} (${effGlassSKU})`,'success',3000);
                                   }
                                 } else if(parentBox&&!parentBox.glassSKUType){
                                   showToast(`⚠️ Glass SKU Type not yet set on the parent Box — set it first to auto-fill Nos/Set`,'info',5000);
@@ -2141,17 +2147,21 @@ function QuotationApp(){
                                 const parentBox=batchRows.find(r=>
                                   r.itemType==="Box"&&!r.setCodeAssumed&&
                                   (r.setCode||"").trim()===(row.setCode||"").trim());
+                                // D-1: same precedence as the auto-fill above.
+                                const effGlassSKU=parentBox?.glassSKUType||row.glassSKUType||"";
                                 return(
                                 <div style={{minWidth:160}}>
                                   <div style={{fontSize:9,color:"#2E6094",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>
                                     🍶 Glass SKU Type</div>
-                                  <div style={{fontSize:11,color:parentBox?.glassSKUType?"#2E6094":C.slateL,
+                                  <div style={{fontSize:11,color:effGlassSKU?"#2E6094":C.slateL,
                                     padding:"3px 8px",border:"1px solid #6A9FD433",borderRadius:4,background:"#EEF4FB"}}>
-                                    {parentBox?.glassSKUType||"— set on Main Box row —"}
+                                    {effGlassSKU||"— set on Main Box row —"}
                                   </div>
                                   <div style={{fontSize:9,color:C.slateL,marginTop:2}}>
                                     Nos/Set: <b style={{color:C.amber}}>{row.nosPerSet||1}</b>
-                                    {parentBox?.glassSKUType&&" (inherited from Main Box)"}
+                                    {parentBox?.glassSKUType
+                                      ?" (inherited from Main Box)"
+                                      :effGlassSKU?" (from Costing — Main Box not yet set)":""}
                                   </div>
                                 </div>);
                               })()}

@@ -178,6 +178,12 @@ export function useCostingBatchBridge(st){
       product:spec.product||"",
       // B1: nosPerSet was missing — a Maker correcting partition count in deep-dive lost it on Calculate All
       nosPerSet:spec.qtyPerSet||row.nosPerSet,
+      // D-1: Costing names this skuType, the grid names it glassSKUType. Same bug shape as B1 —
+      // fixing only the send path would leave Deep-Dive→Push lossy. Known limitation, accepted:
+      // ||row.glassSKUType means CLEARING the Glass SKU in Costing does not clear it on push.
+      // Consistent with B1, but sharper here because Part rows have no editable Glass SKU control
+      // in the grid — a wrong value is corrected by pushing a different one, never by clearing.
+      glassSKUType:spec.skuType||row.glassSKUType,
       board_gsm:spec.board_gsm||"",spec_bs:spec.spec_bs||"",
       spec_bct:spec.spec_bct||"",spec_ect:spec.spec_ect||"",
       reqBoxWt:spec.reqBoxWt||"",salesMOQ:spec.salesMOQ||"",volume:spec.volume||"",
@@ -502,6 +508,10 @@ export function useCostingBatchBridge(st){
       itemType:newItemType,                       // C3: was hardcoded "Box"
       setCode:spec.setCode||"",   // spec.setCode is single source of truth; blank when switch OFF
       setCodeAssumed:false,
+      // D-1: carry the Glass SKU across the naming boundary (Costing: skuType, grid: glassSKUType).
+      // Written onto the row being sent, never onto a sibling — seeding the parent Box needs a
+      // confirmed Box to already exist, which fails when the Part is sent first. See D-1-follow-up.
+      glassSKUType:spec.skuType||"",
       constructionCode:constrCode,
       L:spec.L||"",W:spec.W||"",H:spec.H||"",
       ups:spec.ups||1,

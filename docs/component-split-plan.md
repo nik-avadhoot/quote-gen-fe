@@ -131,7 +131,10 @@ change. Hence the rule now in the decisions table.
 | 1 | *(user)* run the four negative cases | Case 4 target: **₹2.10 / MOQ 82,200** |
 | 2 | ✅ **Phase 4, UNCHANGED** | committed `c7d7b83` at the exact reviewed bytes |
 | 3 | ✅ **4c persist wrapper** | 37 sites wrapped, lint-neutral; carried this document into the repo and the held-back `useCostingState` comment |
-| 4 | **D-1 Glass SKU Type** | fix proposed for approval before writing |
+| 4 | ✅ **D-1 Glass SKU Type** | forward leg written; user verifies on a restored surface |
+| 4b | 🚨 **D-5 autosave overwrite** | **BETA BLOCKER — jumps the queue.** Propose before writing |
+| 4c | **buildSpecFromRow return leg** | own commit |
+| 4d | **KEYS registry + D-3 + two cosmetics** | own commit, proposal first |
 | 5 | Phase 5 — memoise `useCostingResult` | |
 | 6 | Phase 6 — leaf tabs | 6c needs the persist wrapper already in place |
 | 7 | Phase 7 — prerequisite commit lifts New Batch | **D-2 fixed there** |
@@ -865,8 +868,13 @@ state *after* the loop, masking the line-37 failure for all of them. Only three 
 overwrite: `cbb_template`, `cbb_rate_date`, `cbb_batch_autosave`. The loss is the intersection of
 **raw-string AND not-overwritten** — the first two die, the third survives because it is JSON.
 
-**Detection signature:** an affected backup file literally contains `"cbb_template": null`. Existing
-files can be checked without restoring them.
+**Detection signature:** an affected backup file literally contains `"cbb_template": null`.
+
+> ⚠️ **`null` and ABSENT are different, and only `null` indicates D-3.** Line 37 is
+> `if(v!=null)snap[k]=JSON.parse(v);` inside the try — so a key that was **missing from
+> localStorage** is never assigned and comes out **absent** from the file, while a key that was
+> **present but unparseable** comes out **`null`**. A backup showing `cbb_template` absent was
+> taken from a profile that had no template; only an explicit `null` proves the parse failed.
 
 #### Severity — higher than `cbb_pinned_addons`
 * **Silent.** The exception is swallowed, the toast reports success, the file looks well-formed.
@@ -888,6 +896,49 @@ files can be checked without restoring them.
 > mirrors line 14 into line 37 — attempt `JSON.parse`, fall back to the raw string rather than null —
 > but the proposal must also answer what happens to backup files **already written with nulls in
 > them**. Do not fix before then; pre-existing, not a refactor regression.
+
+### D-5 — 🚨 BETA BLOCKER — autosave silently overwrites a larger batch
+
+`state/useBatchState.js:69–80`. The comment and the code disagree:
+
+```js
+// Fix 3: Never let a smaller/empty batch overwrite a larger valid prior save.
+// Only write if current rows are non-empty AND >= the saved row count (or no prior save exists).
+if(!batchRows.length){                        // ← guard fires ONLY when empty
+  const prev=getItem('cbb_batch_autosave');
+  if(prev){const{rows}=JSON.parse(prev);if(rows?.length>0)return;}
+}
+setItem('cbb_batch_autosave',JSON.stringify({ts:Date.now(),rows:batchRows,profile:batchProfile}));
+```
+
+The comment promises a **count comparison**. The code implements only the **empty** case. Any
+non-empty batch overwrites any larger prior save.
+
+#### Reachable from ordinary use, in three steps
+`batchRows` is **not** hydrated from storage on mount — the rows live in `cbb_batch_autosave` and the
+app shows a *"Unsaved batch work found … Restore it?"* banner and waits for an explicit click. So:
+
+1. Reload. Rows are in storage, `batchRows` state is empty.
+2. **Dismiss** the banner — it looks like cosmetic clutter. State and storage are now divergent.
+3. Add or send one row. The effect fires and writes 1 row over N.
+
+**Silent. No confirmation, no undo.** A Maker who dismisses the banner because it is in the way
+loses the batch on their next send.
+
+> **Observed live, not theorised.** During Phase-5-era fixture work this destroyed a 6-row batch,
+> overwriting it with 1. The operator was working under an explicit "tell me before anything
+> destructive" rule and still walked into it, because **Dismiss reads as cosmetic and is not.**
+> If a careful operator under that rule hits it, a Maker mid-quote has no chance.
+
+> **Severity: BETA BLOCKER. Outranks D-3 and the `cbb_pinned_addons` gap.** Silent, unrecoverable
+> loss of work on a common path.
+
+> **Fix window: immediately after D-1. Propose before writing.** The proposal must cover:
+> * whether to implement the count comparison the comment describes, **or** to stop `Dismiss`
+>   leaving state and storage divergent — do not assume the comment describes the right behaviour
+>   just because it is there;
+> * what happens to a Maker who legitimately wants to start a *smaller* batch, which a naive count
+>   comparison would block.
 
 ### D-2 — New Batch silently discards the Costing scratchpad
 
