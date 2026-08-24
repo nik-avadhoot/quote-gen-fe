@@ -1197,6 +1197,39 @@ than decided, and it is the class of thing that bites in beta.
 
 ---
 
+## Design positions — decided, not overlooked
+
+Recorded so a later reader knows these were considered and settled. **Not defects. No fix window.**
+
+### DP-1 — The batch grid signals THAT a row is non-compliant, not WHY
+
+Finding the reason requires Deep Dive. **This is deliberate and stays.** The grid is already dense
+with frozen columns, and inlining per-row mismatch reasons would crowd every row for a case that is
+occasional.
+
+> **Do not "improve" the grid by adding a reason column.** It was considered and rejected on density
+> grounds.
+
+### QE-1 — Queued enhancement: put the mismatch reason in the EXPANDED SUB-ROW
+
+Not a defect, not part of the split. If the "why" is wanted, the sub-row is the right home —
+**not a tooltip, and not a new grid column**:
+
+* the sub-row already exists and already carries per-row detail;
+* it is opened by exactly the person who saw the flag and wants to know why, so the reason appears
+  where they are already looking;
+* zero grid-density cost, no new UI surface;
+* a tooltip is too cramped for something like *"BS 6.2 against NLT 9.0"*, and Deep Dive is too heavy
+  — it hydrates the whole spec into Costing just to read one line.
+
+DP-1 still stands: the grid signals THAT, not WHY. This only makes the WHY one click away instead of
+a full Deep Dive.
+
+> **Lands after Phase 8.** The expanded-row IIFE is explicitly on Phase 7's leave-alone list, so this
+> work waits until that code is in its final location.
+
+---
+
 ## Target layout
 
 ```
