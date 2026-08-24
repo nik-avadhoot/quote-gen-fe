@@ -951,12 +951,31 @@ loses the batch on their next send.
 > **Severity: BETA BLOCKER. Outranks D-3 and the `cbb_pinned_addons` gap.** Silent, unrecoverable
 > loss of work on a common path.
 
-> **Fix window: immediately after D-1. Propose before writing.** The proposal must cover:
-> * whether to implement the count comparison the comment describes, **or** to stop `Dismiss`
->   leaving state and storage divergent — do not assume the comment describes the right behaviour
->   just because it is there;
-> * what happens to a Maker who legitimately wants to start a *smaller* batch, which a naive count
->   comparison would block.
+#### The comment describes the WRONG fix — do not implement it
+
+Demonstrated by an ordinary action: **deliberately deleting 2 of 4 rows.** The autosave correctly
+wrote 2 over 4. That write is *exactly* what the comment's guard — *"only write if current rows are
+non-empty AND >= the saved row count"* — would **block**. Under that rule the deletion never
+persists, and the user reloads to find the deleted rows back.
+
+So a count comparison is not a stricter version of the right behaviour; it is a different bug.
+**Deliberate shrinking must persist. Only shrinking the user did not ask for is the defect.** Row
+count cannot distinguish the two, because the difference is *intent*, which the count does not carry.
+
+#### The real defect is state/storage divergence
+
+`Dismiss` leaves `batchRows` empty in React state while the rows remain in `localStorage`. Every
+subsequent write is then "legitimate" by any count rule — the state genuinely does hold fewer rows —
+but it persists **a state the user never intended to be in**. The write is not the bug; the
+divergence that preceded it is.
+
+> **Fix window: immediately after D-1. Propose before writing.**
+> **Investigate the divergence framing first** — make `Dismiss` not leave state and storage
+> disagreeing — rather than adding a guard at the write. A guard at the write can only ever see
+> counts, and counts cannot encode intent. Options worth weighing: have `Dismiss` clear the stored
+> autosave as well as the banner; or hydrate `batchRows` from storage on mount so state and storage
+> never diverge in the first place, making the banner a genuine choice rather than the only path
+> back to one's own data.
 
 ### D-2 — New Batch silently discards the Costing scratchpad
 
