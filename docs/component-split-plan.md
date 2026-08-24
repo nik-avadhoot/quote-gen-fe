@@ -57,6 +57,47 @@ behaviour that the guards protect.**
 This is not a per-phase surprise. Each remaining phase below names which checks require a human at
 the browser. Plan the handoff into the phase rather than discovering it at the gate.
 
+#### Session handoff — how the implementer drives the UI at all
+
+The implementer **cannot type a password into a login form** (standing prohibition covering
+passwords, keys and tokens; it does not relax for a low-privilege account). So credentials are never
+handed over. Instead: **the user logs in once, in the browser the implementer is driving.** The
+Supabase session persists in `localStorage` under `apiClient.js`'s own key, so it survives reloads
+and HMR, and the implementer drives the authenticated session without ever seeing the secret.
+
+> That this works at all is a side effect of scoping `apiClient.js` **out** of the persist seam in
+> 4c — the auth session was excluded because it is not part of the `cbb_*` data model. Unplanned
+> benefit, worth not undoing later.
+
+**Isolation: a separate browser profile. NOT Backup-first.**
+`localStorage` is per-origin **per browser profile**, so a second Chrome profile pointed at
+`localhost:5173`, logged in once, gives the implementer a wholly separate data space — create,
+clear and destroy freely with zero reach into the user's working data.
+
+Backup/Restore is *recovery*, not isolation: Restore is a full-state overwrite, so recovering from a
+mid-flow `Clear Quote Items` would also roll back everything done after the snapshot. The profile
+split removes the entire category instead of mitigating it.
+
+**Never drive the user's primary profile.** If the session in the implementer's profile expires, say
+so and wait for the user to re-authenticate there — do not fall back to the primary profile.
+
+#### What the implementer runs, and what it must NOT touch
+
+| Runs (self-checking, catches own breakage early) | Never runs, never reports on |
+|---|---|
+| Happy-path flows: Costing → Send → Calculate All → Deep Dive → Push → Send All | **The four negative cases** |
+| Persistence round-trips (edit → refresh → confirm) | **The Case 4 number check** (₹2.10 / MOQ 82,200) |
+| Console and network reads; drive up to the Export click | |
+
+**The four guards must stay genuinely first-touch — do not run them even informally, and do not
+report on them.** This is not about trust. A report that "Case 3 blocks correctly" makes the user
+read their own run looking for confirmation rather than looking at what actually happened. An
+accurate report still corrupts the check.
+
+Export ends in a file download, which is gated on the implementer's side and typically blocked in
+the preview sandbox. Drive up to the click and report the network request and console; confirming a
+well-formed workbook is the user's Phase 0 byte comparison.
+
 **Why Phase 5 is the cautionary case:** it was committed with steps 3 and 4 of its own verification
 unrun, and the disclosure sat in the commit body rather than the summary. The concrete risk was
 real — those steps test whether the memoised resolver goes stale on the send path, and D-1 modifies
