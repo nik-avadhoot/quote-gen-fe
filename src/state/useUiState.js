@@ -3,7 +3,7 @@
 //
 // App chrome + transient tab-local UI state.
 // Must be composed FIRST: showToast is referenced by handlers across every
-// other slice. newSector and the clTab* trio live here
+// other slice. The clTab* trio lives here
 // only until Phase 6 makes them local state inside their extracted tabs.
 //
 // Extracted verbatim from QuotationApp.jsx (Phase 4). The bodies below are
@@ -30,7 +30,6 @@ export function useUiState(){
   const[clTabQuery,setClTabQuery]=useState('');
   const[clTabFilter,setClTabFilter]=useState({sector:'',client:'',status:'active'});
   const[clTabExpandedConstr,setClTabExpandedConstr]=useState(null);
-  const[newSector,setNewSector]=useState({code:"",name:"",wasteCBB:5,wastePP:5,convBox:7,convPP:12.5,specLang:"BS"});
 
-  return { clTabExpandedConstr, clTabFilter, clTabQuery, newSector, profile, role, setClTabExpandedConstr, setClTabFilter, setClTabQuery, setNewSector, setShowChangePassword, setShowProfile, setSidebarCollapsed, setTab, setToasts, showChangePassword, showProfile, showToast, sidebarCollapsed, signOut, tab, toasts };
+  return { clTabExpandedConstr, clTabFilter, clTabQuery, profile, role, setClTabExpandedConstr, setClTabFilter, setClTabQuery, setShowChangePassword, setShowProfile, setSidebarCollapsed, setTab, setToasts, showChangePassword, showProfile, showToast, sidebarCollapsed, signOut, tab, toasts };
 }
