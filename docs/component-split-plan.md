@@ -321,6 +321,23 @@ Then:
 > `exportFromTemplate`, so it lands in `src/export/excel.js`. **Never run Prettier or
 > `eslint --fix` reflow over this code**, here or anywhere in the file.
 
+> ✅ **`exportExcelFull`'s failure reproduced live and captured (post-Phase-5):**
+> ```
+> Toast:   ❌ Export failed: qty is not defined. Check the browser console for details.
+> Console: [exportFromTemplate] Export failed: ReferenceError: qty is not defined
+>              at .../src/export/excel.js   at Array.map (<anonymous>)
+> ```
+> Source line is `excel.js:107`, inside `exportExcelFull` (32–137), in the item-row `.map()`. The
+> outer try/catch ("Fix 8") catches it, so the user sees a toast rather than a white screen — the
+> failure is visible but the export simply does not happen.
+>
+> **Reproducing it needs THREE conditions, not two.** Backend unreachable AND `cbb_template` absent
+> from `localStorage` AND `templateB64` empty in React state. The Quote Items button passes
+> `templateB64` from state, which is read once at mount — so clearing `localStorage` alone does NOT
+> disarm the template, and the click silently takes the client-side template-clone path instead.
+> The fallback is only reachable by passing `templateB64Arg = null` explicitly, or by reloading
+> after clearing the key.
+>
 > ⚠️ **Two known `no-undef` bugs, moving as-is by decision.** `exportExcelFull` references undefined
 > `qty` (line 108, twice) and undefined `locations` (line 130) — so it throws `ReferenceError` on
 > every call, and it is reachable at 201 and 211 (no template loaded / template missing its `CBB+PP`
@@ -331,6 +348,11 @@ Then:
 
 **Verify:** `npm run test:costing`; Costing renders; die-line preview appears when L/W/H are typed;
 exported Excel and PDF match the Phase 0 files.
+
+> ✅ **Confirmed live (post-Phase-5).** `exportFromTemplate` works end-to-end after being moved
+> to `export/excel.js`: clicking Export (Master Format) issued `OPTIONS` + `POST`
+> `http://localhost:3001/export`, both **200**, with zero console errors. The backend fill of the
+> master template is intact across the Phase 3 move.
 
 ---
 
@@ -848,6 +870,10 @@ files can be checked without restoring them.
 > **The Phase 0 backup was therefore never a complete snapshot — record it as a PARTIAL fixture.**
 > The golden numbers are unaffected: they come from the Node harness, not from any backup.
 
+> **Fix scope is narrower than it looks.** Because lines 39–47 overwrite nine keys afterwards,
+> line 37 only ever matters for the three keys that escape the overwrite: `cbb_template`,
+> `cbb_rate_date`, `cbb_batch_autosave`. Any fix need only be correct for those.
+>
 > **Fix window: the KEYS-registry commit.** Same file, same backup/restore concern, already opening
 > for `cbb_pinned_addons`. One commit covers all three. **Propose before writing.** The obvious fix
 > mirrors line 14 into line 37 — attempt `JSON.parse`, fall back to the raw string rather than null —
@@ -869,6 +895,26 @@ consented to four things and lost five.
 >
 > **Propose options then, not now** — add the scratchpad to the confirm text; preserve the spec and
 > clear only the batch; or offer a third choice. The user decides.
+
+### D-4 — Identity freeze is lost on reload while the batch survives
+
+`specCommitted` is session state, not persisted. That is deliberate and correct in itself. The
+consequence is not: **after any page reload the Costing identity freeze is gone, while the batch it
+was protecting persists in `localStorage`.**
+
+Observed directly: with "Batch active · 4 rows" showing, Costing's CLIENT and SECTOR fields were
+empty and fully editable after a reload. A Maker can then type a different client into Costing and
+send — and the client/sector mismatch guard only **WARNS**, it does not block.
+
+So the post-reload state is: no freeze, plus a passable warning, protecting a batch that survived.
+Weaker than the design intends, and reloads are ordinary — laptop closed, crash, HMR reload during
+development.
+
+**Not a refactor regression** — behaviour is identical to pre-Phase-4. But it is inherited rather
+than decided, and it is the class of thing that bites in beta.
+
+> **No fix window assigned.** To be decided after Phase 6. **Do not propose a fix.**
+
 
 ---
 
