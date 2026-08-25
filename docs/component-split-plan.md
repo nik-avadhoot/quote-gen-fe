@@ -48,7 +48,7 @@ Goal: real components, one mounted tab at a time, with a shared state layer — 
 | UI verification | **Cannot be automated. Permanently the user's.** See *Standing constraint* below — schedule around it, do not rediscover it at each gate |
 | Defects | 🛑 **RECORD, DON'T FIX — until Phase 8 lands.** Register the defect with severity and a reachability note, then stop. No fix, no proposal, no fix window. **Do not ask whether to fix it; the answer is no.** Only exception: something that blocks *the split itself* — say so once and stop |
 | Capability | **Demonstrated, not described.** Before either party plans around something working, one of us produces it. Covers tool capabilities and covers reporting a check as run |
-| Assertions | **Read them from the source or the rendered output — never write them from expectation.** Twice this refactor a check list asserted behaviour that was never true (label propagation; PDF wording), and the code was right both times. A wrong assertion costs a false failure or, worse, a false pass |
+| Assertions | **DERIVE them programmatically from the source — never type them.** Two concrete bans: **(a) no hand-written string assertions**, and **(b) no positional element selection (`input[N]`, `slice(0,3)`) where a named or labelled selector exists.** See *Why the earlier wording failed* below |
 | Asking | **Ask, then WAIT.** If a question is worth asking before acting, it is worth not acting until it is answered. Raising a concern and proceeding anyway is not asking — it is narrating |
 
 ### Standing constraint — UI verification is the user's, always
@@ -82,6 +82,34 @@ explicitly fronting the tab. **There is no window for the user to click into or 
 > and discards data on close, so Guest cannot work either), but it requires the user to install and
 > sign into an extension purely to save the implementer a round trip. That trade was judged not
 > worth it: Phases 0–5 all landed without it, and arranging it cost more exchanges than it saved.
+
+#### Why the earlier wording failed — assertions must be derived, not intended
+
+The first version of this rule read *"read them from the source, never write them from expectation."*
+It was broken **within two commits of being written**, which is the useful datum: *"read it from
+source"* is an **intention**, and intentions do not survive being three calls deep in an
+investigation.
+
+Four false alarms this refactor, none of which was a code fault:
+
+| # | Assertion | Reality |
+|---|---|---|
+| 1 | A **label** edit propagates to the batch grid | `constrAutoName` is spec-derived and never reads `c.name` |
+| 2 | PDF contains `"Payment: 60 days"` | It reads `"Payment terms: 60 days from date of invoice"` |
+| 3 | Page contains `"DIE-LINE PREVIEW"` | Source says `Die-Line Preview` (mixed case) |
+| 4 | `input[type=number]` indices 0–2 are L/W/H | They are **NOS/SET, L, W** — H left empty, so the block's own guard correctly suppressed it |
+
+**#4 is the one the string rule would not have caught.** Positional element selection is a separate
+failure mode and needs its own ban.
+
+**The replacement is mechanical, not attentional:** extract the expected string from the source file
+in the same command that asserts it, and select elements by label, placeholder or accessible name —
+never by index — whenever such a selector exists.
+
+> **What did NOT go wrong, recorded deliberately.** All four cost time; **none produced a wrong
+> conclusion**. Each was chased to ground and correctly attributed to the check rather than filed as
+> a code fault. The behaviour being trained out is **wasted effort, not bad reporting** — the
+> reporting worked.
 
 #### 🛑 D-5 operational mitigation — ALWAYS Restore, NEVER Dismiss
 
@@ -699,6 +727,10 @@ must be lifted into `useCostingBatchBridge`:
   `setBatchRows`, `setBatchResults`, `setExpandedRows`, `setActiveBatchRowId`, `setSpecCommitted`,
   `setItems`, `setCostingContext`, `setSpec`, `setSetAutoFill`. The most cross-cutting action in the app.
 - **`↓ Profile`** (3369–3392) — reads `spec`, `costingContext`, `batchRows.length`; writes `batchProfile`.
+
+> ✅ **The `SubHdr` hoist eliminated `react-hooks/static-components` outright, 2 → 0.**
+> First rule this refactor removed **by intent** rather than as a side effect of code motion — every
+> other lint improvement has been incidental to moving code out of `QuotationApp.jsx`.
 
 **7a — `tabs/costing/`**: `SpecForm.jsx` (642), `OutputPanel.jsx` (319), `CostingTab.jsx` (~15, just
 the `380px | 1fr` grid wrapper). **Hoist `SubHdr` (line 2493) to module scope** — ESLint errors
