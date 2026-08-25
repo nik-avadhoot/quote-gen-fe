@@ -973,6 +973,63 @@ overwrite: `cbb_template`, `cbb_rate_date`, `cbb_batch_autosave`. The loss is th
 > but the proposal must also answer what happens to backup files **already written with nulls in
 > them**. Do not fix before then; pre-existing, not a refactor regression.
 
+### D-13 — The C11 guard's only exit is destructive (no "save your work" path)
+
+**Not a guard failure.** C11 fires correctly. The defect is that the state it blocks has **no
+non-destructive way out**.
+
+#### The flow
+```
+Costing → + New Batch (scratchpad)      costingContext = "new-batch", rows preserved
+        → enter client / sector / plant  real work now lives only in `spec`
+Batch Entry → ↓ Profile                  C11 BLOCKS — correctly
+```
+
+The toast then says:
+
+> *"❌ Scratchpad context — cannot overwrite the existing Batch Profile.
+>  Use Batch Entry → + New Batch to clear the old batch first."*
+
+**Following that instruction triggers D-2** — `startNewBatch` calls `setSpec({...INIT_SPEC})` and
+silently discards the Costing scratchpad the user just filled in. The confirm names the profile, rows,
+results and Quote Items; it does not name the spec.
+
+#### Both exits lose something
+| Choice | Cost |
+|---|---|
+| Import anyway (if C11 did not exist) | Batch contaminated: new customer's profile over the previous customer's rows |
+| Follow the toast → `+ New Batch` | **The Costing spec is destroyed**, unnamed, unrecoverable (never persisted) |
+| Abandon and re-enter elsewhere | Manual re-keying |
+
+**The guard protects the batch and sacrifices the scratchpad.** There is no "commit this scratchpad
+into a new batch", no "park it", no "save before proceeding".
+
+> **This is the missing capability, not a broken check.** The scratchpad context exists precisely so
+> a Maker can cost something independently while a batch is open — but nothing lets that work
+> *graduate* into a batch of its own without first destroying it.
+
+> **NO FIX WINDOW. Do not propose a fix.** Post-Phase-8 this is a design question: what should
+> "promote scratchpad to a new batch" do with the existing batch — archive it, require it be sent to
+> Quote Items first, or hold two batches concurrently? That is a product decision about the batch
+> model, not a patch to a toast string.
+
+#### Related, unreproduced — C11 observed once as not firing
+During Phase 7a verification the guard was reported as importing anyway under this flow. It could
+not be reproduced. Evidence on both sides, recorded so it is neither lost nor mistaken for a
+confirmed defect:
+
+* **Static:** the guard is **byte-identical** at `dacedb4` (pre-lift, inline), `5c72d1c` (post-lift,
+  in the bridge) and the 7a tree. Identical code with identical inputs cannot behave differently —
+  so any real failure implies the *inputs* differed, not the code.
+* **Live at 7a**, with `costingContext:"new-batch"`, `batchRows:3`, `spec.client:"ZZTEST OtherCo"`:
+  the toast fired and `batchProfile.client` was unchanged (`profileHeld: true`).
+* Plausible input differences: `↓ Profile` clicked **once before** entering scratchpad context, where
+  it is legal and unguarded — which produces the same end state (new profile, old rows) one step
+  earlier than the click it was attributed to.
+
+**Status: open observation, not a defect record.** If it recurs, capture `costingContext` and
+`batchRows.length` at the moment of the click.
+
 ### D-12 — 🚨 The toast overlay makes a destructive button clickable-by-accident
 
 The client-mismatch toast overlays the Costing header, and clicking it fires **+ New Batch** — the
