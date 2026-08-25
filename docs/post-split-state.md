@@ -26,7 +26,7 @@ Companion documents:
 
 ---
 
-## 1. Running it, and the two gates
+## 1. Running it, and the three gates
 
 ```bash
 npm run dev
@@ -41,6 +41,23 @@ npm run ref:case4
 ```
 
 `npm run build` and `npm run lint` are the other two. The backend is expected at `localhost:3001`.
+
+**Last run on `main` at `0def418`, 2026-08-25 — all three green:**
+
+| Gate | Command | Result |
+|---|---|---|
+| Build | `npm run build` | pass — 406 ms, `index.js` 1,401.96 kB (gzip 513.11 kB) |
+| Costing | `npm run test:costing` | pass — 5/5 fixtures |
+| Lint | `npx eslint src` | **76 errors, 0 warnings** — equals the Phase 0 baseline |
+
+The lint gate is a *ceiling*, not a target: 76/0 is the pre-refactor count and may only go down.
+`npm run lint` (`eslint .`) and the baseline's `npx eslint src` both report 76/0 post-split, so
+either is a valid gate — they agreed when checked on `0def418`, but the baseline file names
+`npx eslint src` and that is the one to quote.
+
+`python scripts/audit-doc-sections.py` is the fourth check, for documents rather than code — see
+§6 rule 2. It exits 0 as of `0def418` (3 retitled, 2 moved, 1 reviewed-and-accepted, no silent
+deletions). Its own file header records what it catches and the commit that motivated it.
 
 ### What `test:costing` does NOT cover — read this before trusting a green run
 
@@ -359,6 +376,8 @@ Branch `refactor/component-split`, one commit per phase, each independently reve
 | Phases 1–6 | `77e73a2` · `ceff59c` · `76626a6` · `c7d7b83` · `a6af2e4` · `27e4a10` · `5c96cc6` · `12aa5b0` · `5755273` · `60d3c48` · `dacedb4` |
 | Phase 7 | `5c72d1c` prerequisite · `4082d8d` 7a · `a6e326c` 7b |
 | Phase 8 | `724da4e` |
+| Post-split docs | `ffaded3` · `32f28ed` · `019cd34` · `5313f15` |
+| **Merge to `main`** | **`0def418`** — "Merge refactor/component-split", ort strategy |
 
 **Line-count trajectory of `QuotationApp.jsx`:**
 
@@ -367,3 +386,70 @@ Branch `refactor/component-split`, one commit per phase, each independently reve
 Every extraction from Phase 7 onward was verified **byte-identical**: the moved JSX reconstructs
 exactly from the previous commit after a uniform dedent. Free variables were derived by ESLint scope
 analysis and confirmed reachable from the store before any file was written — not read off by eye.
+
+---
+
+## 8. Repository and deployment state
+
+### Where the code is
+
+| | |
+|---|---|
+| `quote-gen-fe` local `main` | `0def418` — the merge; the split is here |
+| `quote-gen-fe` `origin/main` | see below — was `1ee0e28` (pre-split) before this document was pushed |
+| `refactor/component-split` | **local only.** `git ls-remote --heads origin` listed only `refs/heads/main`; the branch was never pushed. It is kept locally because every phase is independently revertable. |
+| `quote-gen-be` `origin/main` | `cf61f0e` auth, then `b93dee7` login-config fix |
+
+The 46 commits from `3d87de8` (Phase 0 harness) through `0def418` (merge) sat unpushed on local
+`main` while `origin/main` still pointed at the pre-split baseline. If a clone looks like it has no
+component split in it, check `origin/main` before concluding the work is missing.
+
+### The Vercel environment-variable requirement
+
+`quote-gen-be/.env` is gitignored — deliberately, it holds the Supabase keys — which means **it
+never reaches Vercel**. The deployed backend gets its configuration only from environment variables
+set in the Vercel project itself. Three are required:
+
+| Var | Scope |
+|---|---|
+| `SUPABASE_URL` | all environments |
+| `SUPABASE_PUBLISHABLE_KEY` | all environments — RLS enforced |
+| `SUPABASE_SECRET_KEY` | **Production only** — service role, bypasses RLS, never exposed to the frontend |
+
+Setting them requires a redeploy; Vercel does not apply new variables to existing deployments.
+
+### Confirming it worked
+
+```bash
+curl -s https://quote-gen-be.vercel.app/health
+```
+
+Want `"supabase": true`. This is a live check, not a static flag — `/health` calls `get_supabase()`
+inside a try/except, so it reports true only if the client actually constructed from real
+environment variables.
+
+**It does not validate the secret key.** `/health` builds only the publishable-key client. To
+confirm `SUPABASE_SECRET_KEY` landed, complete a login: that path calls `_fetch_profile_or_none()`,
+which uses the admin client.
+
+### `supabase: false` means configuration, not credentials
+
+This cost real time and is the reason `b93dee7` exists.
+
+`/auth/login` called `get_supabase()` *inside* the same `try` that wrapped
+`sign_in_with_password`. Missing environment variables raise `RuntimeError`; the bare
+`except Exception` caught it alongside a genuine auth failure and returned
+**"Invalid email or password"**. A deployment fault was reported as a credentials fault, which sent
+the investigation to the user record — *was the account created, is the password right* — when the
+account was fine all along: confirmed, active, `role: admin`, with a successful `last_sign_in_at`
+already on it.
+
+`b93dee7` hoists the client construction above the credential check; a config fault now returns
+**500 "Auth backend is not configured"** and logs the cause.
+
+> **The generalisation.** The missing variables were the trigger; the swallowed `RuntimeError` was
+> the defect. A `try` block that spans both "can I reach the service" and "are these credentials
+> valid" collapses two failures with completely different remedies into one message. Keep
+> reachability and validity in separate `try` blocks wherever this pattern recurs.
+
+When a login fails, **check `/health` before touching the user record.**
