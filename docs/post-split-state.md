@@ -4,12 +4,17 @@
 across Phases 0–8 on `refactor/component-split`. This document is the handoff. It assumes you have
 read none of the conversation that produced the split.
 
-Two companion documents:
+Companion documents:
 
 | | |
 |---|---|
 | [`component-split-plan.md`](component-split-plan.md) | The full record — every phase, every decision and its reasoning, the complete defect register with mechanisms, and the design positions. **Authoritative.** This file is the summary. |
+| [`../CLAUDE.md`](../CLAUDE.md) | Repo conventions and business-logic guardrails. **It now lives at `quote-gen-fe/CLAUDE.md`** — it previously sat in the shared parent directory, outside both git repos, so every edit to it was unversioned. Moved in and tracked at the end of Phase 8. |
 | `../../quote-gen-be/docs/CFB_QOS_Project_Brief_v3.md` | Business logic, formulas, tab-by-tab behaviour spec. Authoritative for anything not about code structure. |
+
+> ⚠️ **Consequence of that move, unresolved:** `quote-gen-be` and the shared parent directory now
+> have **no `CLAUDE.md`**. Working in the backend, nothing loads. The fix is a file in `quote-gen-be`
+> — a separate repository, deliberately left alone rather than decided unilaterally.
 
 ---
 
@@ -180,6 +185,19 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 > **D-6 and D-7 were silently deleted from the plan by commit `b7cc2a4`** — an anchor-replace in
 > that commit consumed them. Both were **restored verbatim from `b7cc2a4^`** at the end of Phase 8.
 > Nothing was rewritten.
+>
+> **The whole document was then audited across all 29 commits that touched it** — every heading at
+> every revision, compared against the next, with each apparent loss checked by testing whether its
+> *body text* survived (a rename is indistinguishable from a deletion at heading level). **D-6 and
+> D-7 are the only genuine loss in the document's history.** Five other headings changed and all
+> five were deliberate rewrites that added content: `da5ac3c` replaced two sections with three when
+> correcting a capability claim that had turned out to be false, `b7cc2a4` reframed D-2 into a
+> substantially fuller entry, and `72583b2` retitled D-13.
+>
+> The mechanism is confirmed by position rather than inferred: at `b7cc2a4^` the register ran
+> **D-2 → D-7 → D-6 → D-4**, and the D-2 rewrite replaced from D-2's heading through to D-4's,
+> consuming the two entries in between. **An anchor-replace whose end anchor is the *next* heading
+> silently eats everything between.** Anchor on the section being replaced, never on what follows it.
 
 ### Beta blockers
 
