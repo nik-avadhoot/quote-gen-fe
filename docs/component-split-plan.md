@@ -46,10 +46,25 @@ Goal: real components, one mounted tab at a time, with a shared state layer — 
 | Commit discipline | **One concern per commit.** Structural moves and behaviour changes never share one |
 | Verification | **No phase commits with its own verification outstanding** — whether or not the plan spells out a hard stop for it. Phase 5 broke this rule; see below |
 | UI verification | **Cannot be automated. Permanently the user's.** See *Standing constraint* below — schedule around it, do not rediscover it at each gate |
-| Defects | 🛑 **RECORD, DON'T FIX — until Phase 8 lands.** Register the defect with severity and a reachability note, then stop. No fix, no proposal, no fix window. **Do not ask whether to fix it; the answer is no.** Only exception: something that blocks *the split itself* — say so once and stop |
+| Defects | 🛑 **RECORD, DON'T FIX, AND DON'T INVESTIGATE — until Phase 8 lands.** A new defect gets **ONE LINE** in the register: **what was observed, and where.** No hypothesis, no reproduction attempt, no bisect, no root-cause analysis, no proposed mechanism, no fix, no proposal, no fix window. **Do not ask whether to fix or investigate; the answer is no.** Only exception: something that blocks *the split itself* — say so once and stop |
+| Reported guard failures | **Record as an observation and CARRY ON.** A report that looks like a guard failure is not a stop condition. **Stop only when a guard demonstrably fails in a way that implicates the commit in front of us** — demonstrably, in the current tree, not by inference. Everything else is an observation line and the work continues |
 | Capability | **Demonstrated, not described.** Before either party plans around something working, one of us produces it. Covers tool capabilities and covers reporting a check as run |
 | Assertions | **DERIVE them programmatically from the source — never type them.** Two concrete bans: **(a) no hand-written string assertions**, and **(b) no positional element selection (`input[N]`, `slice(0,3)`) where a named or labelled selector exists.** See *Why the earlier wording failed* below |
 | Asking | **Ask, then WAIT.** If a question is worth asking before acting, it is worth not acting until it is answered. Raising a concern and proceeding anyway is not asking — it is narrating |
+
+> ### Why the defect rule tightened — D-13 is the worked example
+>
+> D-13 cost **four exchanges**: hypothesis, static bisect, reproduction attempt, decisive live test.
+> The finding that survived all four was **one line** — *there is no non-destructive exit from
+> scratchpad context.* Everything else was scaffolding thrown away on arrival.
+>
+> The investigation was not wrong, it was **mistimed**. Done now it is against code that three
+> phases are still moving; the same work post-split is done once, in final code, with every defect
+> in view at the same time. **Investigating during the split pays for the analysis twice and gets
+> the worse copy.**
+>
+> **The rule binds both sides.** The implementer does not investigate unprompted, and analysis is
+> not requested mid-split. A defect report during the split is a *bookmark*, not a *ticket*.
 
 ### Standing constraint — UI verification is the user's, always
 
