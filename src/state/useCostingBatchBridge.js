@@ -26,7 +26,7 @@ import { buildSpecFromRow } from "../engine/costing.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
 
 export function useCostingBatchBridge(st){
-  const { activeBatchRowId, autoCalcPPDims, batchProfile, batchRows, constructionLib, costingContext, freight, invalidateBatchRow, resolveSpecWasteConv, sectors, setActiveBatchRowId, setAutoFill, setBatchProfile, setBatchRows, setConstructionLib, setCostingContext, setSetAutoFill, setSpec, setSpecCommitted, setTab, showToast, spec } = st;
+  const { activeBatchRowId, autoCalcPPDims, batchProfile, batchRows, constructionLib, costingContext, freight, invalidateBatchRow, resolveSpecWasteConv, sectors, setActiveBatchRowId, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setCostingContext, setSetAutoFill, setSpec, setSpecCommitted, setTab, showToast, spec } = st;
 
   const loadBatchRowIntoCosting=(row)=>{
     // Gate: block Deep Dive if this row has an unconfirmed SET Code
@@ -585,5 +585,72 @@ export function useCostingBatchBridge(st){
   };
 
 
-  return { loadBatchRowIntoCosting, pushCostingToBatchRow, sendCostingToBatch, specForNewBatch, specFromProfile };
+
+  // ── CROSS-SLICE ACTIONS lifted from BatchProfileBar JSX (Phase 7 prerequisite) ──
+  // Both were inline onClick bodies. They are cross-slice, so they belong here
+  // rather than travelling into tabs/batch/BatchProfileBar.jsx in 7b.
+  //
+  // ⚠️ Only the HANDLER BODIES moved. The <button> elements stay in the JSX.
+  // The lift had to start at the arrow function, not the line above it: the two
+  // preceding lines are closing </div> tags for the Import-from-Costing block,
+  // and consuming them leaves the profile bar unbalanced — the silent-deletion
+  // failure mode CLAUDE.md warns about.
+
+  // C11 guard lives inside: blocks a Profile import while Costing is in
+  // scratchpad (new-batch) context and an old batch still exists.
+  const copyCostingToProfile=()=>{
+                  // C11: block Profile import when Costing is in scratchpad context and old batch exists
+                  if(costingContext==="new-batch"&&batchRows.length>0){
+                    showToast("❌ Scratchpad context — cannot overwrite the existing Batch Profile.\n\nUse Batch Entry → + New Batch to clear the old batch first.",'error',6000);
+                    return;
+                  }
+                  const isBoxRow=!spec.rowType||spec.rowType==="Box";
+                  const srcMargin=typeof spec.margin==="number"?spec.margin:8;
+                  const srcInterest=typeof spec.interest==="number"?spec.interest:0.5;
+                  setBatchProfile(p=>({...p,
+                    client:spec.client||p.client,sector:spec.sector||p.sector,
+                    plant:spec.plant||p.plant,delivery:spec.delivery||p.delivery,
+                    margin:isBoxRow?srcMargin:(typeof p.margin==="number"?p.margin:8),
+                    marginPP:!isBoxRow?srcMargin:(typeof p.marginPP==="number"?p.marginPP:8),
+                    interest:srcInterest,
+                    paymentDisc:spec.paymentDisc||p.paymentDisc,
+                    freightOverride:spec.freightOverride||p.freightOverride,
+                    waste:spec.waste??p.waste??5,convRate:spec.convRate??p.convRate??7,
+                    wastePP:spec.wastePP??p.wastePP??5,convRatePP:spec.convRatePP??p.convRatePP??12.5,
+                    customerType:spec.customerType||p.customerType||'existing',
+                    priceContext:spec.priceContext||p.priceContext||'unknown',
+                  }));
+                  showToast(isBoxRow?"✅ Box profile imported":"✅ PP profile imported",'success');
+  };
+
+  // The most cross-cutting action in the app: TEN setters across four slices
+  // (batch, costing, quote items, batch UI) plus INIT_SPEC. Fix 5 also clears
+  // Quote Items so a prior customer's data cannot leak into a new batch.
+  //
+  // ⚠️ See D-2: the confirm text names the profile, SKU rows, results and Quote
+  // Items — four things — but setSpec below also discards the Costing
+  // scratchpad, unnamed. Recorded, deliberately NOT fixed here (defect freeze).
+  const startNewBatch=()=>{
+            // Fix 5: also clear Quote Items on New Batch so prior customer's data cannot leak
+          if(!window.confirm("Start a new batch? This will clear the current profile, all SKU rows, results, and Quote Items."))return;
+            const fresh={client:'',sector:'',plant:'',delivery:'',
+              margin:8,marginPP:8,interest:0.5,paymentDisc:'30',freightOverride:'',
+              waste:5,convRate:7,wastePP:5,convRatePP:12.5,
+              customerType:'existing',priceContext:'unknown'};
+            setBatchProfile(fresh);
+            setBatchRows([]);
+            setBatchResults({});
+            setExpandedRows(new Set());
+            setActiveBatchRowId(null);
+            setSpecCommitted(false); // Costing identity fields become editable again
+            setItems([]); // Fix 5: clear Quote Items so new customer starts clean
+            // Batch Entry cleared → Costing re-attaches to the now-empty batch (same-batch context)
+            // Also reset Costing spec so the panel reflects the fresh state immediately
+            setCostingContext("same-batch");
+            setSpec({...INIT_SPEC,plant:"",delivery:""});
+            setSetAutoFill(true);
+            showToast("✅ New batch started — Quote Items cleared",'success');
+  };
+
+  return { copyCostingToProfile, loadBatchRowIntoCosting, pushCostingToBatchRow, sendCostingToBatch, specForNewBatch, specFromProfile, startNewBatch };
 }

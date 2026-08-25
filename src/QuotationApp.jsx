@@ -50,6 +50,8 @@ export default function App(){
 function QuotationApp(){
   const st = useAppState();
   const {
+    startNewBatch,
+    copyCostingToProfile,
     _convDefBox, _convDefPP, _sendReady, _wasteDefBox, _wasteDefPP, activeBatchRowId,
     addBatchRow, aiNotes, autoCalcPPDims, autoCodeEnabled, autoCodeSeq, autosaveBanner,
     batchConstrOverlay, batchConstrOverlayFilter, batchConstrOverlayQuery,
@@ -61,7 +63,7 @@ function QuotationApp(){
     sendAllToQuoteItems, sendCostingToBatch, setActiveBatchRowId, setAiNotes,
     setAutoCodeEnabled, setAutoFill, setAutosaveBanner, setBatchConstrOverlay,
     setBatchConstrOverlayFilter, setBatchConstrOverlayQuery, setBatchConstrTargetRowId,
-    setBatchProfile, setBatchResults, setBatchRows, setCostingContext, setExpandedRows, setItems, setSetAutoFill, setShowChangePassword, setShowProfile,
+    setBatchProfile, setBatchRows, setCostingContext, setSetAutoFill, setShowChangePassword, setShowProfile,
     setSidebarCollapsed, setSpec, setSpecCommitted, setTab, showChangePassword, showProfile,
     showToast, sidebarCollapsed, spec, specCommitted, specForNewBatch, specFromProfile, tab,
     toasts, togglePinAddOn, toggleRowExpand,
@@ -1306,30 +1308,7 @@ function QuotationApp(){
             <div style={{fontSize:7.5,color:C.slateL,fontWeight:700,textTransform:"uppercase",
               letterSpacing:"0.06em",textAlign:"center",marginBottom:3}}>Import from Costing</div>
             <div style={{display:"flex",gap:4}}>
-              <button onClick={()=>{
-                  // C11: block Profile import when Costing is in scratchpad context and old batch exists
-                  if(costingContext==="new-batch"&&batchRows.length>0){
-                    showToast("❌ Scratchpad context — cannot overwrite the existing Batch Profile.\n\nUse Batch Entry → + New Batch to clear the old batch first.",'error',6000);
-                    return;
-                  }
-                  const isBoxRow=!spec.rowType||spec.rowType==="Box";
-                  const srcMargin=typeof spec.margin==="number"?spec.margin:8;
-                  const srcInterest=typeof spec.interest==="number"?spec.interest:0.5;
-                  setBatchProfile(p=>({...p,
-                    client:spec.client||p.client,sector:spec.sector||p.sector,
-                    plant:spec.plant||p.plant,delivery:spec.delivery||p.delivery,
-                    margin:isBoxRow?srcMargin:(typeof p.margin==="number"?p.margin:8),
-                    marginPP:!isBoxRow?srcMargin:(typeof p.marginPP==="number"?p.marginPP:8),
-                    interest:srcInterest,
-                    paymentDisc:spec.paymentDisc||p.paymentDisc,
-                    freightOverride:spec.freightOverride||p.freightOverride,
-                    waste:spec.waste??p.waste??5,convRate:spec.convRate??p.convRate??7,
-                    wastePP:spec.wastePP??p.wastePP??5,convRatePP:spec.convRatePP??p.convRatePP??12.5,
-                    customerType:spec.customerType||p.customerType||'existing',
-                    priceContext:spec.priceContext||p.priceContext||'unknown',
-                  }));
-                  showToast(isBoxRow?"✅ Box profile imported":"✅ PP profile imported",'success');
-                }}
+              <button onClick={copyCostingToProfile}
                 style={{flex:1,padding:"4px 0",borderRadius:4,border:"none",
                   background:"#2E6094",color:C.white,fontSize:10,fontWeight:600,cursor:"pointer"}}>
                 ↓ Profile
@@ -1341,27 +1320,8 @@ function QuotationApp(){
               </button>
             </div>
           </div>
-          <button onClick={()=>{
-            // Fix 5: also clear Quote Items on New Batch so prior customer's data cannot leak
-          if(!window.confirm("Start a new batch? This will clear the current profile, all SKU rows, results, and Quote Items."))return;
-            const fresh={client:'',sector:'',plant:'',delivery:'',
-              margin:8,marginPP:8,interest:0.5,paymentDisc:'30',freightOverride:'',
-              waste:5,convRate:7,wastePP:5,convRatePP:12.5,
-              customerType:'existing',priceContext:'unknown'};
-            setBatchProfile(fresh);
-            setBatchRows([]);
-            setBatchResults({});
-            setExpandedRows(new Set());
-            setActiveBatchRowId(null);
-            setSpecCommitted(false); // Costing identity fields become editable again
-            setItems([]); // Fix 5: clear Quote Items so new customer starts clean
-            // Batch Entry cleared → Costing re-attaches to the now-empty batch (same-batch context)
-            // Also reset Costing spec so the panel reflects the fresh state immediately
-            setCostingContext("same-batch");
-            setSpec({...INIT_SPEC,plant:"",delivery:""});
-            setSetAutoFill(true);
-            showToast("✅ New batch started — Quote Items cleared",'success');
-          }} style={{padding:"5px 10px",borderRadius:5,border:`1px solid ${C.amber}`,
+          <button onClick={startNewBatch}
+            style={{padding:"5px 10px",borderRadius:5,border:`1px solid ${C.amber}`,
             background:C.white,color:C.amber,fontSize:10,fontWeight:700,cursor:"pointer",
             textAlign:"center"}}>
             + New Batch
