@@ -1072,6 +1072,20 @@ overwrite: `cbb_template`, `cbb_rate_date`, `cbb_batch_autosave`. The loss is th
 > but the proposal must also answer what happens to backup files **already written with nulls in
 > them**. Do not fix before then; pre-existing, not a refactor regression.
 
+### D-18 — Row-level Interest override does not reach the exported xlsx
+
+Observed at Phase 8. Everything else in the export is correct.
+
+**Unresolved, one of two — deliberately not investigated:**
+
+1. the export writes a **stale** interest value, or
+2. the export writes **nothing** and the template's own cell stands.
+
+Not distinguishable from the observation alone: "does not reach the file" fits both. They separate
+by opening the exported workbook and checking whether that cell holds the template default or a
+different-but-wrong number — **one step for the post-split pass, recorded here so it is not
+re-derived.**
+
 ### D-14 … D-17 — observations from Phase 7b verification
 
 Recorded under the tightened rule (`b52c681`): **one line each, what was observed and where.**
