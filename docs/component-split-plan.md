@@ -823,6 +823,11 @@ D-1 is the exception and stays as committed — written and verified before the 
 > verification produces discovery, and there is no natural end to that loop — the app carries months
 > of accumulated defects and this refactor has just built the first surface capable of finding them.
 
+> **Two classes live in this register.** D-1 … D-12 are *code not matching intent* — patchable,
+> and the correct behaviour is writable down. **D-13 is *intent that was never built*** and is
+> marked as such; it needs a product decision before any code and is sequenced as a design input to
+> the masters work, not as a bug in the queue. Do not let it be triaged alongside the others.
+
 **Standing rule for every commit from here: one concern per commit.** Structural moves and
 behaviour changes never share a commit. If a guard breaks, it must be unambiguous which change did it.
 
@@ -973,9 +978,31 @@ overwrite: `cbb_template`, `cbb_rate_date`, `cbb_batch_autosave`. The loss is th
 > but the proposal must also answer what happens to backup files **already written with nulls in
 > them**. Do not fix before then; pre-existing, not a refactor regression.
 
-### D-13 — The C11 guard's only exit is destructive (no "save your work" path)
+### D-13 — 🧭 Scratchpad work cannot become a batch without being destroyed
 
-**Not a guard failure.** C11 fires correctly. The defect is that the state it blocks has **no
+> ## CLASS BOUNDARY — THIS IS THE FIRST MISSING-CAPABILITY ENTRY
+>
+> **D-1 … D-12 are code not matching intent.** Each has a correct behaviour that someone could
+> write down, and the code does something else. They are patchable, and the patch is decidable by
+> whoever writes it.
+>
+> **D-13 is intent that was never built.** There is no correct behaviour to restore, because the
+> capability does not exist and never did. Nothing here can be *fixed* — something has to be
+> *designed and then built*.
+>
+> **Consequences of the class difference:**
+> * It **requires a product decision from the user before any code is written.** Not a review of a
+>   proposed patch — a decision about what the batch model *is*. No implementer can derive it.
+> * It **will interact with the three incoming masters** (CustomerFamilyMaster, CustomerMaster,
+>   SKUMaster — see the roadmap). "Promote scratchpad to a new batch" is structurally the same
+>   shape as the **Prospect → Customer transition**: provisional work, held under a temporary
+>   identity, that must graduate into a permanent one without being re-keyed. A Prospect already
+>   carries two codes for exactly this reason. Solving one and not the other builds the same
+>   mechanism twice.
+> * **This is the defect most likely to shape what gets built next** — not something to patch.
+>   Sequence it as a design input to the masters work, not as a bug in the queue behind D-1…D-12.
+
+**Not a guard failure.** The guards fire correctly. The defect is that the state they block has **no
 non-destructive way out**.
 
 #### The flow
@@ -985,12 +1012,28 @@ Costing → + New Batch (scratchpad)      costingContext = "new-batch", rows pre
 Batch Entry → ↓ Profile                  C11 BLOCKS — correctly
 ```
 
-The toast then says:
+#### The wording is itself part of the defect — baseline recorded verbatim
 
-> *"❌ Scratchpad context — cannot overwrite the existing Batch Profile.
->  Use Batch Entry → + New Batch to clear the old batch first."*
+**Any fix that lands MUST rewrite these strings.** They are not incidental UI copy: in this state
+they are the app's *only* guidance, and both of them point the user at the app's most destructive
+action. **A user who follows the instructions correctly still loses work.** That is the defect
+stated at its sharpest — obedience is not a defence.
 
-**Following that instruction triggers D-2** — `startNewBatch` calls `setSpec({...INIT_SPEC})` and
+There are **two** such strings, from two independent guards, and *both* name `+ New Batch`.
+Copied byte-for-byte from source as the baseline any rewrite is diffed against:
+
+| | Guard | Source | Current text, verbatim (`
+
+` shown as ⏎) |
+|---|---|---|---|
+| **C11** | `↓ Profile` import | `useCostingBatchBridge.js:604` | `❌ Scratchpad context — cannot overwrite the existing Batch Profile.`⏎`Use Batch Entry → + New Batch to clear the old batch first.` |
+| **C10** | Send Costing → Batch | `useCostingBatchBridge.js:260-261` | `❌ New-Batch/Scratchpad context — cannot send into existing Batch Entry batch.`⏎`Go to Batch Entry → + New Batch to clear the old batch first, then send.` |
+
+> **Both exits from this state are the same destructive action.** The app offers the user exactly
+> two ways forward — send the spec into the batch, or import the profile — blocks both, and hands
+> out the identical remedy each time. There is no third string, because there is no third path.
+
+**Following either instruction triggers D-2** — `startNewBatch` calls `setSpec({...INIT_SPEC})` and
 silently discards the Costing scratchpad the user just filled in. The confirm names the profile, rows,
 results and Quote Items; it does not name the spec.
 
@@ -1008,10 +1051,12 @@ into a new batch", no "park it", no "save before proceeding".
 > a Maker can cost something independently while a batch is open — but nothing lets that work
 > *graduate* into a batch of its own without first destroying it.
 
-> **NO FIX WINDOW. Do not propose a fix.** Post-Phase-8 this is a design question: what should
-> "promote scratchpad to a new batch" do with the existing batch — archive it, require it be sent to
-> Quote Items first, or hold two batches concurrently? That is a product decision about the batch
-> model, not a patch to a toast string.
+> **NO FIX WINDOW. Do not propose a fix.** Post-Phase-8 this is a design question the user answers
+> first: what should "promote scratchpad to a new batch" do with the existing batch — archive it,
+> require it be sent to Quote Items first, or hold two batches concurrently? Then, and only then,
+> what the two strings above should say instead. **A patch to a toast string is not a fix** —
+> rewriting the strings without building the missing path merely removes the false instruction and
+> leaves the user in the same dead end, better informed.
 
 #### Related, unreproduced — C11 observed once as not firing
 During Phase 7a verification the guard was reported as importing anyway under this flow. It could
