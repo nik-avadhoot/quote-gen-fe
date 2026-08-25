@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { C, mono, sans } from "./theme.js";
-import { apiFetch } from "./lib/apiClient.js";
-import { useAuth } from "./AuthContext.jsx";
+import { C, mono, sans } from "../theme.js";
+import { apiFetch } from "../lib/apiClient.js";
+import { useAuth } from "../AuthContext.jsx";
 
 const ROLES = ["maker", "checker", "admin"];
 

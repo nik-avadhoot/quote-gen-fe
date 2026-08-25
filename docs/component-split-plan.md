@@ -779,7 +779,12 @@ slide-over overlay opens per-row and from the toolbar; pin/unpin an add-on colum
 - `ui/Sidebar.jsx` (2107–2140, plus `NAV_ITEMS` 2097–2106) and `ui/TopBar.jsx` (2143–2162, **with**
   `restoreRef` and the hidden restore `<input>` — they must not be separated).
 - Move `UserManagementTab.jsx` into `tabs/`.
-- Consider renaming `aiNotes` → `statusNote` (it is a generic status banner; nothing about it is AI).
+- ~~Consider renaming `aiNotes` → `statusNote`~~ — **SKIPPED, deliberately. Deferred to the
+  post-split cleanup pass.** It is behaviour-neutral and structurally worthless, and it would touch
+  `tabs/costing/SpecForm.jsx`, which Phase 7a had just extracted. Renaming a field inside a
+  freshly-moved file trades a real risk (a missed call site in a file whose byte-identity is the
+  only evidence the extraction was clean) for a cosmetic gain. The name is still wrong — nothing
+  about that banner is AI — so it stays on the post-split list, not in Phase 8.
 - **Update `CLAUDE.md`** — two statements become actively misleading and will make the next session
   fight this architecture:
   - *"all React state (`useState` only, no Redux/Context)"* — already false (`AuthProvider`), now
@@ -788,6 +793,19 @@ slide-over overlay opens per-row and from the toolbar; pin/unpin an add-on colum
 - Drive `npm run lint` to zero for the **new** files at minimum.
 
 ---
+
+### Post-split cleanup list — deferred, deliberately
+
+Behaviour-neutral tidying that was in reach during the split and was **left alone on purpose**,
+because doing it mid-split would have mixed cosmetic churn into commits whose diffs were the only
+evidence the moves were clean.
+
+| Item | Why deferred |
+|---|---|
+| `aiNotes` → `statusNote` | Would touch freshly-extracted `SpecForm.jsx`; the name is wrong but the risk/benefit is upside-down mid-split |
+| Two empty section banners in `QuotationApp.jsx` (`Export modules`, `Presentation`) | Emptied by Phases 3–6, not by Phase 8 — left rather than churned |
+| `bsOk` / `isPP` unused locals in `BatchGrid.jsx` | Pre-existing, inside the byte-identical region; removing them would have broken the identity proof |
+| `no-empty` × 18, `no-unused-vars` × 63 across `state/` and `export/` | Baseline lint debt, not introduced by the split. New files are at zero |
 
 ## Post-split roadmap — what this architecture must accommodate
 

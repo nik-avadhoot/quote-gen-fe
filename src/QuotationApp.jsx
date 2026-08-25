@@ -1,15 +1,7 @@
-import UserManagementTab from "./UserManagementTab.jsx";
 import ChangePasswordModal from "./ChangePasswordModal.jsx";
 import ProfileModal from "./ProfileModal.jsx";
-import AccountMenu from "./AccountMenu.jsx";
 
-// ── Engine & Data ─────────────────────────────────────────────────────────
-
-// ── Export modules (Phase 3 refactor) ─────────────────────────────────────
-
-// ── Presentation (Phase 3 refactor) ───────────────────────────────────────
-
-// ── Tabs (Phase 6 refactor) ───────────────────────────────────────────────
+// ── Tabs (Phase 6 refactor) ──────────────────────────────────────────────
 import FreightTab from "./tabs/FreightTab.jsx";
 import RateMasterTab from "./tabs/RateMasterTab.jsx";
 import DefaultsTab from "./tabs/DefaultsTab.jsx";
@@ -17,9 +9,14 @@ import ConstructionLibTab from "./tabs/ConstructionLibTab.jsx";
 import QuoteItemsTab from "./tabs/QuoteItemsTab.jsx";
 import CostingTab from "./tabs/costing/CostingTab.jsx";
 import BatchEntryTab from "./tabs/batch/BatchEntryTab.jsx";
+import UserManagementTab from "./tabs/UserManagementTab.jsx";
+
+// ── Shell chrome (Phase 8 refactor) ──────────────────────────────────────
+import Sidebar from "./ui/Sidebar.jsx";
+import TopBar from "./ui/TopBar.jsx";
 import { C, sans } from "./theme.js";
 
-// ── State layer (Phase 4 refactor) ────────────────────────────────────────
+// ── State layer (Phase 4 refactor) ───────────────────────────────────────
 import { AppStateProvider } from "./state/AppStateProvider.jsx";
 import { useAppState } from "./state/AppStateContext.js";
 
@@ -36,88 +33,15 @@ export default function App(){
   );
 }
 
-// The destructure below is deliberately exhaustive and flat. Keeping it in one
-// place means the JSX beneath is byte-identical to the pre-Phase-4 monolith,
-// so this commit's diff is "state moved out, one destructure added" - nothing
-// else. Tabs extracted in later phases call useAppState() directly instead.
+// What is left here is chrome that belongs to no tab: the autosave banner, the
+// toast stack, two modals, and the tab switch itself. Everything else moved.
+// Components below this line take NO props for shared state - they each call
+// useAppState() directly. Do not reintroduce prop-drilling from here.
 function QuotationApp(){
   const st = useAppState();
-  const { autosaveBanner, constructionLib, handleBackup, handleRestore,
-    handleRestoreFile, items, restoreAutosave, restoreRef, role,
-    setAutosaveBanner, setShowChangePassword, setShowProfile, setSidebarCollapsed, setTab,
-    showChangePassword, showProfile, showToast, sidebarCollapsed, tab, toasts } = st;
-
-  const NAV_ITEMS=[
-    ["costing","📊","Costing"],
-    ["items","📋","Quote Items",items.length],
-    ["batch","🗂","Batch Entry"],
-    ["constrlib","📚","Construction Library",constructionLib.length],
-    ["rates","💰","Rate Master"],
-    ["freight","🚚","Freight Rates"],
-    ["defaults","🛠","Defaults"],
-    ...(role==="admin"?[["users","👥","Users"]]:[]),
-  ];
-  const sidebar=(
-    <div style={{background:C.slate,display:"flex",flexDirection:"column",flexShrink:0,
-      width:sidebarCollapsed?56:200,overflow:"hidden"}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",
-        borderBottom:`2px solid ${C.amber}`,height:48,boxSizing:"border-box"}}>
-        <div style={{width:28,height:28,flexShrink:0,background:C.amber,borderRadius:6,display:"flex",
-          alignItems:"center",justifyContent:"center",fontSize:14}}>📦</div>
-        {!sidebarCollapsed&&<div style={{color:C.white,fontWeight:700,fontSize:12,lineHeight:1.2,whiteSpace:"nowrap"}}>
-          CFB Quotation Master
-          <div style={{fontSize:8,color:"rgba(255,255,255,.4)",fontWeight:400}}>AVADHOOT PACKS</div>
-        </div>}
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:"8px 0"}}>
-        {NAV_ITEMS.map(([t,icon,l,count])=>(
-          <button key={t} onClick={()=>setTab(t)} title={sidebarCollapsed?l:undefined}
-            style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:sidebarCollapsed?"10px 0":"10px 16px",
-              justifyContent:sidebarCollapsed?"center":"flex-start",border:"none",background:tab===t?"rgba(217,123,46,.15)":"none",
-              borderLeft:tab===t?`3px solid ${C.amber}`:"3px solid transparent",
-              fontFamily:sans,fontSize:12,fontWeight:600,cursor:"pointer",
-              color:tab===t?C.amber:"rgba(255,255,255,.6)"}}>
-            <span style={{fontSize:15,flexShrink:0}}>{icon}</span>
-            {!sidebarCollapsed&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-              {l}{!!count&&` (${count})`}</span>}
-            {sidebarCollapsed&&!!count&&<span style={{position:"absolute",marginLeft:14,marginTop:-14,
-              background:C.amber,color:C.white,borderRadius:8,fontSize:8,padding:"1px 4px"}}>{count}</span>}
-          </button>))}
-      </div>
-      <button onClick={()=>setSidebarCollapsed(v=>!v)} title={sidebarCollapsed?"Expand sidebar":"Collapse sidebar"}
-        style={{padding:"10px 0",border:"none",borderTop:`1px solid rgba(255,255,255,.1)`,
-          background:"none",color:"rgba(255,255,255,.5)",cursor:"pointer",fontSize:13}}>
-        {sidebarCollapsed?"»":"« Collapse"}
-      </button>
-    </div>
-  );
-
-  // ── TOP BAR (account + backup/restore) ───────────────────────────────────
-  const topBar=(
-    <div style={{background:C.slate,display:"flex",alignItems:"center",padding:"0 16px",
-      height:48,borderBottom:`2px solid ${C.amber}`,flexShrink:0,gap:8}}>
-      <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
-        <AccountMenu onEditProfile={()=>setShowProfile(true)} onChangePassword={()=>setShowChangePassword(true)}/>
-        <button onClick={handleBackup} title="Download a full backup of all app data (rates, freight, sectors, constructions, partitions)"
-          style={{padding:"4px 10px",borderRadius:5,fontSize:11,fontWeight:600,border:"1px solid rgba(255,255,255,.25)",
-            background:"rgba(255,255,255,.10)",color:"rgba(255,255,255,.80)",cursor:"pointer",fontFamily:sans}}>
-          ⬇ Backup
-        </button>
-        <button onClick={handleRestore} title="Restore all app data from a previously downloaded backup file"
-          style={{padding:"4px 10px",borderRadius:5,fontSize:11,fontWeight:600,border:"1px solid rgba(255,255,255,.25)",
-            background:"rgba(255,255,255,.10)",color:"rgba(255,255,255,.80)",cursor:"pointer",fontFamily:sans}}>
-          ⬆ Restore
-        </button>
-        <input ref={restoreRef} type="file" accept="application/json" style={{display:"none"}}
-          onChange={handleRestoreFile}/>
-      </div>
-    </div>
-  );
-
-
-  // ── CONSTRUCTION LIBRARY TAB ─────────────────────────────────────────────
-
-
+  const { autosaveBanner, restoreAutosave, role, setAutosaveBanner,
+    setShowChangePassword, setShowProfile, showChangePassword, showProfile, showToast,
+    tab, toasts } = st;
 
   // ── MAIN RENDER ───────────────────────────────────────────────────────────
   return(
@@ -136,9 +60,9 @@ function QuotationApp(){
       </div>)}
     <div style={{display:"flex",flexDirection:"row",height:"100vh",width:"100%",overflow:"hidden",
       background:C.cream,fontFamily:sans}}>
-      {sidebar}
+      <Sidebar/>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
-        {topBar}
+        <TopBar/>
         <div style={{flex:1,overflow:"hidden",position:"relative"}}>
           {tab==="costing"&&<CostingTab/>}
           {tab==="items"&&<QuoteItemsTab/>}
