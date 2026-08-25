@@ -1054,6 +1054,28 @@ overwrite: `cbb_template`, `cbb_rate_date`, `cbb_batch_autosave`. The loss is th
 > but the proposal must also answer what happens to backup files **already written with nulls in
 > them**. Do not fix before then; pre-existing, not a refactor regression.
 
+### D-14 … D-17 — observations from Phase 7b verification
+
+Recorded under the tightened rule (`b52c681`): **one line each, what was observed and where.**
+No hypothesis, no reproduction, no bisect, no mechanism. **Do not investigate these.** They are
+bookmarks for the post-split defect pass, not tickets.
+
+| # | Observed | Class |
+|---|---|---|
+| **D-14** | An unconfirmed SET Code does **not** block Deep Dive — it blocks auto-dims, Calculate All and Send All to Quote Items, but Deep Dive opens for the unconfirmed SKU | gate gap |
+| **D-15** | An unconfirmed SET Code blocks only the offending row, not globally — **may be correct by design**, decide post-split | undecided |
+| **D-16** | After Deep Dive → Unlink, auto-dims stop recalculating. Unlink itself behaves correctly and its notice matches what it does. **Unverified:** whether conv/waste re-resolve per sector after a Set Role / Box Type change post-Unlink | correctness |
+| **D-17** | The add-on pin control is a bare ⊕ beside a number input — no label, hover tooltip only, reads as "add"/"increment" rather than "pin to grid". Discoverability only, not correctness. Fix is a pin glyph | cosmetic |
+
+> **D-17 carries more weight than "cosmetic" suggests.** It was not found by someone new to the app
+> — it was not found by its author, who knew the feature existed and was looking for it. That is a
+> discoverability failure of a different order from an unlabelled control, and the severity label
+> here understates it deliberately so it is not confused with a correctness defect.
+
+**Context recorded against D-16 and D-6:** during check 6 the Batch Entry toolbar's **`+ Constr`**
+button switched to the Construction Library tab instead of opening the slide-over overlay. The
+per-row route into the overlay opens correctly. Observed at 7b; **not investigated, not attributed.**
+
 ### D-13 — 🧭 Scratchpad work cannot become a batch without being destroyed
 
 > ## CLASS BOUNDARY — THIS IS THE FIRST MISSING-CAPABILITY ENTRY
