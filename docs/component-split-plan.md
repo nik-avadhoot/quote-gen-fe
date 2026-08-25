@@ -141,7 +141,7 @@ promised.
 |---|---|
 | `npm run test:costing` | Every UI flow, without exception |
 | `eslint src` diffed rule-by-rule against the Phase 0 baseline | The four negative cases |
-| `npm run build` | The Case 4 number check (₹2.10 / MOQ 82,200) |
+| `npm run build` | The Case 4 number check - run `npm run ref:case4`, never a literal |
 | Static dependency / free-variable analysis via ESLint scope | Persistence round-trips (edit → refresh → confirm) |
 | Headless console and network reads; `localStorage` inspection | Excel and PDF export, and the Phase 0 byte comparison |
 
@@ -170,7 +170,7 @@ change. Hence the rule now in the decisions table.
 ### Sequence from here
 | # | Commit | Notes |
 |---|---|---|
-| 1 | *(user)* run the four negative cases | Case 4 target: **₹2.10 / MOQ 82,200** |
+| 1 | *(user)* run the four negative cases | Case 4 target: **`npm run ref:case4`** (SUPERSEDED literal: ₹2.10 / MOQ 82,200 - reproduces, but retired as a form; see the Case 4 section) |
 | 2 | ✅ **Phase 4, UNCHANGED** | committed `c7d7b83` at the exact reviewed bytes |
 | 3 | ✅ **4c persist wrapper** | 37 sites wrapped, lint-neutral; carried this document into the repo and the held-back `useCostingState` comment |
 | 4 | ✅ **D-1 Glass SKU Type** | forward leg written; user verifies on a restored surface |
@@ -644,7 +644,8 @@ deeper, with no number on screen to catch it.
 2. Type in Costing — Final Rate updates.
 3. **Change `wastePP` in Costing → Send to Batch → open the row → confirm the row carries the value
    just typed, not the previous one.**
-4. **Re-run negative Case 4 end-to-end** (₹2.10 / MOQ 82,200).
+4. **Re-run negative Case 4 end-to-end** - derive the target with `npm run ref:case4`; do not
+   transcribe it. (SUPERSEDED literal: ₹2.10 / MOQ 82,200 - reproduces, but retired as a form; see the Case 4 section).
 
 Run steps 3 and 4 for **both the Box and the PP path** — `:166` and `:481` branch on
 `isPPRowType` / `isPPItem`, so a stale resolver can surface on one path and not the other.
@@ -803,6 +804,66 @@ Not designed here. But the split should not obstruct it, so three cheap accommod
    already an informal join key across Construction Library, Defaults, and Batch Profile. See the
    Phase 4d accommodation: route reads through the masters hook or bridge as the refactor passes
    through them, rather than scattering raw string reads across the new file tree.
+
+---
+
+
+## Negative Case 4 — the reference pair is DERIVED, never transcribed
+
+`npm run ref:case4` prints the pair. **Do not copy its output into this document.** The literal it
+replaced is the reason this section exists.
+
+```bash
+npm run ref:case4                                  # against DEFAULT_* (engine baseline)
+npm run ref:case4 -- ../CFB_QOS_Backup_XXXX.json   # against a backup's masters (UI baseline)
+```
+
+### Why a literal was the wrong shape for this number
+
+| | `scripts/costing-fixtures.mjs` | the running app |
+|---|---|---|
+| masters | pinned `DEFAULT_RATES` / `DEFAULT_FREIGHT` / `DEFAULT_BOX_TRIM_DATA` | `useMastersState.js:16` reads `localStorage['cbb_rates']`, falling back to `DEFAULT_RATES` only when absent or unparseable |
+| | **masters-INDEPENDENT** | **masters-DEPENDENT** |
+
+The two are computed from different data the moment anyone edits Rate Master, Freight or Defaults —
+which **D-8** records as an unguarded direct write with no confirmation, validation or undo. Before
+any such edit they agree exactly.
+
+> **That agreement is what made the old literal look trustworthy.** It was never an independently
+> captured UI number. It was the engine golden wearing a UI label — and nothing in the document said
+> so, so nothing flagged it when the two sources could have diverged.
+
+### Status of the superseded pair — it reproduces
+
+The pair flagged void (**₹2.10 / MOQ 82,200**) is **superseded in form, not falsified in value.**
+Re-derived against three independent master sources — `DEFAULT_*`, `CFB_QOS_Backup_20260824.json`,
+and `CFB_QOS_Backup_20260824_fixture.json` — **all three produce the identical pair.** The masters
+had not in fact drifted.
+
+**It is retired anyway, and the reason is the form rather than the digits:** a transcribed literal at
+a gate cannot tell you whether it still reproduces. This one happened to; the next one will not, and
+will fail a correct build or pass a wrong one without announcing which. Superseded, not deleted —
+per the standing rule, and because its reproduction is itself the evidence above.
+
+**The harness goldens remain separate and remain valid.** `scripts/costing-golden.json` is pinned to
+`DEFAULT_*` by design and must stay that way — that is what makes it a stable regression gate rather
+than a mirror of whatever is currently in the browser. The two numbers coinciding today is a fact
+about the current masters, **not** a licence to treat either as a substitute for the other.
+
+### What this does and does not discharge
+
+`ref:case4` pins both `wastePP` arms **at the spec level**, so it never reads a sector's `wastePP`.
+It therefore cannot be perturbed by sector master data — and reveals nothing about it.
+
+> ⚠️ **It derives the TARGET. It does not run the CHECK.** Like the fixture harness, it calls
+> `calcCosting` directly, which receives a spec whose blanks are already resolved.
+> `resolveSpecWasteConv` is still declared **inside** `useCostingResult` (`useCostingResult.js:84`),
+> closing over hook state, so it remains unimportable and the blank-vs-zero resolution remains
+> untestable from Node. **Negative Case 4 is still a mandatory manual check.** The Phase 9 candidate
+> that would retire it is unchanged and still deferred.
+
+Guard against a vacuous run is built in: if the two arms ever produce the same rate, the script
+exits non-zero and says so rather than printing a pair that proves nothing.
 
 ---
 

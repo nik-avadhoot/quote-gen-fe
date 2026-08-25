@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "test:costing": "node scripts/costing-fixtures.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ref:case4": "node scripts/case4-reference.mjs"
   },
   "dependencies": {
     "react": "^19.2.8",
