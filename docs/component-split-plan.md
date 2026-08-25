@@ -941,6 +941,50 @@ overwrite: `cbb_template`, `cbb_rate_date`, `cbb_batch_autosave`. The loss is th
 > but the proposal must also answer what happens to backup files **already written with nulls in
 > them**. Do not fix before then; pre-existing, not a refactor regression.
 
+### D-12 — 🚨 The toast overlay makes a destructive button clickable-by-accident
+
+The client-mismatch toast overlays the Costing header, and clicking it fires **+ New Batch** — the
+most destructive action in the app.
+
+#### Mechanism — DETERMINED: pass-through, not a toast handler
+
+`QuotationApp.jsx:2229`, the toast stack:
+
+```js
+{toasts.length>0&&<div style={{position:"fixed",top:68,right:20,zIndex:9999,…,pointerEvents:"none"}}>
+  {toasts.map(t=>(<div key={t.id} style={{…}}>{t.msg}</div>))}</div>}
+```
+
+* The container sets **`pointerEvents:"none"`**.
+* **No toast carries an `onClick`** — zero matches in the element.
+
+So the toast is not a control and never receives the click. `pointerEvents:"none"` makes the click
+pass **straight through** to whatever sits beneath — here, the **+ New Batch** button in the Costing
+header, which the toast visually covers (its orange edge is visible behind the toast).
+
+> **The irony is the root cause.** `pointerEvents:"none"` was almost certainly added so toasts would
+> not block the UI underneath — a correct instinct. Combined with a fixed position that overlaps an
+> actionable control, that same property converts *"click the toast"* into *"click whatever is
+> behind it, sight unseen."* A toast that swallowed the click would be **safer** than one that
+> passes it through.
+
+This makes it a **positioning / z-order problem, not an affordance problem.** Fixes that target the
+toast's own click handling would find nothing to change.
+
+#### Why it is dangerous beyond an ordinary mis-click
+The toast's own text invites the click: *"Start a New Batch for this client, or fix the Client field
+in Costing."* It reads as an instruction, and clicking a toast is the universal instinct for
+dismissing one. The path from *"a warning appeared"* to *"one OK away from losing the batch, Quote
+Items and the Costing spec"* is a single reflexive click on a control the user cannot see.
+
+The confirm dialog does catch it, so this is not silent loss — but see **D-2**: that confirm names
+four recoverable things and stays silent about the one that is not.
+
+> **NO FIX WINDOW. Do not propose a fix.**
+> ⚠️ **Whatever lands must NOT suppress the toast.** The client-mismatch warning **is negative
+> Case 2** and must keep firing. The fix is to stop the overlay sitting over actionable controls —
+> reposition, reserve space, or make the stack swallow clicks — not to remove the warning.
+
 ### D-11 — 🚨 Construction Library duplicates instead of matching (FOUR predicates, one absent)
 
 **Hypothesis tested and REFUTED.** The proposed cause was that the two `importConstrFromSpec` copies
@@ -1219,80 +1263,48 @@ divergence that preceded it is.
 > never diverge in the first place, making the banner a genuine choice rather than the only path
 > back to one's own data.
 
-### D-2 — New Batch silently discards the Costing scratchpad
+### D-2 — New Batch warns about what IS recoverable and hides what ISN'T
 
-`QuotationApp.jsx:1398` fires `setSpec({...INIT_SPEC,plant:"",delivery:""})` unconditionally. The
-confirm text at `1383` names *"the current profile, all SKU rows, results, and Quote Items"* — four
-things. The Costing spec is a fifth, unnamed one.
+`useCostingBatchBridge.js` → `startNewBatch` (lifted from the Batch Profile bar JSX in the Phase 7
+prerequisite). The confirm reads:
 
-Worst case is not hypothetical: a user fully enters a spec, is correctly blocked by a Batch Profile
-mismatch, goes to New Batch to clear the blocker, and loses the entire spec with no warning. They
-consented to four things and lost five.
+> *"Start a new batch? This will clear the current profile, all SKU rows, results, and Quote Items."*
 
-> **Fix window: Phase 7's prerequisite commit**, which lifts this exact handler into
-> `useCostingBatchBridge` anyway. Fixing it there costs nothing extra and lands in the right module.
->
-> **Propose options then, not now** — add the scratchpad to the confirm text; preserve the spec and
-> clear only the batch; or offer a third choice. The user decides.
+**Four things named. Ten state changes made.**
 
-### D-7 — SET Code case normalisation is asymmetric, breaking parent resolution
-
-Two entry points normalise differently, and the two consumers compare differently:
-
-| Site | Behaviour |
+| Named (4) | Unnamed (6) |
 |---|---|
-| Costing SET Code input — `QuotationApp.jsx:250` | `s("setCode", v.toUpperCase())` — **forces uppercase** |
-| Costing's own parent lookup — `:284–289` | `.trim().toUpperCase()===` on both sides — **case-insensitive** ✓ |
-| Grid SET Code input — `:1860` | `upd("setCode", e.target.value)` — **no normalisation** |
-| Grid parent predicates — `:1805`, `:2149` | `.trim()===` — **case-sensitive** ✗ |
+| `setBatchProfile` | **`setSpec`** — the Costing scratchpad |
+| `setBatchRows` | `setCostingContext("same-batch")` |
+| `setBatchResults` | `setSpecCommitted(false)` — releases the identity freeze |
+| `setItems` | `setActiveBatchRowId(null)` — breaks any Deep-Dive link |
+| | `setSetAutoFill(true)` |
+| | `setExpandedRows(new Set())` |
 
-So a SET created in the grid as `Glass180` can **never** be matched by a row sent from Costing,
-which stores `GLASS180`. Costing's own auto-dims lookup would match it; the grid's Glass-SKU parent
-resolution will not.
+#### The warning is INVERTED relative to the actual risk — observed first-hand
 
-**Observed in live data.** After sending a Part-L from Costing under SET `Glass180`, the batch held:
+Confirmed live, not read from code: **after + New Batch, the autosave recovery banner offers the
+batch back.** The Costing spec is gone permanently.
 
-```
-Glass180     Box      setCode "Glass180"   glassSKUType "Nip 180"
-Glass180-P   Plate    setCode "Glass180"   glassSKUType null
-ZZTEST-A     Part-L   setCode "GLASS180"   glassSKUType "Pint 375"
-```
+So the confirm **names four things that are RECOVERABLE** (the batch survives in
+`cbb_batch_autosave`) **and stays silent about the one thing that is not** (`spec` is never
+persisted anywhere).
 
-The Part-L is visually in the same SET and is not, as far as `:1805`/`:2149` are concerned.
+**Practical consequence:** a user who does this and panics can get their batch back. They cannot get
+their spec back, and **nothing tells them it is gone** — Costing simply shows *4 BLOCKERS* and looks
+like a clean start rather than a loss.
 
-> **Interaction with D-1, worth knowing.** D-1's `parentBox?.glassSKUType||row.glassSKUType||""`
-> fallback **masks this**: with no parent matched, the row's own value is used and the display reads
-> *"(from Costing — Main Box not yet set)"* — which is accurate but attributes the miss to the Box
-> being unset rather than to a case mismatch. Nos/Set still auto-fills correctly. So D-7 degrades
-> quietly rather than failing loudly, and only because D-1 landed first.
+Three of the six unnamed changes alter Costing's **mode** rather than its content: context reverts to
+same-batch, the identity freeze releases, and any Deep-Dive link breaks. A user mid-review on a batch
+row loses that link with no mention of it.
 
-> **Fix window: not assigned.** Pre-existing, unrelated to the split. The obvious fix is to
-> normalise in one place — either uppercase at both inputs, or compare case-insensitively at both
-> predicates (Costing already does the latter at `:288`). Choosing between them affects existing
-> stored data, which carries mixed case today.
+> **Interacts with D-5 and D-12.** D-5 is why the batch is recoverable at all. D-12 is how a user
+> reaches this confirm by reflex, without meaning to.
 
-### D-6 — Backup filenames cannot distinguish two snapshots from the same day
-
-`state/useQuoteActions.js`, in `handleBackup`:
-
-```js
-a.download=`CFB_QOS_Backup_${d.getFullYear()}${MM}${DD}.json`;
-```
-
-No time component. Every backup taken on the same day gets an identical filename. Nothing is
-overwritten — the browser saves the second as `…(1).json` — but **provenance becomes guesswork
-within hours.**
-
-Not hypothetical: it is exactly the confusion that arose during D-5 recovery. A `20260824` file
-timestamped 09:14 turned out to be masters-only (0 rows, 0 items, 0 constructions), while the
-restore that had actually populated the test pane came from something else. With only a date in the
-name there was no way to tell the two apart from the filesystem.
-
-Low severity and a trivial fix — add `HHMM`, or use the `_ts` already written inside the file. But
-**the entire safety story for this refactor rests on these files**, and a name that cannot separate
-two snapshots taken an hour apart undermines it.
-
-> **Fix window: the KEYS-registry / backup commit, alongside D-3.** Same file, same concern.
+> **Fix window: was Phase 7's prerequisite; now deferred under the defect freeze.** The handler has
+> already moved into the bridge, so the fix has a stable home. **Propose options rather than
+> assuming** — name the scratchpad in the confirm, preserve the spec and clear only the batch, or
+> offer a third choice. Product decision.
 
 ### D-4 — Identity freeze is lost on reload while the batch survives
 
