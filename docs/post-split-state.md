@@ -12,9 +12,17 @@ Companion documents:
 | [`../CLAUDE.md`](../CLAUDE.md) | Repo conventions and business-logic guardrails. **It now lives at `quote-gen-fe/CLAUDE.md`** — it previously sat in the shared parent directory, outside both git repos, so every edit to it was unversioned. Moved in and tracked at the end of Phase 8. |
 | `../../quote-gen-be/docs/CFB_QOS_Project_Brief_v3.md` | Business logic, formulas, tab-by-tab behaviour spec. Authoritative for anything not about code structure. |
 
-> ⚠️ **Consequence of that move, unresolved:** `quote-gen-be` and the shared parent directory now
-> have **no `CLAUDE.md`**. Working in the backend, nothing loads. The fix is a file in `quote-gen-be`
-> — a separate repository, deliberately left alone rather than decided unilaterally.
+> ### ⚠️ OPEN ITEM — for whoever works on `quote-gen-be` next
+>
+> Moving `CLAUDE.md` into `quote-gen-fe/` left **`quote-gen-be` and the shared parent directory with
+> no `CLAUDE.md` at all.** Working in the backend, no conventions file loads — including the
+> guardrail that `server.py` mirrors the costing formulas in `engine/costing.js` and that the two
+> must not drift.
+>
+> **This is not resolved and was not decided here.** `quote-gen-be` is a separate repository; adding
+> a file to it was out of scope for the split. The likely shape is a short `quote-gen-be/CLAUDE.md`
+> carrying the backend-specific sections plus a pointer to this one, but that is a call for whoever
+> picks up the backend, not a default to apply silently.
 
 ---
 
@@ -298,20 +306,43 @@ the moves were clean.
 1. **Never reflow. Never run Prettier or `eslint --fix` over this repo.** `export/excel.js` contains
    an ASI-dependent statement whose terminator sits *inside a comment* —
    `const _ppItem=items.find(...) // R-2;`. A reformat silently breaks it.
-2. **`engine/costing.js`, `data/defaults.js` and `quote-gen-be/server.py` are off-limits** without a
+2. **When replacing a range, anchor on what is being replaced — NEVER on what follows it.**
+   An end anchor placed on the *next* section silently consumes everything between the two anchors.
+
+   This failure has now occurred **three times in this project**, each time from an end-point chosen
+   by what was *visible* rather than by what was *structurally there*:
+
+   | | Where | Caught by |
+   |---|---|---|
+   | Delete range `1099–1111` | would have truncated `mergeAI` mid-object-literal **and** silently taken live `sectorCodes` with it | the build — syntax error |
+   | Lift starting at `3402` | lines 3402–3403 were closing `</div>` tags belonging to the block above | the build — unbalanced JSX |
+   | Anchor on the next heading | consumed defect entries **D-6 and D-7** in `b7cc2a4` | **nothing. Eleven commits later, by hand.** |
+
+   > **The asymmetry is the point.** In code, a bad range boundary usually breaks the build, so the
+   > error announces itself immediately. In prose, a bad range boundary is **silent, and stays
+   > silent** — the document simply reads as though the section never existed.
+   >
+   > **Therefore documents need MORE care than code, not less.** The intuition that prose is the
+   > low-risk place to be casual with boundaries is exactly backwards: it is the only place where
+   > nothing is checking.
+
+   `python scripts/audit-doc-sections.py` exists for precisely this and currently exits 0.
+   Run it after any structural edit to a tracked document.
+
+3. **`engine/costing.js`, `data/defaults.js` and `quote-gen-be/server.py` are off-limits** without a
    deliberate decision. The costing formulas are mirrored between `costing.js` and `server.py` and
    must not drift. If `test:costing` fails, the change is wrong — revert it.
-3. **Capability is demonstrated, not described.** Before either party plans around something
+4. **Capability is demonstrated, not described.** Before either party plans around something
    working, one of us shows it working. Claims about tooling that turn out to be false cost more
    than the work they were meant to save.
-4. **One concern per commit.** Structural moves and behaviour changes never share a commit. If a
+5. **One concern per commit.** Structural moves and behaviour changes never share a commit. If a
    guard breaks, it must be unambiguous which change did it.
-5. **Nothing commits with verification outstanding**, and **UI verification is permanently the
+6. **Nothing commits with verification outstanding**, and **UI verification is permanently the
    user's.** No amount of automated green discharges a manual guard.
-6. **Derive assertions programmatically from source — never type them.** Two concrete bans: no
+7. **Derive assertions programmatically from source — never type them.** Two concrete bans: no
    hand-written string assertions, and no positional element selection (`input[N]`) where a named or
    labelled selector exists.
-7. **Defects during structural work: record, do not fix, do not investigate.** One line — what was
+8. **Defects during structural work: record, do not fix, do not investigate.** One line — what was
    observed, and where. A defect report during a refactor is a bookmark, not a ticket. *(This rule
    existed for the split; the defect pass is where it lifts.)*
 
