@@ -396,13 +396,19 @@ analysis and confirmed reachable from the store before any file was written — 
 | | |
 |---|---|
 | `quote-gen-fe` local `main` | `0def418` — the merge; the split is here |
-| `quote-gen-fe` `origin/main` | see below — was `1ee0e28` (pre-split) before this document was pushed |
+| `quote-gen-fe` `origin/main` | `aee1121` — **current, and holds the split.** Local `main` is in sync; two doc-only commits (`dfa57f4`, `aee1121`) sit above the merge. Was `1ee0e28` (pre-split) until this document was pushed |
 | `refactor/component-split` | **local only.** `git ls-remote --heads origin` listed only `refs/heads/main`; the branch was never pushed. It is kept locally because every phase is independently revertable. |
 | `quote-gen-be` `origin/main` | `cf61f0e` auth, then `b93dee7` login-config fix |
 
-The 46 commits from `3d87de8` (Phase 0 harness) through `0def418` (merge) sat unpushed on local
-`main` while `origin/main` still pointed at the pre-split baseline. If a clone looks like it has no
-component split in it, check `origin/main` before concluding the work is missing.
+**This gap is now closed.** The 46 commits from `3d87de8` (Phase 0 harness) through `0def418`
+(merge) sat unpushed on local `main` for two days while `origin/main` still pointed at the pre-split
+baseline. They have since been pushed, along with the two doc commits above the merge, and
+`origin/main` now holds all of it.
+
+**Keep the habit regardless: if a clone looks like it has no component split in it, check
+`origin/main` before concluding the work is missing.** The condition that made that advice necessary
+has gone, but the failure it prevents — reading an out-of-date remote as evidence that work was
+never done — costs a session every time it recurs.
 
 ### The Vercel environment-variable requirement
 

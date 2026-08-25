@@ -25,8 +25,12 @@ Two independently-versioned repos side by side, each with its own `.git`:
 The **component split is complete**: `QuotationApp.jsx` went 5,402 → 83 lines across Phases 0–8,
 merged to `main` as `0def418`. `refactor/component-split` is **local-only** and was never pushed.
 
-**Before concluding anything is missing, check `origin/main`.** The merge sat unpushed behind 46
-local commits for two days; a clone taken in that window looks like the split never happened.
+**`origin/main` is current — it holds the whole split.** Local and remote both sit at `aee1121`,
+two doc-only commits above the merge. The gap is closed; a fresh clone gets the split.
+
+**The lesson stands even though the gap is closed: check `origin/main` before concluding anything
+is missing.** The merge sat unpushed behind 46 local commits for two days, and a clone taken in
+that window looked like the split never happened.
 
 Auth is live: login is required, `role` comes from the signed-in profile, and `public.profiles`
 is the one table in Supabase. `CLAUDE.md` now lives at `quote-gen-fe/CLAUDE.md` — it used to sit in
