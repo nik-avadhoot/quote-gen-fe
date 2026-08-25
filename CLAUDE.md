@@ -19,10 +19,12 @@ quote-gen-be/   Flask export backend   → https://github.com/nik-avadhoot/quote
 **Database: Supabase** (project `czettlukuenlnnrmvhqt`), accessible via the Supabase MCP server.
 This is the project's DB going forward, but the split isn't decided yet — what moves into Supabase
 vs. what stays in `localStorage` is a per-feature call to be made as we go, not a wholesale
-migration. As of 2026-08-23 the Supabase project has no tables yet; today, all quote/master-data
-state still lives in the browser's `localStorage` (`cbb_*` keys), and the backend is otherwise
-stateless — its only job is to fill `CFB_Quotation_Master_v7.xlsx` with posted JSON and return the
-workbook. `quote-gen-be/schema.sql` was a forward-looking design doc for this eventual DB; revisit
+migration. **As of 2026-08-25 the Supabase project has one table: `public.profiles`** — app-level
+user identity (role, display name, plant, active flag), 1:1 with `auth.users.id`, RLS enabled, all
+writes going through the backend's service-role client. Auth is therefore the first feature to have
+actually moved off `localStorage`; the backend is no longer stateless. All *quote/master-data* state
+still lives in the browser's `localStorage` (`cbb_*` keys), and the export path is unchanged — fill
+`CFB_Quotation_Master_v7.xlsx` with posted JSON and return the workbook. `quote-gen-be/schema.sql` was a forward-looking design doc for this eventual DB; revisit
 it now that Supabase is actually in play rather than treating it as purely aspirational.
 
 For the full (very detailed) design doc — business-logic tables, architectural decisions,
