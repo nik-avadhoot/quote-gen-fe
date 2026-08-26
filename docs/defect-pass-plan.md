@@ -117,7 +117,7 @@ it is a correctness defect on a live fallback path, not cosmetic lint debt.
 | **Site** | `export/excel.js:107` (`qty`, twice), `excel.js:129` (`locations`) |
 | **Reached from** | `excel.js:176` (no template) and `excel.js:186` (no `ws_cbb` sheet) |
 | **Severity** | High — the client-side Excel fallback does not work today, and D-3 is the mechanism that routes users onto it |
-| **Detection** | `npx eslint src` reports all three as `no-undef`. They are inside the 76-error baseline, so **the lint ceiling does not fall when they are fixed unless the baseline is updated too** |
+| **Detection** | `npx eslint src` reports all three as `no-undef`. Fixing them takes the count **76 → 73**, which satisfies the "may only go down" ceiling. **`scripts/eslint-baseline.txt` needs no change** — it is a Phase 0 snapshot (121/2, pre-split monolith), not a live gate, and nothing compares against it programmatically |
 | **Status** | Open — Stage 1, in D-3's scope |
 
 > **Scope caution.** D-19 is a `no-undef` fix, not a rewrite of `exportExcelFull`. What `qty` and

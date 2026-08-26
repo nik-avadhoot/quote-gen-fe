@@ -1111,9 +1111,15 @@ every already-restored profile broken.
 > resolve to must be derived from the call sites before anything is written. The pre-existing
 > `⚠️ BUG` comment at `excel.js:11` describes the fault and stays until the fix lands.
 >
-> **The lint ceiling does not fall on its own.** All three errors are inside the 76-error baseline,
-> so fixing them requires updating `scripts/eslint-baseline.txt` in the same commit or the ceiling
-> stops matching the count.
+> **The lint ceiling: 76 → 73, and `scripts/eslint-baseline.txt` needs NO change.** That file is a
+> **Phase 0 snapshot** — it records 121 errors / 2 warnings against the pre-split monolithic
+> `QuotationApp.jsx` and is not regenerated per commit. The live gate is the prose ceiling of 76/0
+> in §1 of the handoff, and it *may only go down*, so 73 satisfies it. `npm run lint` is plain
+> `eslint .` — nothing compares against the baseline file programmatically.
+>
+> `src` holds **four** `no-undef` errors, not three: the fourth is `boxTrim` at
+> `importExcel.js:50`, the `parseImportedExcel` bug, which stays on the cleanup list and is **not**
+> part of D-19.
 
 ### D-18 — Row-level Interest override does not reach the exported xlsx
 
