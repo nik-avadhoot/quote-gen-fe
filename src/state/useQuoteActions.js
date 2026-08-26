@@ -34,7 +34,18 @@ export function useQuoteActions(st){
 
   const handleBackup=()=>{
     const snap={_version:1,_ts:new Date().toISOString()};
-    BACKUP_KEYS.forEach(k=>{try{const v=getItem(k);if(v!=null)snap[k]=JSON.parse(v);}catch(e){snap[k]=null;}});
+    // D-3: cbb_template holds raw base64 and cbb_rate_date a raw string. Neither is
+    // JSON, so JSON.parse threw, the catch wrote null, and handleRestoreFile skips
+    // nulls — so neither key ever round-tripped. Fall back to the raw string, which
+    // mirrors what the restore leg below already does correctly.
+    //
+    // An ABSENT key stays absent (the profile never had it); only a file written by a
+    // pre-fix build carries an explicit null. After this, null means exactly that.
+    BACKUP_KEYS.forEach(k=>{
+      const v=getItem(k);
+      if(v==null)return;
+      try{snap[k]=JSON.parse(v);}catch(e){snap[k]=v;}
+    });
     // Also include current in-memory state for anything not yet flushed to localStorage
     snap.cbb_rates=rates;
     snap.cbb_freight=freight;
@@ -78,6 +89,19 @@ export function useQuoteActions(st){
           }catch(err){}
         }
       });
+      // D-3: an explicit null means this file was written by a pre-fix build that
+      // discarded the raw-string keys. ABSENT is different — that profile simply had
+      // no template — so only null warns.
+      //
+      // Deliberately window.alert, NOT showToast: the reload 1200ms below destroys any
+      // toast before it can be read. A warning that cannot be seen is not a warning.
+      // Consistent with handleRestore, which already gates this flow on window.confirm.
+      if(snap.cbb_template===null){
+        window.alert('⚠️ No Excel template in this backup.\n\n'
+          +'It was written by a build that silently discarded the template (D-3). '
+          +'Any template already on this machine has been kept, but if there is none, '
+          +'exports will fail until you load one again from Quote Items.');
+      }
       showToast('✅ Backup restored — reloading…','success');
       setTimeout(()=>window.location.reload(),1200);
     }catch(err){showToast('❌ Restore failed: '+err.message,'error');}
