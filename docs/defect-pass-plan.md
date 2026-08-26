@@ -327,6 +327,7 @@ None of these blocks Stage 1. Each blocks its own stage.
 | 4 | D-8d | Defer until masters move to Supabase? |
 | 5 | D-11 | What *constitutes* the same construction — is sector/client identity or metadata? Must layers match, or only board specs? |
 | Float | D-18 | Interest only, or all four sheet-level parameters? (§2.1 recommends all four) |
+| — | **Order quantity on a quote** | **Should a quote carry an order quantity and line value at all?** Surfaced by D-19: the OFFER sheet's data row was written to emit `qty` and `finalRate*qty`, but no order-quantity field was ever built and the header never got the two columns. The Stage-1 fix drops the values rather than inventing the field. **Recorded, not investigated** — a product question, not a bug |
 
 ---
 

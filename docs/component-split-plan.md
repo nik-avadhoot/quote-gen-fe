@@ -1106,10 +1106,35 @@ every already-restored profile broken.
 > `no-undef` bug was in the cleanup list as lint debt. Neither pointed at the other, and each looked
 > like someone else's problem from where it sat.
 
-> **Scope caution.** This is a `no-undef` fix, not a rewrite of `exportExcelFull`. `qty` and
-> `locations` are **absent, not misspelled**, so there is no mechanical repair — what they should
-> resolve to must be derived from the call sites before anything is written. The pre-existing
-> `⚠️ BUG` comment at `excel.js:11` describes the fault and stays until the fix lands.
+> **Scope caution.** This is not a rewrite of `exportExcelFull`. `qty` and `locations` are
+> **absent, not misspelled**, so neither has a mechanical repair. The pre-existing `⚠️ BUG` comment
+> at `excel.js:11` describes the fault and stays until the fix lands.
+
+#### The two faults are different in kind — `qty` is a DISCOVERY, not a typo
+
+**Calling D-19 "a `no-undef` fix" understates what is actually wrong with the `qty` half.**
+
+| | Fault | What it really is |
+|---|---|---|
+| `locations` (`:129`) | `(locations\|\|LOCATIONS)` was correct while this code lived inside `QuotationApp.jsx` with `locations` in scope. Phase 3 extracted it and the identifier went undefined | **A genuine extraction casualty.** Mechanical once the source is chosen |
+| `qty` (`:107`, twice) | The OFFER header at `:102` declares **10 columns**. The data row emits **12 values** — the last two being `qty` and `finalRate*qty` | **A schema that was never built** |
+
+**There is no order-quantity field anywhere in the data model.** The nearest, `qtyPerSet`, is
+nos-per-set — a different quantity entirely. So `qty` was never defined *because the thing it refers
+to does not exist*: whoever wrote that row expected the OFFER sheet to carry an order quantity and a
+line value, and the schema behind it was never created. The column count mismatch is the evidence —
+a header written for ten columns and a row written for twelve.
+
+> **Ruled: drop the two trailing values** so the row matches its own 10-column header. That restores
+> the function with no invented data. **Adding the columns properly is a feature, not this fix** —
+> it needs an order-quantity field the app does not capture, and the product question behind it is
+> recorded in [`defect-pass-plan.md`](defect-pass-plan.md) §8, not resolved here.
+
+> **`locations` — ruled: read it through the persistence seam**, `getItem('cbb_locations')`, inside
+> `exportExcelFull`. Precedent already exists in this file at `:175`, which reads
+> `getItem('cbb_template')` the same way. Falling back to the imported `LOCATIONS` constant was
+> rejected: it would **silently discard a customised locations master**, which is the same class of
+> silent substitution as D-9.
 >
 > **The lint ceiling: 76 → 73, and `scripts/eslint-baseline.txt` needs NO change.** That file is a
 > **Phase 0 snapshot** — it records 121 errors / 2 warnings against the pre-split monolithic
