@@ -198,14 +198,18 @@ in Supabase. One seam to change instead of thirty-seven.
 
 ---
 
-## 3. Defect register — D-1 to D-18
+## 3. Defect register — D-1 to D-19
 
 Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](component-split-plan.md).
 **None is a refactor regression; all predate Phase 0** except the observations, which were found
 *during* verification but are not caused by it.
 
-> **D-10 does not exist.** The number was skipped, not lost. D-1 to D-9 and D-11 to D-18 are the
+> **D-10 does not exist.** The number was skipped, not lost. D-1 to D-9 and D-11 to D-19 are the
 > whole register.
+>
+> **D-19 was added at the defect pass**, promoted out of the §4 cleanup list rather than newly
+> found. It took the next free number for the same reason D-10 stays empty: reusing a skipped
+> number corrupts every prior reference.
 
 > **D-6 and D-7 were silently deleted from the plan by commit `b7cc2a4`** — an anchor-replace in
 > that commit consumed them. Both were **restored verbatim from `b7cc2a4^`** at the end of Phase 8.
@@ -254,11 +258,36 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | D-15 | Unconfirmed SET Code blocks only the offending row, not globally | — | **Undecided** — may be correct by design |
 | D-16 | After Deep Dive then Unlink, auto-dims stop recalculating | High | Open — observation. *Unverified:* whether conv/waste re-resolve per sector after a Set Role or Box Type change post-Unlink |
 | D-17 | Add-on pin control is an unlabelled circled-plus | Cosmetic | Open — see cleanup list |
-| D-18 | Row-level Interest override missing from xlsx export | High | Open — **unresolved, one of two:** it writes a stale value, *or* it writes nothing and the template cell stands. Not distinguishable from the observation alone; one step for the defect pass |
+| D-18 | Row-level Interest override missing from xlsx export | High | Open — **RESOLVED at source, and it is a category.** See below |
+| D-19 | `exportExcelFull` throws `ReferenceError` on every call | High | Open — **in D-3's scope.** Promoted from the §4 cleanup list; D-3 is not discharged without it |
 
 **Context, recorded but not attributed:** the Batch Entry toolbar's `+ Constr` button switches to
 the Construction Library tab instead of opening the slide-over overlay. The per-row route into the
 overlay opens correctly. Filed against D-16 and D-6.
+
+> ### D-18 is a CATEGORY, not one cell — resolved at source, do not fix interest alone
+>
+> The two recorded possibilities were *writes a stale value* and *writes nothing*. **Neither.**
+> `export/excel.js:251–252` writes `f0.interest` — **`items[0]`'s** value — into `BJ3`/`BJ4`, which
+> are *sheet-level* parameter cells that every data row from row 7 computes against.
+> `useQuoteActions.js:266` correctly folds each row's `interestOverride` into that item's own spec.
+>
+> **The app models interest per-row; the template models it per-sheet. Every row after the first is
+> costed in the workbook at row 1's rate.** Row 1 is correct, which is why it presents as
+> intermittent.
+>
+> **Three siblings share the shape** — `BM3` from `f0.margin`, `AY3`/`BA3` from `f0.waste` /
+> `f0.convRate`, and `AY4`/`BA4` which are **already partially patched**. The `FIX:` comment and
+> `_ppSpec` workaround at `excel.js:244–250` exist because someone hit this once for the PP row and
+> repaired that instance without generalising. **Fixing interest the same way makes the same mistake
+> a third time.**
+>
+> 🛑 **The ASI landmine is five lines from the fix site.** `const _ppItem=items.find(...) // R-2;`
+> at `excel.js:246` has its terminator inside a comment; the interest writes are at `251–252`. See
+> §6 rule 1 — no reflow, no Prettier, no `eslint --fix`, anywhere near this.
+
+Sequencing, clusters and the Stage-1 rulings for the defect pass are in
+[`defect-pass-plan.md`](defect-pass-plan.md).
 
 ### D-13 is a different class from the rest
 
@@ -292,7 +321,7 @@ the moves were clean.
 | Two empty section banners in `QuotationApp.jsx` | Emptied by Phases 3 to 6, not by Phase 8 — left rather than churned |
 | `bsOk` / `isPP` unused locals in `BatchGrid.jsx` | Pre-existing, inside the byte-identical region; removing them would have broken the identity proof |
 | Baseline lint debt: `no-empty` x18, `no-unused-vars` x63, mostly in `state/` and `export/` | Predates the split. **Every file created by the split lints at zero** |
-| `exportExcelFull` `no-undef` bugs | `qty` (twice) and `locations` are undefined, so it throws `ReferenceError` on every call — the client-side Excel fallback does not work today. Moved as-is by decision, carrying `// BUG:` comments |
+| ~~`exportExcelFull` `no-undef` bugs~~ | **PROMOTED OUT of this list — now D-19 in the register.** `qty` (twice) and `locations` are undefined, so it throws `ReferenceError` on every call. It was never behaviour-neutral tidying: it is a correctness defect on a live fallback path, and D-3 routes users onto that path. Listed here as lint debt is how the D-3 tie stayed invisible |
 | `parseImportedExcel` `no-undef` bug | References `boxTrim` at what is now `importExcel.js`; its parameter is named `boxTrimData`. Part of why Re-import is disabled |
 
 > **D-17 understates itself deliberately.** The pin control was not missed by someone new to the

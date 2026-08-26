@@ -1073,19 +1073,89 @@ overwrite: `cbb_template`, `cbb_rate_date`, `cbb_batch_autosave`. The loss is th
 > but the proposal must also answer what happens to backup files **already written with nulls in
 > them**. Do not fix before then; pre-existing, not a refactor regression.
 
+> **ANSWERED at the defect pass: every backup file on disk carries the nulls.**
+> `CFB_QOS_Backup_20260824.json`, `CFB_QOS_Backup_20260824_fixture.json` and
+> `CFB_QOS_Backup_20260825.json` all contain `"cbb_template": null` **and**
+> `"cbb_rate_date": null`. The question was not an edge case — it is 100% of the backups that
+> exist, the fixture included. **Ruled:** fix the backup leg, re-take fresh backups (the user's
+> action), and have restore warn on a null template, because old files circulate regardless.
+
+### D-19 — `exportExcelFull` throws `ReferenceError` on every call
+
+**Promoted into the register at the defect pass**, from the post-split cleanup list where it sat as
+deferred lint debt. It is a correctness defect on a live fallback path, and **D-3 is not discharged
+without it.**
+
+> **The number is D-19, not D-10.** D-10 is recorded as deliberately skipped; reusing it would
+> corrupt every prior reference to the register's numbering.
+
+| | |
+|---|---|
+| Site | `export/excel.js:107` — `qty`, twice, in the item row map · `excel.js:129` — `locations`, in the freight matrix |
+| Reached from | `excel.js:176` (no template stored) and `excel.js:186` (stored template has no CBB+PP sheet) |
+| Severity | **High** — the client-side Excel fallback does not work at all today |
+| Detection | `npx eslint src` reports all three as `no-undef`; they are inside the 76-error baseline |
+| Status | Open — Stage 1 of the defect pass, in D-3's scope |
+
+**Why it belongs with D-3.** D-3 discards `cbb_template` from every backup. Restore such a backup and
+no template is stored, so `excel.js:176` routes every export into `exportExcelFull`, which throws.
+**A restored profile cannot export at all** — and fixing D-3 alone stops only *new* losses, leaving
+every already-restored profile broken.
+
+> **This tie spans two documents, which is why it went unseen.** D-3 was in the register; the
+> `no-undef` bug was in the cleanup list as lint debt. Neither pointed at the other, and each looked
+> like someone else's problem from where it sat.
+
+> **Scope caution.** This is a `no-undef` fix, not a rewrite of `exportExcelFull`. `qty` and
+> `locations` are **absent, not misspelled**, so there is no mechanical repair — what they should
+> resolve to must be derived from the call sites before anything is written. The pre-existing
+> `⚠️ BUG` comment at `excel.js:11` describes the fault and stays until the fix lands.
+>
+> **The lint ceiling does not fall on its own.** All three errors are inside the 76-error baseline,
+> so fixing them requires updating `scripts/eslint-baseline.txt` in the same commit or the ceiling
+> stops matching the count.
+
 ### D-18 — Row-level Interest override does not reach the exported xlsx
 
 Observed at Phase 8. Everything else in the export is correct.
 
-**Unresolved, one of two — deliberately not investigated:**
+**Recorded at Phase 8 as unresolved, one of two — deliberately not investigated then:**
 
 1. the export writes a **stale** interest value, or
 2. the export writes **nothing** and the template's own cell stands.
 
-Not distinguishable from the observation alone: "does not reach the file" fits both. They separate
-by opening the exported workbook and checking whether that cell holds the template default or a
-different-but-wrong number — **one step for the post-split pass, recorded here so it is not
-re-derived.**
+> ## RESOLVED AT THE DEFECT PASS — and it is a CATEGORY, not one cell
+>
+> **Neither of the two.** `export/excel.js:251–252` writes `f0.interest` — **`items[0]`'s** interest
+> — into `BJ3`/`BJ4`. Those are *sheet-level parameter cells*: every data row from `DATA_START=7`
+> onward computes against them. Meanwhile `useQuoteActions.js:266` correctly folds each row's
+> `interestOverride` into that item's own `sp.interest`, so the data going in is right.
+>
+> **The app models interest per-row. The template models it per-sheet.** Every row after the first
+> is costed in the workbook at row 1's interest rate. Row 1 exports correctly, which is why the
+> defect presents as intermittent rather than total — and why "does not reach the file" fitted both
+> original hypotheses badly.
+>
+> ### Three siblings have the identical shape
+>
+> | Cells | Written from | Per-row override |
+> |---|---|---|
+> | `BJ3` / `BJ4` | `f0.interest` | **yes** — `row.interestOverride`, editable at `BatchGrid.jsx:646` |
+> | `BM3` | `f0.margin` | confirm during the fix |
+> | `AY3` / `BA3` | `f0.waste` / `f0.convRate` | confirm during the fix |
+> | `AY4` / `BA4` | `_ppSpec` with `f0` fallback | **already partially patched** |
+>
+> 🛑 **`excel.js:244–250` is a prior partial patch of this same defect.** The `FIX:` comment and the
+> `_ppItem` / `_ppSpec` workaround exist because someone hit this once for the PP row and repaired
+> that one instance without generalising. **Fixing interest the same way makes the same mistake a
+> third time.** Whatever lands must decide the per-row-vs-per-sheet question for all four.
+>
+> ⚠️ **The ASI landmine is five lines from the fix site.** `const _ppItem=items.find(...) // R-2;`
+> at `excel.js:246` carries its statement terminator **inside the comment**; the interest writes are
+> at `251–252`. Same screen. No reflow, no Prettier, no `eslint --fix` — see the standing rules.
+>
+> **Still the user's to verify:** opening an exported workbook confirms the rendered result. The
+> mechanism is settled from source; the output is not.
 
 ### D-14 … D-17 — observations from Phase 7b verification
 
