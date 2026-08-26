@@ -198,13 +198,13 @@ in Supabase. One seam to change instead of thirty-seven.
 
 ---
 
-## 3. Defect register — D-1 to D-22
+## 3. Defect register — D-1 to D-23
 
 Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](component-split-plan.md).
 **None is a refactor regression; all predate Phase 0** except the observations, which were found
 *during* verification but are not caused by it.
 
-> **D-10 does not exist.** The number was skipped, not lost. D-1 to D-9 and D-11 to D-22 are the
+> **D-10 does not exist.** The number was skipped, not lost. D-1 to D-9 and D-11 to D-23 are the
 > whole register.
 >
 > **D-19 was added at the defect pass**, promoted out of the §4 cleanup list rather than newly
@@ -235,7 +235,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | **D-5** | Autosave silently overwrites a larger batch | Destroys committed work with no undo. It destroyed a test fixture during this project. |
 | **D-8** | Unguarded master-data edits — a *category*, not one bug | Admin edits to shared reference data are direct writes with no confirmation, no validation, no undo. Corrupts every quote computed afterwards, silently. |
 | **D-11** | Construction Library duplicates instead of matching | Four creation paths with four different checks — one, `ConstructionLibTab.jsx:196`, has **none**. **And path 1's STD-tier prompt treats Cancel as "keep my grades", which deliberately creates a duplicate** — so there is an unguarded route *and* a sanctioned one, needing different remedies. Corrupts a master that is already an informal join key. |
-| **D-12** | Toast overlay makes a destructive button clickable-by-accident | The toast container is `pointerEvents:"none"` and no toast has an `onClick`, so clicks pass **through** to `+ New Batch` beneath. |
+| **D-12** | Toast overlay makes a destructive button clickable-by-accident | The toast container is `pointerEvents:"none"` and no toast has an `onClick`, so clicks pass **through** to the Costing `+ New Batch` beneath. **Corrected at Stage 2:** narrower than first recorded — it does *not* reach `startNewBatch`, so the batch and Quote Items are never at risk — but **worse in one case**, since that button confirms only `if(batchRows.length>0)`, so with an empty batch an unsaved Costing spec is discarded with **no dialog at all**. D-2's loss without D-2's dialog. |
 | **D-13** | No non-destructive exit from scratchpad context | Both guards that block this state instruct the user to perform D-2, which destroys the work they were protecting. |
 
 > **D-12 is added to the four originally named.** It is the mechanism by which D-5 was actually
@@ -263,6 +263,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | D-20 | `+ New Construction` gives no visible feedback — draft appended off-screen | UX | Open — observation, Stage-1 verification |
 | D-21 | Defaults/Masters screen cut off at the bottom, no scroll affordance | Layout | Open — observation, Stage-1 verification |
 | D-22 | 🍶 badge below Nos/Set renders for some Part rows and not others | Cosmetic | Open — **the first version of this entry was wrong and was retracted.** Not a data defect and not D-8: the badge (`BatchGrid.jsx:340`) is the only one of three Part-row consumers with no parent fallback. Related to **D-1**. Nos/Set auto-fill is **verified correct** |
+| D-23 | Costing `+ New Batch` guards on batch state to protect spec state | High | Open — the defect underneath D-12. Confirms on `batchRows.length>0` but destroys `spec`. Same family as D-2; rule on it with D-2 at Stage 2 |
 
 **Context, recorded but not attributed:** the Batch Entry toolbar's `+ Constr` button switches to
 the Construction Library tab instead of opening the slide-over overlay. The per-row route into the

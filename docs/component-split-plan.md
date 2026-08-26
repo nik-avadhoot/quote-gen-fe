@@ -1321,12 +1321,42 @@ confirmed defect:
 
 ### D-12 — 🚨 The toast overlay makes a destructive button clickable-by-accident
 
-The client-mismatch toast overlays the Costing header, and clicking it fires **+ New Batch** — the
-most destructive action in the app.
+The client-mismatch toast overlays the Costing header, and clicking it fires the Costing
+**+ New Batch** — silently discarding an in-progress Costing spec that is never persisted anywhere.
+
+> ### ⚠️ CORRECTED at Stage 2 — narrower in scope, WORSE in one case
+>
+> This entry originally said the click fires *"+ New Batch — the most destructive action in the
+> app"* and put the user *"one OK away from losing the batch, Quote Items and the Costing spec."*
+> **That describes the wrong button.** There are two:
+>
+> | Button | Site | Action |
+> |---|---|---|
+> | Batch Entry | `BatchProfileBar.jsx:244` | `startNewBatch` — the destructive one, ten state changes, D-2's subject |
+> | **Costing** | `OutputPanel.jsx:84` | Sets `spec` to `INIT_SPEC`, flips context to `new-batch`. **Does not touch `batchRows`, `items` or `batchProfile`** |
+>
+> The toast sits over the **Costing** panel header — confirmed by the product owner from a
+> screenshot, orange button edge visible behind the toast, "Batch active · 3 rows" alongside. So the
+> button underneath is the Costing one. **The batch and Quote Items are never at risk from this
+> path.**
+>
+> **But one case is worse than what was recorded.** The Costing button confirms only
+> `if(batchRows.length>0)`. **With an empty batch there is no dialog at all** — a pass-through click
+> goes straight to `setSpec({...INIT_SPEC})` and the in-progress Costing spec is gone. The spec is
+> never persisted anywhere, so there is no autosave banner, no restore, no undo.
+>
+> **This is D-2's loss without D-2's dialog**, reached by a click the user cannot see they are
+> making.
+>
+> ### 🚨 STAYS A BETA BLOCKER on that basis
+>
+> Silent unrecoverable loss with **zero** confirmation is not a downgrade from loss behind a
+> confirm. The severity did not fall; the mechanism moved.
 
 #### Mechanism — DETERMINED: pass-through, not a toast handler
 
-`QuotationApp.jsx:2229`, the toast stack:
+The toast stack — `QuotationApp.jsx:2229` pre-split, `QuotationApp.jsx:78` post-split, and now
+`ui/ToastStack.jsx`:
 
 ```js
 {toasts.length>0&&<div style={{position:"fixed",top:68,right:20,zIndex:9999,…,pointerEvents:"none"}}>
@@ -1355,8 +1385,23 @@ in Costing."* It reads as an instruction, and clicking a toast is the universal 
 dismissing one. The path from *"a warning appeared"* to *"one OK away from losing the batch, Quote
 Items and the Costing spec"* is a single reflexive click on a control the user cannot see.
 
-The confirm dialog does catch it, so this is not silent loss — but see **D-2**: that confirm names
-four recoverable things and stays silent about the one that is not.
+**The confirm dialog catches it only when the batch is non-empty.** With rows present the user
+gets a dialog — which, per **D-2**, names what is recoverable and stays silent about what is not.
+With an empty batch there is no dialog and the loss is immediate and total.
+
+### D-23 — the Costing `+ New Batch` guards on batch state to protect spec state
+
+**Recorded, not fixed. Independent of the toast.**
+
+`OutputPanel.jsx:84` gates its confirm on `batchRows.length>0`, but the thing it destroys is
+`spec` — `setSpec({...INIT_SPEC,plant:"",delivery:""})`. **It guards X to protect Y.** The batch it
+asks about is the one thing the action leaves untouched; the scratchpad it silently discards is
+never mentioned.
+
+This is the defect underneath D-12. Fixing the pass-through stops the *accidental* click; the
+button still discards an unsaved spec without asking whenever the batch happens to be empty.
+**Same family as D-2** — a confirm describing the wrong subject — and it should be ruled on with
+D-2 at Stage 2.
 
 > **NO FIX WINDOW. Do not propose a fix.**
 > ⚠️ **Whatever lands must NOT suppress the toast.** The client-mismatch warning **is negative
