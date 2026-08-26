@@ -928,6 +928,18 @@ behaviour changes never share a commit. If a guard breaks, it must be unambiguou
 
 ### D-1 — Glass SKU Type never reaches the batch grid
 
+> ### ⚠️ FIXED, but with a live consequence — see D-22
+>
+> The forward leg landed at `06c1522` and works. The **accepted limitation** recorded below — that
+> the 🍶 badge in the Nos/Set cell was deliberately given **no** parent fallback, unlike the other
+> two Part-row consumers — has since been **observed in use** as a badge that appears on some Part
+> rows and not others, depending on whether the SET's Glass SKU happens to sit on the Box or on the
+> Part. That is **D-22**.
+>
+> Nothing about D-1's fix is wrong. But *"FIXED"* on this entry means the forward leg, not that
+> every consumer is consistent. **The remaining inconsistency is exactly one line**: give the badge
+> the same `parentBox?.glassSKUType || row.glassSKUType || ""` precedence its siblings already use.
+
 Costing captures the value as **`spec.skuType`** (dropdown at `QuotationApp.jsx:309`, shown only when
 `spec.rowType` is Part-L/Part-W). The batch grid uses **`row.glassSKUType`** (editable dropdown at
 `:2117`, shown only when `row.itemType==="Box"`). `sendCostingToBatch` writes neither — its only
@@ -945,7 +957,7 @@ Same shape as the already-fixed **B1** (`nosPerSet` lost on the Deep-Dive→Push
 |---|---|---|
 | `1806–1813` | `parentBox.glassSKUType` — Nos/Set auto-fill on SET-code confirm | **fallback** |
 | `2148–2154` | `parentBox?.glassSKUType` — read-only display in expanded row | **fallback** |
-| `1885–1890` | `row.glassSKUType` — 🍶 badge in the Nos/Set cell | **none** — starts working once the row carries a value |
+| `1885–1890` | `row.glassSKUType` — 🍶 badge in the Nos/Set cell | **none** — starts working once the row carries a value. ⚠️ **This limitation has since surfaced as an observable UI inconsistency — see D-22** (now `BatchGrid.jsx:340`) |
 
 #### Decision: Part-row write + consumer fallback
 
@@ -1762,29 +1774,85 @@ verification session and are bookmarks, not tickets. One exception is marked bel
 |---|---|---|
 | **D-20** | `+ New Construction` gives no visible feedback — the draft entry is appended at the bottom, off-screen, and the user must scroll to discover anything happened. Needs to direct the user to the new entry; scroll-to vs overlay vs modal is a design choice for the product owner | UX |
 | **D-21** | The Defaults/Masters screen is cut off at the bottom — content height exceeds the viewport with no scroll affordance at the cut point | Layout |
-| **D-22** | Glass SKU Type renders an informational tag below Nos/Set for some values but not others (`Pint 375 ml` yes, `Nip 180 ml` no, possibly not 90 ml either) | **See below — not cosmetic** |
+| **D-22** | The 🍶 badge below Nos/Set renders for some Part rows and not others (`Pint 375` yes, `Nip 180` no) | **Cosmetic/UX — see below.** Related to **D-1**, not D-8 |
 
-#### D-22 is a DATA defect, not a rendering inconsistency — one read, confirmed
+#### D-22 — the 🍶 badge has no parent fallback. RETRACTED AND REWRITTEN
 
-The tag is not a design choice per value. `BatchGrid.jsx:584–585` renders it only when
-`partitionsMaster.find(x=>x.skuType===row.glassSKUType)` matches, and the dropdown at `:582` is
-populated from **that same array**. So a value chosen from the dropdown *now* must match by
-construction — a missing tag is structurally impossible within one session.
+> ### ⚠️ THE FIRST VERSION OF THIS ENTRY WAS WRONG, AND WAS PUSHED
+>
+> It claimed D-22 was a **data** defect — that the row held a `skuType` no longer in
+> `partitionsMaster`, that this was **D-8's mechanism in the wild**, and that Nos/Set auto-fill was
+> probably producing silent wrong numbers. It was rated **High**. **Every part of that is false.**
+>
+> **The wrong render path was read.** `BatchGrid.jsx:584` is the **expanded-row panel for Box
+> rows**, which renders a "Part-L: n pcs · Part-W: n pcs" tag and *does* gate on
+> `partitionsMaster.find(...)`. The badge actually being reported is `BatchGrid.jsx:340`, in the
+> **main grid's Nos/Set cell**, which does not consult the master at all. The structural argument
+> was sound about the code that was read and irrelevant to the code in question.
+>
+> **It was caught by domain knowledge, not by code review** — the product owner knew both master
+> values were healthy and challenged the conclusion. **That is the second time a claim in this
+> project has been wrong in a way only a check could catch** (the first: `scripts/eslint-baseline.txt`
+> described as a live gate when it is a Phase 0 snapshot). A confident mechanism, derived from real
+> source, can still be about the wrong source.
 
-**Therefore a missing tag means `row.glassSKUType` holds a string that is no longer in
-`partitionsMaster`:** the row was created when the master held a different value, or the master was
-edited afterwards. The stored default keys carry no ` ml` suffix (`Nip 180`, `Pint 375`,
-`data/defaults.js:48–55`), while the observed dropdown shows ` ml` — consistent with a customised
-master and rows keyed to the pre-edit strings.
+**The actual condition** — `BatchGrid.jsx:340`, one line, no master lookup:
 
-> **This is D-8's mechanism, observed in the wild.** An unguarded master edit silently orphaned
-> every row pointing at the old string. Nothing warned, and the only visible symptom is a tag
-> quietly failing to appear.
+```js
+const isAlcoPart = batchProfile.sector==="ALCOBEV" && (row.itemType==="Part-L"||row.itemType==="Part-W");
+{isAlcoPart && row.glassSKUType && ( … 🍶 {row.glassSKUType.substring(0,8)} … )}
+```
 
-> ⚠️ **Likely worse than a missing tag, and NOT yet investigated.** The same `skuType` lookup is
-> what drives Nos/Set auto-fill for Part rows. If auto-fill resolves through the same match, a
-> stale `glassSKUType` makes it silently produce nothing — a wrong number rather than a missing
-> label. **One read when D-22 is worked; deliberately not chased here.**
+**The badge reads `row.glassSKUType` and nothing else.** No parent fallback. So a Part row whose
+SET carries the value on its **Box** shows no badge, while a Part row that happens to carry its own
+value does.
+
+Confirmed against live data (`CFB_QOS_Backup_20260827_0012.json`), master healthy in every respect:
+
+| SET | Box | Plate | Part-L | Part-W | Badge on Parts |
+|---|---|---|---|---|---|
+| Glass180 | `'Nip 180'` | `None` | `None` | `None` | **no** |
+| Glass375 | `''` | `''` | `'Pint 375'` | `'Pint 375'` | **yes** |
+
+`partitionsMaster` holds all eight entries intact — `'Nip 180'` (lwise 5, wwise 7) and `'Pint 375'`
+(lwise 3, wwise 5), no ` ml` suffix on any stored key. **Nothing is stale and nothing is orphaned.**
+
+#### This is D-1's accepted limitation surfacing as an observable inconsistency
+
+D-1 lists three Part-row read sites and gives the badge **no** fallback deliberately, on the
+reasoning that it "starts working once the row carries a value." The other two resolve
+`parentBox?.glassSKUType || row.glassSKUType`. **The badge is the only one of the three without
+parent-first resolution**, and that is precisely what produces the reported difference.
+
+> ### The fix is one line and already specified by its siblings
+>
+> **Give the badge the same parent-first resolution the other two consumers already have** —
+> `parentBox?.glassSKUType || row.glassSKUType || ""`, the precedence rule D-1 established. **Do not
+> invent a new mechanism.** The parent-lookup predicate is already written at
+> `BatchGrid.jsx:253` and `:597`.
+
+> ### ✅ Nos/Set auto-fill is VERIFIED CORRECT — do not re-open
+>
+> The retracted entry speculated that auto-fill shared the badge's gate and might be producing
+> silent wrong numbers. **It does not, and it is not.** `BatchGrid.jsx:260` resolves parent-first
+> before the master lookup:
+>
+> ```js
+> const effGlassSKU = parentBox?.glassSKUType || row.glassSKUType || "";
+> const pm = partitionsMaster.find(x => x.skuType === effGlassSKU);
+> ```
+>
+> Demonstrated end to end against live data: **all four Part rows resolved correctly**, including
+> the two that carry no `glassSKUType` of their own and reached the master through their parent Box.
+>
+> | Row | `nosPerSet` | Master |
+> |---|---|---|
+> | Glass180 Part-L | 5 | `'Nip 180'` lwise 5 ✓ |
+> | Glass180 Part-W | 7 | `'Nip 180'` wwise 7 ✓ |
+> | Glass375 Part-L | 3 | `'Pint 375'` lwise 3 ✓ |
+> | Glass375 Part-W | 5 | `'Pint 375'` wwise 5 ✓ |
+>
+> **No silent wrong numbers. D-8 stays at Stage 4** — this was not an argument for moving it.
 
 **Second part, design only:** even when correct, the tag expands row height and costs vertical
 space, which compounds badly on a 20+ SKU batch. That half is a design call for the product owner,

@@ -247,7 +247,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 
 | # | Defect | Severity | Status |
 |---|---|---|---|
-| D-1 | Glass SKU Type never reaches the batch grid | High | **FIXED** — `06c1522`, written before the freeze |
+| D-1 | Glass SKU Type never reaches the batch grid | High | **FIXED** — `06c1522`, written before the freeze. ⚠️ Its accepted limitation has surfaced as a live UI inconsistency — see **D-22** |
 | D-2 | New Batch warns about what IS recoverable and hides what ISN'T | High | Open — interacts with D-13 |
 | D-3 | Backup silently discards the two raw-string keys | High | Open |
 | D-4 | Identity freeze is lost on reload while the batch survives | High | Open |
@@ -262,7 +262,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | D-19 | `exportExcelFull` throws `ReferenceError` on every call | High | Open — **in D-3's scope.** Promoted from the §4 cleanup list; D-3 is not discharged without it |
 | D-20 | `+ New Construction` gives no visible feedback — draft appended off-screen | UX | Open — observation, Stage-1 verification |
 | D-21 | Defaults/Masters screen cut off at the bottom, no scroll affordance | Layout | Open — observation, Stage-1 verification |
-| D-22 | Glass SKU Type tag renders for some values and not others | High | Open — **a DATA defect, not cosmetic.** The tag and the dropdown read the same array, so a missing tag means the row holds a `skuType` no longer in `partitionsMaster`. D-8's mechanism in the wild |
+| D-22 | 🍶 badge below Nos/Set renders for some Part rows and not others | Cosmetic | Open — **the first version of this entry was wrong and was retracted.** Not a data defect and not D-8: the badge (`BatchGrid.jsx:340`) is the only one of three Part-row consumers with no parent fallback. Related to **D-1**. Nos/Set auto-fill is **verified correct** |
 
 **Context, recorded but not attributed:** the Batch Entry toolbar's `+ Constr` button switches to
 the Construction Library tab instead of opening the slide-over overlay. The per-row route into the
