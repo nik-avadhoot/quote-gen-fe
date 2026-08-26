@@ -1752,6 +1752,44 @@ than decided, and it is the class of thing that bites in beta.
 
 > **No fix window assigned.** To be decided after Phase 6. **Do not propose a fix.**
 
+### D-20 … D-22 — observations from Stage-1 verification of the defect pass
+
+Recorded under the same one-line rule as D-14…D-17: **what was observed, and where.** The
+record-don't-investigate rule has lifted for defects *being worked*; these are new sightings from a
+verification session and are bookmarks, not tickets. One exception is marked below.
+
+| # | Observed | Class |
+|---|---|---|
+| **D-20** | `+ New Construction` gives no visible feedback — the draft entry is appended at the bottom, off-screen, and the user must scroll to discover anything happened. Needs to direct the user to the new entry; scroll-to vs overlay vs modal is a design choice for the product owner | UX |
+| **D-21** | The Defaults/Masters screen is cut off at the bottom — content height exceeds the viewport with no scroll affordance at the cut point | Layout |
+| **D-22** | Glass SKU Type renders an informational tag below Nos/Set for some values but not others (`Pint 375 ml` yes, `Nip 180 ml` no, possibly not 90 ml either) | **See below — not cosmetic** |
+
+#### D-22 is a DATA defect, not a rendering inconsistency — one read, confirmed
+
+The tag is not a design choice per value. `BatchGrid.jsx:584–585` renders it only when
+`partitionsMaster.find(x=>x.skuType===row.glassSKUType)` matches, and the dropdown at `:582` is
+populated from **that same array**. So a value chosen from the dropdown *now* must match by
+construction — a missing tag is structurally impossible within one session.
+
+**Therefore a missing tag means `row.glassSKUType` holds a string that is no longer in
+`partitionsMaster`:** the row was created when the master held a different value, or the master was
+edited afterwards. The stored default keys carry no ` ml` suffix (`Nip 180`, `Pint 375`,
+`data/defaults.js:48–55`), while the observed dropdown shows ` ml` — consistent with a customised
+master and rows keyed to the pre-edit strings.
+
+> **This is D-8's mechanism, observed in the wild.** An unguarded master edit silently orphaned
+> every row pointing at the old string. Nothing warned, and the only visible symptom is a tag
+> quietly failing to appear.
+
+> ⚠️ **Likely worse than a missing tag, and NOT yet investigated.** The same `skuType` lookup is
+> what drives Nos/Set auto-fill for Part rows. If auto-fill resolves through the same match, a
+> stale `glassSKUType` makes it silently produce nothing — a wrong number rather than a missing
+> label. **One read when D-22 is worked; deliberately not chased here.**
+
+**Second part, design only:** even when correct, the tag expands row height and costs vertical
+space, which compounds badly on a 20+ SKU batch. That half is a design call for the product owner,
+not a correctness fix.
+
 
 ---
 
@@ -1767,6 +1805,28 @@ occasional.
 
 > **Do not "improve" the grid by adding a reason column.** It was considered and rejected on density
 > grounds.
+
+### DP-2 — Manual Restore does NOT repopulate the grid directly, and that is deliberate
+
+**Confirmed from source, not inferred.** `handleRestoreFile` writes `cbb_batch_autosave` like any
+other key and reloads. On mount, `batchRows` initialises **empty** — only `autosaveBanner`
+(`useBatchState.js:55`) reads that key, and only to build a *label* from `ts` and `rows.length`.
+`restoreAutosave()` is the sole path that puts rows into state, and it is user-invoked from the
+banner.
+
+So a manual Restore is a **two-step**: Restore writes the data, the banner offers it, the user
+accepts. That is D-5's symptom, and it is **also a guard worth keeping**:
+
+> **Clicking Restore cannot silently overwrite batch entries the user has not looked at.** A second,
+> explicit confirmation stands between a restore and the grid being replaced. **Ruled: deliberate,
+> not accidental.**
+
+> ### ⚠️ Known limitation of relying on the banner as that guard
+>
+> The banner is age-gated — `if(ageMin>10080||!rows?.length)return null` (`useBatchState.js:64`),
+> i.e. **7 days**. Past that the rows remain in `localStorage` but the banner never appears, so
+> there is **no route back to them through the UI at all.** Whatever preserves this confirmation
+> step should not inherit that expiry.
 
 ### QE-1 — Queued enhancement: put the mismatch reason in the EXPANDED SUB-ROW
 

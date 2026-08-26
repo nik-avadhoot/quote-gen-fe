@@ -188,6 +188,26 @@ the same change rather than being separate work.
 > **Open sub-question for the diff proposal:** what the recovery banner is *for* once rows hydrate
 > automatically. It cannot keep its current meaning. Settle this when proposing, not while writing.
 
+> ### 🛑 BLOCKING CONSTRAINT ON D-5 — raised at Stage-1 verification, before Stage 2 starts
+>
+> The banner is currently doing **double duty**. Besides being D-5's symptom, it is the
+> confirmation step that stands between a manual Restore and the batch grid being replaced —
+> recorded as **DP-2** in [`component-split-plan.md`](component-split-plan.md) and ruled
+> **deliberate**, not accidental.
+>
+> **Hydrate-on-mount removes the banner as the route back to the data, and would therefore silently
+> delete a guard the product owner has explicitly said they want kept.**
+>
+> **D-5's proposed fix MUST either:**
+> 1. preserve a confirmation step before grid data is replaced on a manual Restore, **or**
+> 2. state explicitly why it cannot, and what replaces it.
+>
+> Not to be solved now. **This must be answered in the D-5 proposal, not discovered during it.**
+>
+> Note when designing the replacement: the current guard is age-gated at 7 days
+> (`useBatchState.js:64`), after which rows persist in `localStorage` with no UI route back.
+> Whatever replaces it should not inherit that expiry.
+
 ### 4.3 D-2 — preserve the spec, clear only the batch
 
 **Decided: `+ New Batch` clears the batch and leaves the Costing scratchpad intact.**

@@ -198,13 +198,13 @@ in Supabase. One seam to change instead of thirty-seven.
 
 ---
 
-## 3. Defect register — D-1 to D-19
+## 3. Defect register — D-1 to D-22
 
 Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](component-split-plan.md).
 **None is a refactor regression; all predate Phase 0** except the observations, which were found
 *during* verification but are not caused by it.
 
-> **D-10 does not exist.** The number was skipped, not lost. D-1 to D-9 and D-11 to D-19 are the
+> **D-10 does not exist.** The number was skipped, not lost. D-1 to D-9 and D-11 to D-22 are the
 > whole register.
 >
 > **D-19 was added at the defect pass**, promoted out of the §4 cleanup list rather than newly
@@ -260,6 +260,9 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | D-17 | Add-on pin control is an unlabelled circled-plus | Cosmetic | Open — see cleanup list |
 | D-18 | Row-level Interest override missing from xlsx export | High | Open — **RESOLVED at source, and it is a category.** See below |
 | D-19 | `exportExcelFull` throws `ReferenceError` on every call | High | Open — **in D-3's scope.** Promoted from the §4 cleanup list; D-3 is not discharged without it |
+| D-20 | `+ New Construction` gives no visible feedback — draft appended off-screen | UX | Open — observation, Stage-1 verification |
+| D-21 | Defaults/Masters screen cut off at the bottom, no scroll affordance | Layout | Open — observation, Stage-1 verification |
+| D-22 | Glass SKU Type tag renders for some values and not others | High | Open — **a DATA defect, not cosmetic.** The tag and the dropdown read the same array, so a missing tag means the row holds a `skuType` no longer in `partitionsMaster`. D-8's mechanism in the wild |
 
 **Context, recorded but not attributed:** the Batch Entry toolbar's `+ Constr` button switches to
 the Construction Library tab instead of opening the slide-over overlay. The per-row route into the
