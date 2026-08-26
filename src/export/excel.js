@@ -104,7 +104,13 @@ const exportExcelFull=(items,rates,freight)=>{
       const s=item.spec,r=item.result;
       return[idx+1,s.material_code,s.product,`${s.L}×${s.W}×${s.H} (${s.dimType})`,
         s.ply,`${s.flute_F1||"—"}${s.flute_F2?"/"+s.flute_F2:""}`,
-        s.spec_bs||"—",s.spec_bct||"—",r.calcMOQ,r.finalRate,qty,+(r.finalRate*qty).toFixed(2)];
+        // D-19: this row emitted two further values — `qty` and `finalRate*qty` — but
+        // `qty` was never defined, because no order-quantity field exists anywhere in
+        // the data model (qtyPerSet is nos-per-set, a different quantity). The header
+        // above declares 10 columns; this row was written for 12. It was a schema that
+        // was never built, not a typo. Dropped to match the header rather than invent
+        // the field; the product question is recorded in docs/defect-pass-plan.md §8.
+        s.spec_bs||"—",s.spec_bct||"—",r.calcMOQ,r.finalRate];
     }),
     [""],["COMMERCIAL TERMS:"],
     ["Payment","30 days from invoice"],["Freight","FCL basis — included in rate"],
@@ -124,9 +130,20 @@ const exportExcelFull=(items,rates,freight)=>{
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rmRows),"RATE MASTER");
 
   // ── DEFAULTS sheet ────────────────────────────────────────────────────────
+  // D-19: `locations` was in scope while this code lived inside QuotationApp.jsx and
+  // went undefined when Phase 3 extracted the file. Read the persisted master through
+  // the seam — exportFromTemplate already reads cbb_template the same way below.
+  // Falling back to the imported LOCATIONS constant alone was rejected: it would
+  // silently discard a customised locations master.
+  let _locations=null;
+  try{
+    const _l=getItem('cbb_locations');
+    const _pl=_l?JSON.parse(_l):null;
+    if(Array.isArray(_pl)&&_pl.length)_locations=_pl;
+  }catch{_locations=null;} // malformed cbb_locations — fall back to LOCATIONS
   const defRows=[
     ["FREIGHT RATE MATRIX (Rs/kg)","","Nagpur","Pune","Kolkata"],
-    ...(locations||LOCATIONS).map(loc=>["",loc,...PLANTS.map(p=>freight[p]?.[loc]||0)]),
+    ...(_locations||LOCATIONS).map(loc=>["",loc,...PLANTS.map(p=>freight[p]?.[loc]||0)]),
     [""],["TAKE-UP FACTORS","Flute","Rulebook Default"],
     ...Object.entries(TAKEUP).map(([f,v])=>["",f,v]),
   ];
