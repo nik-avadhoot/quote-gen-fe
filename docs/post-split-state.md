@@ -234,7 +234,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 |---|---|---|
 | **D-5** | Autosave silently overwrites a larger batch | Destroys committed work with no undo. It destroyed a test fixture during this project. |
 | **D-8** | Unguarded master-data edits — a *category*, not one bug | Admin edits to shared reference data are direct writes with no confirmation, no validation, no undo. Corrupts every quote computed afterwards, silently. |
-| **D-11** | Construction Library duplicates instead of matching | Four creation paths with four different checks — one, `ConstructionLibTab.jsx:196`, has **none**. Corrupts a master that is already an informal join key. |
+| **D-11** | Construction Library duplicates instead of matching | Four creation paths with four different checks — one, `ConstructionLibTab.jsx:196`, has **none**. **And path 1's STD-tier prompt treats Cancel as "keep my grades", which deliberately creates a duplicate** — so there is an unguarded route *and* a sanctioned one, needing different remedies. Corrupts a master that is already an informal join key. |
 | **D-12** | Toast overlay makes a destructive button clickable-by-accident | The toast container is `pointerEvents:"none"` and no toast has an `onClick`, so clicks pass **through** to `+ New Batch` beneath. |
 | **D-13** | No non-destructive exit from scratchpad context | Both guards that block this state instruct the user to perform D-2, which destroys the work they were protecting. |
 

@@ -1405,6 +1405,32 @@ check is possible at creation and none happens later. Any construction built thi
 an existing one becomes a permanent duplicate — the most probable origin of the observed groups, and
 it requires no predicate disagreement at all.
 
+#### D-11 IS WIDER THAN "ONE UNGUARDED PATH" — there is also a SANCTIONED duplication route
+
+Confirmed at source during Stage 1. The four paths are not "three guard, one doesn't":
+
+| # | Path | Behaviour |
+|---|---|---|
+| 1 | bridge send (`useCostingBatchBridge.js:419–447`) | **Two checks.** `existingFull` (all fields incl. layers) reuses silently with a toast. `existingSTD` (8 fields, no layers) raises `window.confirm` — **and Cancel deliberately creates a duplicate** |
+| 2 | app-level `importConstrFromSpec` | 5 fields (4 STDs + sector) → `window.alert`, `return`. **Blocks** |
+| 3 | tab `importConstrFromSpec` | STDs + `spec_cobb` + sector → `window.alert`, `return; // always stop`. **Blocks** |
+| 4 | `+ New Construction` (`ConstructionLibTab.jsx:196`) | **No check at all.** Appends unconditionally |
+
+> ### 🛑 Path 1's Cancel branch is a DELIBERATE duplication route, not a gap
+>
+> The STD-tier prompt offers *"OK = Reuse [X] — your Costing paper grades are discarded / Cancel =
+> Create a new construction entry with your Costing layers"*. **Cancel means "keep my grades", and
+> keeping them requires a new entry.** The comment at the fall-through says so:
+> *"If cancelled, fall through to create new construction below."*
+>
+> **So D-11 has an unguarded path AND a sanctioned one.** Path 4 creates duplicates because nothing
+> checks; path 1 creates them because the user was asked and said yes. These need different
+> remedies, and a fix that only adds guards addresses one of the two.
+>
+> **Any resolution must rule on whether the Cancel branch stays.** It is a real choice — discarding
+> a user's paper grades to force reuse is its own kind of data loss, so the branch is not obviously
+> wrong. **Product decision, Stage 5.** Not for the implementer.
+
 **Second duplicate-producing route, by design:** the bridge's STD-tier prompt (`:425–444`) offers
 *"OK = Reuse [X] — your Costing paper grades are discarded"*. **Cancel** means "keep my grades",
 which creates a new entry.
