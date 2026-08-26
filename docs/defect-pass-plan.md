@@ -124,6 +124,29 @@ it is a correctness defect on a live fallback path, not cosmetic lint debt.
 > `locations` *should* resolve to has to be derived from the call sites before anything is written —
 > the identifiers are absent, not merely misspelled, so there is no mechanical fix.
 
+### Verifying D-19 — two traps that produce a false pass
+
+Both were hit while setting up Stage-1 verification. **Recorded, not investigated** — neither is a
+new defect, and each will otherwise be rediscovered the hard way by the next person on this path.
+
+1. **Restoring a null-bearing backup does NOT remove the template.** Restore skips nulls
+   (`if(snap[k]!=null)`), so an existing `cbb_template` survives untouched — *the same skip that
+   causes D-3 also protects what is already there.* A restore-based setup leaves the primary export
+   path working and tests nothing.
+2. **`AuthProvider` calls `refreshSession()` on mount** (`AuthContext.jsx:14`) and its `catch` nulls
+   the profile, so **any reload with the backend down logs you out.** Backend-down setups that
+   require a reload — and D-19's does, to clear in-memory `templateB64` — are structurally
+   impossible, not merely awkward.
+
+> **Working setup:** both servers up · log in · delete `cbb_template` from localStorage · reload ·
+> devtools **Block request URL** on `localhost:3001/export` · export. `/auth/*` keeps working, so
+> reloads stay safe and the session survives, while `/export` fails and the fallback runs.
+>
+> `exportExcelFull` needs **both** conditions — the backend not returning a successful download
+> **and** no template from either `templateB64Arg` or `getItem('cbb_template')`. The backend attempt
+> comes first and returns early on `resp.ok` (`excel.js:186`), so an absent template alone never
+> reaches it.
+
 ---
 
 ## 4. Stage-1 rulings — DECIDED
