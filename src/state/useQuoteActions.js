@@ -25,12 +25,14 @@ export function useQuoteActions(st){
 
 
   // ── BACKUP & RESTORE ──────────────────────────────────────────────────────
-  // Backup: download all 10 localStorage keys as a single JSON file.
+  // Backup: download every persisted localStorage key as a single JSON file.
   // Fix 3: cbb_batch_autosave added so batch rows are included in manual JSON backups.
   const BACKUP_KEYS=['cbb_rates','cbb_freight','cbb_sectors','cbb_boxtrim',
     'cbb_partitions','cbb_constrlib','cbb_template',
     'cbb_rate_date','cbb_batchprofile','cbb_quoteitems','cbb_batch_autosave',
-    'cbb_locations']; // A3: locations is a persisted master
+    'cbb_locations', // A3: locations is a persisted master
+    'cbb_pinned_addons']; // written by useBatchState:33; was absent, so pinned grid
+                          // columns did not survive a backup/restore round trip
 
   const handleBackup=()=>{
     const snap={_version:1,_ts:new Date().toISOString()};
