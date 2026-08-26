@@ -463,6 +463,11 @@ export function useCostingBatchBridge(st){
             TOP:{grade:"",mill:""},F1:{grade:"",mill:""},L1:{grade:"",mill:""},
             F2:{grade:"",mill:""},L2:{grade:"",mill:""},
           },
+          // D-11 enabler: which of the four creation paths wrote this entry. Additive
+          // only — existing entries are NOT backfilled, so an absent createdVia means
+          // "created before the enabler" and never a guessed origin. A timestamp alone
+          // would not distinguish the two duplicate hypotheses; the path is what does.
+          createdVia:"bridge-send",createdAt:new Date().toISOString(),
         };
         setConstructionLib(prev=>[...prev,newConstr]);
         constrCode=nextCode;

@@ -416,6 +416,8 @@ export function useQuoteActions(st){
         TOP:{grade:"",mill:""},F1:{grade:"",mill:""},L1:{grade:"",mill:""},
         F2:{grade:"",mill:""},L2:{grade:"",mill:""},
       },
+      // D-11 enabler — see the note at the bridge's creation path. Additive only.
+      createdVia:"app-import",createdAt:new Date().toISOString(),
     };
     setConstructionLib(prev=>[...prev,newConstr]);
     setTab("batch");
