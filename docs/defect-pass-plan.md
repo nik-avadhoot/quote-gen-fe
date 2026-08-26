@@ -191,6 +191,19 @@ identity freeze releases, and any Deep-Dive link breaks.
    concern. §6 rule 5 is stricter than the register's convenience grouping, and splitting them costs
    nothing.
 3. **Propose diffs before writing them.** Every Stage-1 change.
+4. **The lint ceiling is not headroom to spend.** It is 76/0 and may only go down — but
+   *"still under the ceiling"* is not the test. A change that fixes three errors and introduces two
+   passes the ceiling while leaving the codebase worse.
+
+   > Caught live in Stage 1. The D-19 fix should have taken the count 76 → 73; the first run
+   > reported **75**, and the cause was the implementer's own `catch(e){}` — an unused binding plus
+   > an empty block, two fresh errors. Rewritten as `catch{…}` and the count came to 73.
+   >
+   > **Quietly spending headroom on your own sloppiness is how a ceiling becomes a target.** The
+   > standard this repo already holds — *every file created by the split lints at zero* — is the one
+   > that applies to new code in this pass. **Predict the post-change count before running the gate,
+   > and treat any gap between prediction and result as a defect in the change**, not as slack to
+   > absorb.
 
 ---
 
