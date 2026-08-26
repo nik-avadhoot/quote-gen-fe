@@ -62,7 +62,12 @@ export function useQuoteActions(st){
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
     const d=new Date();
-    a.download=`CFB_QOS_Backup_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;
+    // D-6: date alone cannot separate two snapshots taken the same day. The browser
+    // saves the second as "…(1).json" and provenance becomes guesswork within hours.
+    // HHMM added; the _ts inside the file remains the authority.
+    const _p2=n=>String(n).padStart(2,'0');
+    a.download=`CFB_QOS_Backup_${d.getFullYear()}${_p2(d.getMonth()+1)}${_p2(d.getDate())}`
+      +`_${_p2(d.getHours())}${_p2(d.getMinutes())}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
     showToast('✅ Backup downloaded','success');
