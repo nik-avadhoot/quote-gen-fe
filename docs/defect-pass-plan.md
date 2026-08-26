@@ -204,9 +204,15 @@ the same change rather than being separate work.
 >
 > Not to be solved now. **This must be answered in the D-5 proposal, not discovered during it.**
 >
-> Note when designing the replacement: the current guard is age-gated at 7 days
-> (`useBatchState.js:64`), after which rows persist in `localStorage` with no UI route back.
-> Whatever replaces it should not inherit that expiry.
+> **Both conditions, not one.** The guard DP-2 records is age-gated at 7 days
+> (`useBatchState.js:64`), after which the rows persist in `localStorage` with **no UI route back to
+> them at all** — so DP-2 describes an intent rather than current behaviour, and the expiry is a hole
+> in the guard rather than a footnote on it. A replacement must therefore:
+>
+> * **preserve the confirmation** before grid data is replaced on a manual Restore, **and**
+> * **not inherit the 7-day expiry.**
+>
+> Satisfying one and not the other does not discharge this constraint.
 
 ### 4.3 D-2 — preserve the spec, clear only the batch
 

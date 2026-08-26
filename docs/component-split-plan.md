@@ -1889,12 +1889,24 @@ accepts. That is D-5's symptom, and it is **also a guard worth keeping**:
 > explicit confirmation stands between a restore and the grid being replaced. **Ruled: deliberate,
 > not accidental.**
 
-> ### ⚠️ Known limitation of relying on the banner as that guard
+> ### 🛑 CORRECTION — the guard described above SILENTLY EXPIRES, so DP-2 does not currently
+> exist in the form it was decided in
 >
-> The banner is age-gated — `if(ageMin>10080||!rows?.length)return null` (`useBatchState.js:64`),
-> i.e. **7 days**. Past that the rows remain in `localStorage` but the banner never appears, so
-> there is **no route back to them through the UI at all.** Whatever preserves this confirmation
-> step should not inherit that expiry.
+> The banner is age-gated: `if(ageMin>10080||!rows?.length)return null` (`useBatchState.js:64`) —
+> **7 days**. Past that the rows remain in `localStorage` and the banner never appears, so there is
+> **no route back to them through the UI at all.**
+>
+> **This is not a footnote on DP-2; it is a hole in it.** The position was ruled on the basis that a
+> second confirmation always stands between a manual Restore and the grid being replaced. For any
+> autosave older than a week that confirmation is not merely absent — **the data is unreachable**,
+> which is a worse outcome than the silent overwrite the guard was meant to prevent.
+>
+> **DP-2 therefore states an intent, not the current behaviour.** What is decided is that the
+> confirmation *should* exist. What is implemented expires after 7 days.
+>
+> **Whatever replaces the banner must satisfy both:** preserve the confirmation, and **not inherit
+> the expiry.** See the blocking constraint on D-5 in
+> [`defect-pass-plan.md`](defect-pass-plan.md) §4.2.
 
 ### QE-1 — Queued enhancement: put the mismatch reason in the EXPANDED SUB-ROW
 
