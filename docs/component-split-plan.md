@@ -1816,6 +1816,36 @@ So a count comparison is not a stricter version of the right behaviour; it is a 
 **Deliberate shrinking must persist. Only shrinking the user did not ask for is the defect.** Row
 count cannot distinguish the two, because the difference is *intent*, which the count does not carry.
 
+#### The guard's ONLY effective firing is at mount — observed, and it leaves a residue
+
+**Added at Stage 2 from live observation. The entry above is accurate; this is what it omits.**
+
+The effect's dep array is `[batchRows,batchProfile]`, and row deletion
+(`BatchGrid.jsx:546`) replaces the array on every click. **So the effect fires on every intermediate
+state.** Deleting 8 rows one at a time:
+
+| State reached | Guard | Result |
+|---|---|---|
+| 7, 6, 5, 4, 3, 2, **1** | not empty — does not fire | storage overwritten each time. **The 8-row save is gone at the first deletion** |
+| **0** | fires, sees 1 row in storage, returns | storage **frozen at 1 row** |
+
+Observed live: deleting all 8 rows then reloading offers a banner for **1 row**. Deleting 2 of 8
+leaves 6, as expected — deliberate shrinking persists for every non-zero count.
+
+> **The guard does not preserve "a larger prior save". It preserves whatever the second-to-last
+> state happened to be.** By the time it fires, the intermediate writes have already destroyed
+> anything larger. The code comment it contradicts is not merely unimplemented — the behaviour it
+> describes is unreachable through this code path.
+
+> ### The consequence that matters for the fix
+>
+> **The only moment the guard is ever effective is at mount** — the one case where `batchRows`
+> reaches the effect empty without earlier non-empty writes having overwritten the prior save.
+> Every other path writes straight through it.
+>
+> Since **hydrating `batchRows` on mount eliminates exactly that case**, the guard has no remaining
+> purpose after hydration. It is deleted, not reshaped.
+
 #### The real defect is state/storage divergence
 
 `Dismiss` leaves `batchRows` empty in React state while the rows remain in `localStorage`. Every
