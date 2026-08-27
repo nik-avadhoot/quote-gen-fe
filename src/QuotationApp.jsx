@@ -13,6 +13,7 @@ import UserManagementTab from "./tabs/UserManagementTab.jsx";
 
 // ── Shell chrome (Phase 8 refactor) ──────────────────────────────────────
 import Sidebar from "./ui/Sidebar.jsx";
+import ToastStack from "./ui/ToastStack.jsx";
 import TopBar from "./ui/TopBar.jsx";
 import { C, sans } from "./theme.js";
 
@@ -34,14 +35,14 @@ export default function App(){
 }
 
 // What is left here is chrome that belongs to no tab: the autosave banner, the
-// toast stack, two modals, and the tab switch itself. Everything else moved.
+// toast stack (now ui/ToastStack.jsx), two modals, and the tab switch itself.
 // Components below this line take NO props for shared state - they each call
 // useAppState() directly. Do not reintroduce prop-drilling from here.
 function QuotationApp(){
   const st = useAppState();
   const { autosaveBanner, restoreAutosave, role, setAutosaveBanner,
     setShowChangePassword, setShowProfile, showChangePassword, showProfile, showToast,
-    tab, toasts } = st;
+    tab } = st;
 
   // ── MAIN RENDER ───────────────────────────────────────────────────────────
   return(
@@ -75,7 +76,7 @@ function QuotationApp(){
         </div>
       </div>
     </div>
-    {toasts.length>0&&<div style={{position:"fixed",top:68,right:20,zIndex:9999,display:"flex",flexDirection:"column",gap:7,pointerEvents:"none"}}>{toasts.map(t=>(<div key={t.id} style={{padding:"10px 18px",borderRadius:8,fontSize:12,fontWeight:700,color:"white",boxShadow:"0 4px 18px rgba(0,0,0,.2)",maxWidth:300,background:t.type==="success"?C.green:t.type==="error"?C.red:C.amberD}}>{t.msg}</div>))}</div>}
+    <ToastStack/>
     {showProfile&&<ProfileModal onClose={()=>setShowProfile(false)} showToast={showToast}/>}
     {showChangePassword&&<ChangePasswordModal onClose={()=>setShowChangePassword(false)} showToast={showToast}/>}
   </>
