@@ -1,12 +1,15 @@
 # Session start — read this first
 
 **The standing rules in [§6 of `post-split-state.md`](post-split-state.md) were learned through
-correction, not stated up front. Treat them as binding from message one.** Three in particular,
+correction, not stated up front. Treat them as binding from message one.** Four in particular,
 because they are the ones that get violated by a well-meaning assistant trying to be useful:
 
 - **Defects: record, do not investigate.** One line — what was observed, and where.
 - **Capability is demonstrated, not described.** Show it working before either party plans around it.
 - **Nothing commits on your own verification.** Automated green does not discharge a manual guard.
+- **An unproposed design decision inside an approved diff is a deviation** — even a defensible one.
+  Deciding a condition during implementation that was not in the proposal is not "an implementation
+  detail"; it changes when the code fires. Flag it, the way you would a changed mechanism.
 
 You are not the first session on this repo. The rules below are the compressed cost of the
 earlier ones.

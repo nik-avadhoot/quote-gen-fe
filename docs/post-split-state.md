@@ -402,7 +402,23 @@ the moves were clean.
 7. **Derive assertions programmatically from source — never type them.** Two concrete bans: no
    hand-written string assertions, and no positional element selection (`input[N]`) where a named or
    labelled selector exists.
-8. **Defects during structural work: record, do not fix, do not investigate.** One line — what was
+8. **An unproposed design decision inside an approved diff is a DEVIATION — even when it is
+   defensible.** "Propose before writing" is not discharged by proposing the *shape* of a change
+   and then deciding its conditions during implementation. A condition that changes when the code
+   fires is part of the design, not an implementation detail.
+
+   > Caught live at Stage 2. The DP-2 file-restore confirmation was proposed as *"compare with
+   > current `batchRows.length` and confirm naming both counts before writing anything."* What was
+   > written gated the whole confirmation on `_currentRows>0` — a reasonable call, never put to the
+   > product owner, and discovered only when the check appeared to fail. The reasoning was also
+   > wrong: dialog fatigue is a hazard of *routine* actions, and the exempted case was the one where
+   > the user does not yet know the grid is empty.
+   >
+   > **The standard is the one already applied to the `window.alert` switch in the same commit** —
+   > that deviation was flagged at the time and accepted. The difference between the two was not
+   > defensibility. It was disclosure.
+
+9. **Defects during structural work: record, do not fix, do not investigate.** One line — what was
    observed, and where. A defect report during a refactor is a bookmark, not a ticket. *(This rule
    existed for the split; the defect pass is where it lifts.)*
 
