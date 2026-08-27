@@ -23,6 +23,21 @@ is *sequenced* and what has been *decided*.
 **In:** D-2 · D-3 · D-4 · D-5 · D-6 · D-7 · D-8 · D-9 · D-11 · D-12 · D-14 · D-15 · D-16 · D-17 ·
 D-18 · **D-19** (new — see §3).
 
+> ## 🔒 SCOPE FREEZE — standing rule, decided 2026-08-28
+>
+> **The register as it stood at `a178e3f` is the entire scope of this pass.** It grew D-18 → D-24
+> during Stages 1 and 2, every new entry from live testing. An open list that grows while it is
+> being worked has no end.
+>
+> Anything found from that commit onward goes to
+> [`post-model-defects.md`](post-model-defects.md) as **PM-*** and **is not worked now, regardless
+> of severity** — unless it **blocks a fix already in scope**. "Blocks" means the in-scope fix
+> cannot be completed or verified without it: not related to, not in the same file, not cheap while
+> we are here.
+>
+> **This is not a severity judgement.** A PM entry can be worse than anything in the register. It is
+> deferred because the pass has to terminate.
+
 **Out:**
 
 | | Why |
