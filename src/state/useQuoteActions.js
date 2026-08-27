@@ -85,6 +85,41 @@ export function useQuoteActions(st){
       const text=await f.text();
       const snap=JSON.parse(text);
       if(!snap._version)throw new Error('Not a valid CFB QOS backup file');
+      // ── DP-2: confirm BEFORE the write, not after the reload ─────────────────
+      // Restoring a file replaces the batch grid. Before D-5 the recovery banner
+      // stood between a restore and the grid being repopulated, which is the guard
+      // DP-2 records — but it only appeared after the reload, and it expired after
+      // 7 days. Asking here is strictly stronger: it happens where the user has
+      // context, before anything is written, and it cannot time out.
+      //
+      // Session recovery (reload, crash) hydrates silently and correctly — those
+      // are the user's own rows. A FILE restore is different: they may not have
+      // looked inside it. Only this path asks.
+      //
+      // UNCONDITIONAL — it fires even when the current grid is empty.
+      //
+      // An earlier version gated this on `_currentRows>0`, reasoning that replacing
+      // an empty grid destroys nothing and that a second dialog invites click-through.
+      // That misreads which risk matters. Dialog fatigue is a hazard of ROUTINE
+      // actions; a file restore is rare and deliberate. And the exempted case is
+      // exactly the one where the user does not yet KNOW the grid is empty —
+      // restoring onto a machine they have not looked at. The message is not only a
+      // warning about what is lost, it is information about what is ARRIVING, and
+      // that is wanted regardless of what is already there.
+      const _incomingRows=snap.cbb_batch_autosave?.rows?.length||0;
+      const _currentRows=batchRows.length;
+      const _currentDesc=_currentRows>0
+        ?`Your current batch has ${_currentRows} row${_currentRows!==1?'s':''} and will be REPLACED.`
+        :`Your current batch is empty.`;
+      if(!window.confirm(
+        `This backup contains ${_incomingRows} batch row${_incomingRows!==1?'s':''}.\n\n`
+        +`${_currentDesc}\n\n`
+        +`OK = Restore  |  Cancel = Keep the current batch`
+      )){
+        showToast('Restore cancelled — current batch kept','info');
+        e.target.value='';
+        return;
+      }
       BACKUP_KEYS.forEach(k=>{
         if(snap[k]!=null){
           try{
