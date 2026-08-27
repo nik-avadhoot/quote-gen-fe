@@ -86,6 +86,26 @@ consolidation is a different, safer operation.
 > **D-11's PREVENTION fix stays in scope** — see the plan. Only the cleanup moves here. Prevention
 > stops the set growing; cleanup is what the migration should absorb.
 
+### PM-4 — typing a SET Code silently skips the Nos/Set auto-fill
+
+**Found at Stage 3 while verifying D-7. Pre-existing, unrelated to D-7, found after the freeze —
+so it is here rather than in the register.** It blocks nothing in scope.
+
+**Two behaviours both depend on resolving the same parent Box, and they have different entry
+points:**
+
+* **Auto-dims** run on render, via `autoCalcPPDims` in `useBatchState.js`.
+* **Nos/Set auto-fill** runs *only* inside `handleConfirm` (`BatchGrid.jsx:250`), which is reachable
+  only while `setCodeAssumed` is true.
+
+**Typing in the SET Code field clears `setCodeAssumed`** (`BatchGrid.jsx:311`), which removes the
+confirm control from the DOM. So a user who types a SET Code gets auto-dims and **silently no
+Nos/Set** — no error, no toast, nothing to indicate a step was skipped.
+
+> Demonstrated live: a Part-L created with SET Code typed as `glass180` resolved its parent for dims
+> and did not auto-fill Nos/Set. Initially read as a D-7 failure; it is neither a D-7 failure nor a
+> gate — the code path simply never executes.
+
 ---
 
 ## Migration requirements

@@ -69,6 +69,12 @@ the defect pass has taken it to **67/0** and that is the number to beat now, not
 python scripts/audit-doc-sections.py
 ```
 
+A fifth, added at Stage 3 — SET Code comparison must stay in one place:
+
+```bash
+python scripts/audit-setcode.py
+```
+
 `test:costing` passing does **not** mean the UI works — read §1 of `post-split-state.md` for what
 it does not cover before trusting a green run.
 

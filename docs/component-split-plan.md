@@ -810,6 +810,23 @@ evidence the moves were clean.
 
 ## Post-split roadmap — what this architecture must accommodate
 
+> ### 🔷 A CONSTRUCTION IS A PHYSICAL SPEC, AND IS CLIENT-AGNOSTIC BY DESIGN
+>
+> **Stated for the first time at Stage 3, while ruling D-11's identity question. It is a constraint
+> on the masters work, not a detail of that defect — which is why it is here and not only there.**
+>
+> A construction is defined by its **physical spec**: board specs, ply, flutes, box type, layers.
+> **Sector and client are metadata attached to it, never part of its identity.**
+>
+> **Clients attach to constructions; constructions do not belong to clients.** Multiple clients can
+> share one construction, and eventually multiple sectors can too.
+>
+> **Therefore the eventual model must support MANY clients and MANY sectors per construction — not
+> one each.** A schema with `client` as a column on the construction row, or a unique key including
+> it, fragments a single physical construction across clients. That is **the exact duplication D-11
+> exists to prevent, only sanctioned by the schema** — and it would be far harder to unpick than the
+> current unguarded creation path, because the data would be correct by its own rules.
+
 Three coded masters land **after** the split is organized and tested for logic consistency:
 **CustomerFamilyMaster**, **CustomerMaster**, and **SKUMaster**. CustomerFamily and Customer each
 split into two categories — **Customer** and **Prospect** — and a Prospect carries **two codes**: a
@@ -925,6 +942,24 @@ D-1 is the exception and stays as committed — written and verified before the 
 
 **Standing rule for every commit from here: one concern per commit.** Structural moves and
 behaviour changes never share a commit. If a guard breaks, it must be unambiguous which change did it.
+
+> ## 📏 THE RECORDED EXTENT IS A FLOOR, NOT A FIGURE — three instances
+>
+> **Three times in this pass the stated extent of a defect has been narrower than reality, and every
+> time it surfaced during implementation rather than triage:**
+>
+> | Defect | Recorded | Actual |
+> |---|---|---|
+> | **D-5** | a guard that "never lets a smaller batch overwrite a larger one" | it fires only at mount; every other path writes through it, leaving a 1-row residue |
+> | **D-22** | a data defect, D-8's mechanism in the wild | the wrong render path entirely — the badge never consults the master |
+> | **D-7** | four comparison sites | **eight sites, six files, three conventions** |
+>
+> **The mechanism was right every time. The extent was wrong every time.** In each case the entry
+> was written from one observation and the survey was never done.
+>
+> **Whoever scopes a remaining entry should treat its stated site count as a floor and re-derive the
+> set before proposing.** The cost of doing so is minutes; the cost of not doing so has been a
+> retraction, a refinement and a doubled scope.
 
 > ## 🔷 A DESIGN-LEVEL PATTERN, NOT THREE BUGS — read this before fixing any one of them
 >
@@ -1505,6 +1540,17 @@ guard that is narrower than its description.**
 
 ### D-23 — the Costing `+ New Batch` guards on batch state to protect spec state
 
+> ### ⚠️ THE MESSAGE IS AS WRONG AS THE CONDITION — fixing the gate does not close this
+>
+> The dialog currently reads *"Your existing Batch Entry batch (N rows) remains completely
+> untouched"* — and says **nothing** about discarding the Costing spec, which is the only thing the
+> action actually destroys. **It reassures about what is safe and stays silent about what is lost:
+> exactly D-2's inverted warning, in a different button.**
+>
+> **RULED: confirm when the spec is dirty** (`_specHasWork` — seven string fields, no numerics, so
+> the `wastePP:0` blank-vs-zero trap never arises), **and rewrite the message to name the spec.**
+> A future reader must not conclude that correcting the gate closed the defect.
+
 **Recorded, not fixed. Independent of the toast.**
 
 > 🔷 **One of three instances of the same reasoning error** — see the `batchRows.length` pattern in
@@ -1591,13 +1637,33 @@ Confirmed at source during Stage 1. The four paths are not "three guard, one doe
 > checks; path 1 creates them because the user was asked and said yes. These need different
 > remedies, and a fix that only adds guards addresses one of the two.
 >
-> **Any resolution must rule on whether the Cancel branch stays.** It is a real choice — discarding
-> a user's paper grades to force reuse is its own kind of data loss, so the branch is not obviously
-> wrong. **Product decision, Stage 5.** Not for the implementer.
+> ### ✅ RULED: THE CANCEL BRANCH STAYS
+>
+> Discarding a Maker's paper grades to force reuse is its own kind of data loss, so the branch is
+> kept deliberately.
+>
+> **The consequence, which must be recorded with the ruling: a guards-only fix addresses ONE OF TWO
+> duplicate sources.** Path 4 creates duplicates because nothing checks; path 1 creates them because
+> the user was asked and said yes. Adding predicates everywhere leaves the second untouched — by
+> design now, rather than by omission. **Anyone measuring whether D-11 "worked" must count only
+> unsanctioned duplicates**, or the sanctioned ones will read as a failed fix.
 
 **Second duplicate-producing route, by design:** the bridge's STD-tier prompt (`:425–444`) offers
 *"OK = Reuse [X] — your Costing paper grades are discarded"*. **Cancel** means "keep my grades",
 which creates a new entry.
+
+#### ✅ RULED at Stage 3 — identity is the PHYSICAL SPEC
+
+**Board specs + ply + flutes + boxType + layers.** Sector and client are **metadata, not identity**.
+Minimum prevention only: one shared predicate at all four creation paths including the unguarded
+`ConstructionLibTab.jsx:196`. Not an identity model, not a merge tool — small enough that discarding
+it costs nothing once constructions gain database identity.
+
+> **The design intent behind it, which neither party had stated before and which is a constraint on
+> the masters work — see the roadmap section.** A construction is a **physical spec and is
+> client-agnostic by design.** Clients attach to it; multiple clients can share one construction,
+> and eventually multiple sectors. Including client in identity would fragment a single physical
+> construction across clients — **the exact duplication D-11 exists to prevent, only sanctioned.**
 
 #### TWO COMPETING HYPOTHESES — equal standing, BOTH UNTESTED
 
@@ -1920,7 +1986,45 @@ row loses that link with no mention of it.
 
 > ⚠️ **These two entries were silently deleted by `b7cc2a4` and restored verbatim from `b7cc2a4^` at the end of Phase 8.** An anchor-replace in that commit consumed them. Nothing was rewritten — the text below is byte-identical to what was recorded originally.
 
-### D-7 — SET Code case normalisation is asymmetric, breaking parent resolution
+### D-7 — ✅ FIXED at Stage 3 — SET Code case normalisation is asymmetric, breaking parent resolution
+
+> **Resolved.** Parent resolution now runs through a single helper, `sameSetCode()` in
+> `engine/rowType.js`, enforced by `scripts/audit-setcode.py`. Commits `0453d0a` (helper + four
+> sites) · `50e47b5` (the SET completeness export gate) · `8a88544` (the guard script).
+>
+> **The extent was wider than recorded — eight sites, six files, three conventions**, not four.
+> See the pattern note in the register introduction: this is the third time.
+
+#### Three things about the fix that will otherwise be misread
+
+**1 · `BatchGrid.jsx:254` is DEFENSIVE, not load-bearing — and is likely unreachable
+differentially.** An assumed SET Code is *copied verbatim* from its parent Box
+(`BatchGrid.jsx:298`, `useQuoteActions.js:395`), so it cannot differ from that parent in case. The
+only way to make it differ is to type in the field — and typing clears `setCodeAssumed` at
+`BatchGrid.jsx:311`, which removes the confirm control from the DOM before it can be used.
+
+> **How it was tested, so nobody repeats it and reads the result as a failure.** The product owner
+> created a Part-L, typed the SET Code as lowercase `glass180`, and confirmed. **Auto-dims filled;
+> Nos/Set did not.** That is not `:254` failing — `handleConfirm` never ran, because typing had
+> already removed its control. Auto-dims run on render via `autoCalcPPDims`; Nos/Set auto-fill lives
+> only inside `handleConfirm`. Same parent, two different entry points.
+
+**2 · `normSetCode` deliberately does NOT collapse internal whitespace.** It trims and uppercases,
+so `"Glass 180"` and `"Glass180"` remain **distinct** SET Codes. **A decision, not an omission** —
+collapsing internal spaces would merge codes a user typed differently on purpose. Do not "fix" it.
+
+**3 · The guard script has a blind spot, and it is weaker than the other exceptions.**
+`scripts/audit-setcode.py` cannot see `setCode` inside a **composite key**: `useQuoteActions.js:167`
+builds a template literal and compares whole strings, so no `setCode` operand exists syntactically
+and no regex reaches it without parsing. **That exception is enforced by nothing.** A green exit
+from the script does not cover it, and it is recorded here as well as in the script header because
+an exception documented only inside the tool that cannot enforce it is documented in the wrong place.
+
+> **Also unchanged, deliberately:** `sameSetCode("","")` is **true**, exactly as the previous code
+> was. Two of the four sites have no empty-guard, so two rows with blank SET Codes match each other.
+> Almost certainly wrong — blank means "not in a SET" — but it is a second behaviour change and is
+> **ruled to be FALSE in its own commit, after the case fix is verified**, so that if parent
+> resolution misbehaves it is unambiguous which change did it.
 
 Two entry points normalise differently, and the two consumers compare differently:
 

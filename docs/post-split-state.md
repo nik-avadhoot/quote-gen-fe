@@ -261,7 +261,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | D-3 | Backup silently discards the two raw-string keys | High | Open |
 | D-4 | Identity freeze is lost on reload while the batch survives | High | Open |
 | D-6 | Backup filenames cannot distinguish two same-day snapshots | Medium | Open |
-| D-7 | SET Code case normalisation is asymmetric, breaking parent resolution | High | Open |
+| ~~D-7~~ | SET Code case normalisation is asymmetric | High | **FIXED** — Stage 3. One helper `sameSetCode()`, enforced by `scripts/audit-setcode.py`. Extent was 8 sites, not 4 |
 | D-9 | Selecting a sector silently converts inheritance into an override | High | Open |
 | D-14 | Unconfirmed SET Code does not block Deep Dive | Medium | Open — observation |
 | D-15 | Unconfirmed SET Code blocks only the offending row, not globally | — | **Undecided** — may be correct by design |

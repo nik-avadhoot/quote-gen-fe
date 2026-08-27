@@ -423,7 +423,27 @@ Both independent of the stages. **D-18 is not filler despite being small** — s
 
 ---
 
-## 8. Open decisions — later stages
+## 8. Decisions — ALL EIGHT RULED, 2026-08-28
+
+Answered in one sitting by the product owner. Recorded here so no stage re-opens them.
+
+| # | Defect | Ruling |
+|---|---|---|
+| 1 | **D-7** | **Compare case-insensitively at both predicates**, not normalise at input. Repairs existing data rather than only preventing new breakage, and Costing already did it at one site. **DONE — Stage 3** |
+| 2 | **D-15** | **Per-row blocking is correct.** Calculate All and Send All are already effectively global, so the safety property exists where wrong attribution would escape. **Answered on merits, NOT on D-14's recorded behaviour — settle D-14 from source first** |
+| 3 | **D-24** | **The profile is still committed.** Guards check the profile, not row count. Silent customer reassignment with nothing recording it is not acceptable as correct-by-definition, however narrow the route in |
+| 4 | **D-23** | **Confirm when the spec is dirty** (`_specHasWork`, seven string fields, no numerics). **And rewrite the message** — see the D-23 entry: it is as wrong as the condition |
+| 5 | **D-9** | **Blank with placeholder.** Derive the full write-site set exhaustively BEFORE any fix — a partial fix is worse than uniform wrongness |
+| 6 | **D-11** | **Identity = board specs + ply + flutes + boxType + layers.** Sector and client are metadata. **Cancel branch STAYS.** Minimum prevention only. Design intent recorded in the roadmap |
+| 7 | **D-18** | **All four sheet-level parameters**, not interest alone. Confirm from source that margin and waste/conv have per-row overrides before writing |
+| 8 | **D-20** | **Scroll to the new entry and expand it** |
+
+**Moot:** D-8a and D-8d were deferred to post-model before the sitting, so the original ten became eight.
+
+**D-8c ranges:** to be supplied separately. They survive the migration regardless of where validation
+runs, so they are recorded on arrival.
+
+## 9. Open decisions — remaining
 
 None of these blocks Stage 1. Each blocks its own stage.
 
