@@ -75,7 +75,7 @@ must be `true` (confirms `CFB_Quotation_Master_v7.xlsx` is found beside `server.
 > all state is `useState` with no Context, and that the file must not be broken apart — are now
 > **false and inverted**. Do not act on either; the split is done and it is the architecture.
 > **Start with [`docs/post-split-state.md`](docs/post-split-state.md)** — final architecture, the
-> store's composition order and why it is load-bearing, the defect register D-1–D-18 with beta
+> store's composition order and why it is load-bearing, the defect register D-1–D-24 with beta
 > blockers marked, the standing rules, and what was deliberately *not* done. The exhaustive record,
 > every decision and its reasoning, is [`docs/component-split-plan.md`](docs/component-split-plan.md).
 

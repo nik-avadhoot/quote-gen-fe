@@ -43,7 +43,7 @@ the shared parent directory, outside both repos, where every edit to it was unve
 
 1. **`quote-gen-fe/CLAUDE.md`** — conventions and business-logic guardrails. Loads automatically in
    the frontend. **It does not load when you are working in `quote-gen-be`** — see §5.
-2. **`docs/post-split-state.md`** — the handoff. Architecture, the D-1…D-18 defect register,
+2. **`docs/post-split-state.md`** — the handoff. Architecture, the D-1…D-24 defect register,
    §6 standing rules, §8 repository and deployment state. Start at §6.
 3. **`docs/component-split-plan.md`** — the full record: every phase, decision, and mechanism.
    **Authoritative** where it and the summary disagree.
@@ -62,8 +62,8 @@ npm run test:costing
 npx eslint src
 ```
 
-Lint is a **ceiling of 76 errors / 0 warnings** — the pre-refactor baseline. It may only go down.
-All three were green on `0def418`. A fourth, for documents rather than code:
+Lint is a **ceiling that may only go down.** 76/0 was the pre-refactor baseline at `0def418`;
+the defect pass has taken it to **67/0** and that is the number to beat now, not 76. A fourth, for documents rather than code:
 
 ```bash
 python scripts/audit-doc-sections.py

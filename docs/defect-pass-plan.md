@@ -372,7 +372,23 @@ confirm → Deep Dive → Unlink.
 > check in Stage 3.** It cannot be settled from source.
 
 ### Stage 4 — Master data
-`D-9` survey → `D-9` fix → `D-8e` → `D-8b` → `D-8a`
+`D-9` survey → `D-9` fix → `D-8e` → `D-8b` → record `D-8c`'s ranges
+
+> ### 🔺 D-8e AND D-8b ARE MITIGATIONS, NOT POLISH — read before scheduling this stage
+>
+> **D-8a is deferred (PM-1), so the unguarded per-keystroke write model stays live until the
+> masters migration.** That makes these two **load-bearing for however long that takes**, not
+> nice-to-haves alongside a proper fix that is coming shortly.
+>
+> * **D-8e** — warn when a master edit invalidates already-calculated batch rows
+>   (`useBatchInvalidation.js:34` wipes every cached result). This is the only thing standing between
+>   a typo and *"a quote costed this morning gives a different answer this afternoon and nothing
+>   explains why."*
+> * **D-8b** — confirmation on the blanket operations, which write across **every grade at once**
+>   from a single click (`setRates(prev=>prev.map(r=>({...r,disc:blanketDisc})))`).
+>
+> **Do not reschedule these as low-priority because D-8's "real fix" is deferred.** The deferral is
+> exactly what makes them matter.
 
 **The D-9 survey is investigation, not code.** The register is explicit that the full write-site set
 must be derived exhaustively first, because a partial fix produces inconsistent behaviour between
