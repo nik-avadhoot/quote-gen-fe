@@ -34,31 +34,19 @@ export default function App(){
   );
 }
 
-// What is left here is chrome that belongs to no tab: the autosave banner, the
-// toast stack (now ui/ToastStack.jsx), two modals, and the tab switch itself.
+// What is left here is chrome that belongs to no tab: <ToastStack/>, two modals,
+// and the tab switch itself. The autosave banner was removed with D-5 - batchRows
+// now hydrates on mount, so there is nothing left for it to offer.
 // Components below this line take NO props for shared state - they each call
 // useAppState() directly. Do not reintroduce prop-drilling from here.
 function QuotationApp(){
   const st = useAppState();
-  const { autosaveBanner, restoreAutosave, role, setAutosaveBanner,
-    setShowChangePassword, setShowProfile, showChangePassword, showProfile, showToast,
-    tab } = st;
+  const { role, setShowChangePassword, setShowProfile,
+    showChangePassword, showProfile, showToast, tab } = st;
 
   // ── MAIN RENDER ───────────────────────────────────────────────────────────
   return(
     <>
-    {autosaveBanner&&(
-      <div style={{position:"fixed",top:0,left:0,right:0,zIndex:10000,
-        background:C.amberD,color:C.white,padding:"8px 16px",
-        display:"flex",alignItems:"center",gap:10,fontSize:12,fontWeight:600}}>
-        <span>🕐 Unsaved batch work found from {autosaveBanner.label} ({autosaveBanner.rows} row{autosaveBanner.rows!==1?"s":""}). Restore it?</span>
-        <button onClick={restoreAutosave}
-          style={{padding:"3px 12px",borderRadius:4,border:"none",background:C.white,
-            color:C.amberD,fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:sans}}>Restore</button>
-        <button onClick={()=>setAutosaveBanner(null)}
-          style={{padding:"3px 10px",borderRadius:4,border:"1px solid rgba(255,255,255,.4)",
-            background:"transparent",color:C.white,fontSize:11,cursor:"pointer",fontFamily:sans}}>Dismiss</button>
-      </div>)}
     <div style={{display:"flex",flexDirection:"row",height:"100vh",width:"100%",overflow:"hidden",
       background:C.cream,fontFamily:sans}}>
       <Sidebar/>

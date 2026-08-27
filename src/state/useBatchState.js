@@ -11,7 +11,11 @@ import { useEffect, useState } from "react";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useBatchState(st){
-  const { constructionLib, sectorCodes, setTab, showToast } = st;
+  // D-5: setTab and showToast were used ONLY by restoreAutosave, which the
+  // hydrate-on-mount change removed. This hook no longer depends on the ui slice
+  // at all — see the composition-order note in docs/post-split-state.md §2, which
+  // still lists that dependency.
+  const { constructionLib, sectorCodes } = st;
 
   // ── BATCH ENTRY STATE ─────────────────────────────────────────────────────
   const[batchProfile,setBatchProfile]=useState(()=>{
@@ -38,7 +42,33 @@ export function useBatchState(st){
   const toggleRowExpand=(id)=>setExpandedRows(prev=>{
     const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;
   });
-  const[batchRows,setBatchRows]=useState([]);
+  // ── D-5: hydrate batchRows from the autosave ──────────────────────────────
+  // Before this, batchRows started EMPTY while the rows sat in localStorage, and
+  // the recovery banner was the only route back to them. That divergence — not
+  // the write that followed it — was the defect: every subsequent write was
+  // "legitimate" by any count rule while persisting a state the user never chose.
+  //
+  // Rows only. batchProfile hydrates from cbb_batchprofile above and remains the
+  // single source for profile; the profile snapshot inside the autosave is
+  // deliberately NOT read here, so no second source of truth is introduced.
+  const[batchRows,setBatchRows]=useState(()=>{
+    try{
+      const s=getItem('cbb_batch_autosave');
+      if(!s)return[];
+      const{rows}=JSON.parse(s);
+      return Array.isArray(rows)?rows:[];
+    }catch{
+      // Corrupt blob. Preserve it ONCE before the effect below overwrites it, so
+      // it stays recoverable by hand. This is preservation, not a guard: nothing
+      // is blocked and no divergence is reintroduced. Idempotent, which matters
+      // because StrictMode invokes this initialiser twice in development.
+      try{
+        const raw=getItem('cbb_batch_autosave');
+        if(raw)setItem('cbb_batch_autosave_corrupt',raw);
+      }catch{ /* storage unavailable — nothing further to do */ }
+      return[];
+    }
+  });
   const[batchResults,setBatchResults]=useState({});
   const[expandedConstr,setExpandedConstr]=useState(null);
   const[constrFilter,setConstrFilter]=useState({sector:'',client:'',status:'active'});
@@ -50,46 +80,26 @@ export function useBatchState(st){
   const[batchConstrOverlayFilter,setBatchConstrOverlayFilter]=useState({sector:'',client:''});
   // Construction Library tab state
 
+  // D-5: the age of the batch AS LOADED at mount, for display only.
+  // Deliberately captured once and never updated: it describes what was loaded at
+  // the start of this session, which stays true regardless of later edits. There is
+  // NO behaviour attached to it anywhere — see the note at its render site in
+  // BatchProfileBar.jsx. The old 7-day gate hid rows; this only mentions them.
   // ── AUTO-SAVE: batch rows ─────────────────────────────────────────────────
   // Must be declared AFTER batchRows and batchProfile (both used in dep array).
-  const[autosaveBanner,setAutosaveBanner]=useState(()=>{
-    try{
-      const s=getItem('cbb_batch_autosave');
-      if(!s)return null;
-      const{ts,rows}=JSON.parse(s);
-      // Fix ④: extended to 7 days (10080 min). Friday→Monday is 72h; was 480 min (8h).
-      // Data stays in localStorage regardless — this only controls banner visibility.
-      const ageMin=(Date.now()-ts)/60000;
-      if(ageMin>10080||!rows?.length)return null;
-      const d=new Date(ts);
-      const label=`${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-      return{ts,rows:rows.length,label};
-    }catch(e){return null;}
-  });
   useEffect(()=>{
-    // Fix 3: Never let a smaller/empty batch overwrite a larger valid prior save.
-    // Only write if current rows are non-empty AND >= the saved row count (or no prior save exists).
-    if(!batchRows.length){
-      try{
-        const prev=getItem('cbb_batch_autosave');
-        if(prev){const{rows}=JSON.parse(prev);if(rows?.length>0)return;}
-      }catch(e){}
-    }
+    // D-5: NO GUARD. batchRows hydrates on mount above, so an empty batch here
+    // means the batch IS empty — either storage held nothing, or the user emptied
+    // it deliberately. Both must persist.
+    //
+    // The removed guard could not distinguish those, and never did: the effect
+    // fires on every intermediate state, so deleting N rows one at a time wrote
+    // N-1, N-2 … 1 straight through it and only blocked the final transition to 0.
+    // Its ONLY effective firing was at mount — the one case hydration eliminates.
+    // Observed: deleting all 8 rows left a 1-row residue in storage.
     try{setItem('cbb_batch_autosave',JSON.stringify({
-      ts:Date.now(),rows:batchRows,profile:batchProfile}));}catch(e){}
+      ts:Date.now(),rows:batchRows,profile:batchProfile}));}catch{ /* storage full or unavailable */ }
   },[batchRows,batchProfile]);
-  const restoreAutosave=()=>{
-    try{
-      const s=getItem('cbb_batch_autosave');
-      if(!s)return;
-      const{rows,profile}=JSON.parse(s);
-      if(rows?.length)setBatchRows(rows);
-      if(profile)setBatchProfile(p=>({...p,...profile}));
-      setAutosaveBanner(null);
-      setTab('batch');
-      showToast(`✅ Restored ${rows.length} batch row(s) from autosave`,'success');
-    }catch(e){showToast('❌ Could not read autosave','error');}
-  };
 
   // Conversational filter parser — no AI tokens, pure local regex/keyword matching.
   // Parses a free-text query like "active alcobev ITC BS>8 GSM 700-750 Cobb 125"
@@ -170,5 +180,5 @@ export function useBatchState(st){
   });
   const invalidateAllBatchResults=()=>setBatchResults({});
 
-  return { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, autosaveBanner, batchConstrOverlay, batchConstrOverlayFilter, batchConstrOverlayQuery, batchConstrTargetRowId, batchProfile, batchResults, batchRows, constrFilter, constrQuery, expandedConstr, expandedRows, invalidateAllBatchResults, invalidateBatchRow, parseConstrQuery, pinnedAddOns, restoreAutosave, setAutoCodeEnabled, setAutoCodeSeq, setAutosaveBanner, setBatchConstrOverlay, setBatchConstrOverlayFilter, setBatchConstrOverlayQuery, setBatchConstrTargetRowId, setBatchProfile, setBatchResults, setBatchRows, setConstrFilter, setConstrQuery, setExpandedConstr, setExpandedRows, setPinnedAddOns, togglePinAddOn, toggleRowExpand };
+  return { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchConstrOverlay, batchConstrOverlayFilter, batchConstrOverlayQuery, batchConstrTargetRowId, batchProfile, batchResults, batchRows, constrFilter, constrQuery, expandedConstr, expandedRows, invalidateAllBatchResults, invalidateBatchRow, parseConstrQuery, pinnedAddOns, setAutoCodeEnabled, setAutoCodeSeq, setBatchConstrOverlay, setBatchConstrOverlayFilter, setBatchConstrOverlayQuery, setBatchConstrTargetRowId, setBatchProfile, setBatchResults, setBatchRows, setConstrFilter, setConstrQuery, setExpandedConstr, setExpandedRows, setPinnedAddOns, togglePinAddOn, toggleRowExpand };
 }
