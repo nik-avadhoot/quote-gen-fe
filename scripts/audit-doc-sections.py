@@ -51,6 +51,21 @@ import re
 import subprocess
 import sys
 
+# The tracked documents use em-dashes, arrows and emoji in headings (🚨, 🧭, 🔷),
+# and this script PRINTS headings that changed. On Windows the console defaults to
+# cp1252, which cannot encode them: printing one raises UnicodeEncodeError and the
+# audit dies mid-run with a traceback instead of a verdict.
+#
+# Latent from the start — only CHANGED headings are printed, so it stayed hidden
+# until a heading carrying an emoji was first retitled (D-5, at Stage 2). A gate
+# that crashes on its own subject matter is worse than no gate: it exits non-zero
+# and looks like a finding. The '?' characters seen in this script's output for
+# en-dashes were the same problem, degrading quietly rather than fatally.
+try:
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except (AttributeError, OSError):
+    pass  # pre-3.7 or a stream that cannot be reconfigured; fall through unchanged
+
 DEFAULT_DOC = 'docs/component-split-plan.md'
 MIN_FINGERPRINT_LEN = 45   # shorter lines recur across sections and match spuriously
 MAX_FINGERPRINTS = 4
