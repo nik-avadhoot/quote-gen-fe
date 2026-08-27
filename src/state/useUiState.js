@@ -34,6 +34,10 @@ export function useUiState(){
     setToasts(p=>[...p,{id,msg,type}]);
     setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),dur);
   };
+  // D-12: remove one toast early, on click. The showToast timer above still
+  // fires afterwards and filters an id that is already gone — a harmless no-op,
+  // so there is nothing to cancel.
+  const dismissToast=id=>setToasts(p=>p.filter(t=>t.id!==id));
 
-  return { clTabFilter, clTabQuery, profile, role, setShowChangePassword, setClTabFilter, setClTabQuery, setShowProfile, setSidebarCollapsed, setTab, setToasts, showChangePassword, showProfile, showToast, sidebarCollapsed, signOut, tab, toasts };
+  return { clTabFilter, clTabQuery, dismissToast, profile, role, setShowChangePassword, setClTabFilter, setClTabQuery, setShowProfile, setSidebarCollapsed, setTab, setToasts, showChangePassword, showProfile, showToast, sidebarCollapsed, signOut, tab, toasts };
 }
