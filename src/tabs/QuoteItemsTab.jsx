@@ -26,6 +26,7 @@
 import { exportFromTemplate } from "../export/excel.js";
 import { exportAllPDF } from "../export/pdf.js";
 import { Btn } from "../ui/primitives.jsx";
+import { normSetCode, sameSetCode } from "../engine/rowType.js";
 import { useAppState } from "../state/AppStateContext.js";
 import { C, mono } from "../theme.js";
 
@@ -118,9 +119,14 @@ export default function QuoteItemsTab(){
               :"";
             // B3: SET completeness check — warn if any SET has a Box but no Plate/Partition
             const checkSETCompleteness=()=>{
-              const setCodes=[...new Set(items.filter(i=>i.spec?.setCode&&i.spec.setCode.trim()).map(i=>i.spec.setCode.trim()))];
+              // D-7: normalise. Case-split SET codes made this gate see one SET as two —
+              // a Box under "Glass180" and its Part under "GLASS180" reported the Box's
+              // SET as incomplete when the Part existed all along. A FALSE WARNING on
+              // the export path, not a display quirk. :181 in this same file already
+              // grouped case-insensitively, so the file disagreed with itself.
+              const setCodes=[...new Set(items.filter(i=>i.spec?.setCode&&i.spec.setCode.trim()).map(i=>normSetCode(i.spec.setCode)))];
               const incomplete=setCodes.filter(sc=>{
-                const inSet=items.filter(i=>(i.spec?.setCode||'').trim()===sc);
+                const inSet=items.filter(i=>sameSetCode(i.spec?.setCode,sc));
                 const hasBox=inSet.some(i=>(i.spec?.rowType||'Box')==='Box');
                 const hasPP=inSet.some(i=>['Plate','Part-L','Part-W'].includes(i.spec?.rowType||''));
                 return hasBox&&!hasPP;
