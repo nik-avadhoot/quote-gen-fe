@@ -14,7 +14,7 @@
 // is STRUCTURAL ONLY — no behaviour changed.
 // ═══════════════════════════════════════════════════════════════════════════
 import { BOX_TYPES, PLANTS } from "../../data/defaults.js";
-import { isPPType } from "../../engine/rowType.js";
+import { isPPType, sameSetCode } from "../../engine/rowType.js";
 import BoxDieline from "../../components/BoxDieline.jsx";
 import { Btn, Inp, SH, Sel } from "../../ui/primitives.jsx";
 import { inputSt } from "../../ui/styles.js";
@@ -178,12 +178,12 @@ export default function SpecForm(){
         </div>
         {/* Auto-dims from parent Box: search batchRows first (primary), then items (legacy fallback) */}
         {spec.rowType!=="RS4"&&spec.setCode&&(()=>{
-          const sc=(spec.setCode||"").trim().toUpperCase();
+          const sc=spec.setCode; // D-7: normalisation belongs to sameSetCode, not here
           // Issue 3 fix: parent Box is in batchRows (primary workflow path).
           // items (Quote Items) is the legacy path — kept as fallback only.
           const parent=
-            batchRows.find(r=>(r.setCode||"").trim().toUpperCase()===sc&&(r.itemType||"Box")==="Box")||
-            items.find(i=>(i.spec.setCode||"").trim().toUpperCase()===sc&&i.spec.rowType==="Box");
+            batchRows.find(r=>sameSetCode(r.setCode,sc)&&(r.itemType||"Box")==="Box")||
+            items.find(i=>sameSetCode(i.spec.setCode,sc)&&i.spec.rowType==="Box");
           if(!parent)return null;
           const pL=parent.L??parent.spec?.L;
           const pW=parent.W??parent.spec?.W;

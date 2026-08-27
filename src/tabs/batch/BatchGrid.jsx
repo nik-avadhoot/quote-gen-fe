@@ -22,7 +22,7 @@
 import { Fragment } from "react";
 import { BOX_TYPES } from "../../data/defaults.js";
 import { buildSpecFromRow, checkSpecCompliance } from "../../engine/costing.js";
-import { isPPType } from "../../engine/rowType.js";
+import { isPPType, sameSetCode } from "../../engine/rowType.js";
 import { Btn } from "../../ui/primitives.jsx";
 import { STATUS_DISPLAY, constrAutoName } from "../../lib/constructionName.js";
 import { C, mono, sans } from "../../theme.js";
@@ -251,7 +251,7 @@ export default function BatchGrid(){
                             if(batchProfile.sector==="ALCOBEV"&&(row.itemType==="Part-L"||row.itemType==="Part-W")){
                               const confirmedSetCode=(row.setCode||"").trim();
                               const parentBox=batchRows.find(r=>
-                                r.itemType==="Box"&&!r.setCodeAssumed&&(r.setCode||"").trim()===confirmedSetCode);
+                                r.itemType==="Box"&&!r.setCodeAssumed&&sameSetCode(r.setCode,confirmedSetCode)); // D-7
                               // D-1: parent wins, this row is the fallback. Parts can be sent from
                               // Costing before the Box exists, and a Box with setCodeAssumed===true is
                               // excluded by the predicate above — so the parent is often simply absent.
@@ -595,7 +595,7 @@ export default function BatchGrid(){
                             {batchProfile.sector==="ALCOBEV"&&(row.itemType==="Part-L"||row.itemType==="Part-W")&&(()=>{
                               const parentBox=batchRows.find(r=>
                                 r.itemType==="Box"&&!r.setCodeAssumed&&
-                                (r.setCode||"").trim()===(row.setCode||"").trim());
+                                sameSetCode(r.setCode,row.setCode)); // D-7
                               // D-1: same precedence as the auto-fill above.
                               const effGlassSKU=parentBox?.glassSKUType||row.glassSKUType||"";
                               return(

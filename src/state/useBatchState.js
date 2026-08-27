@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useState } from "react";
 import { getItem, setItem } from "../lib/persist.js";
+import { sameSetCode } from "../engine/rowType.js";
 
 export function useBatchState(st){
   // D-5: setTab and showToast were used ONLY by restoreAutosave, which the
@@ -171,7 +172,7 @@ export function useBatchState(st){
     const idx=batchRows.findIndex(r=>r.id===row.id);
     // Only accept a parent Box with the same confirmed SET Code
     const parentBox=[...batchRows.slice(0,idx)].reverse().find(r=>
-      r.itemType==="Box"&&!r.setCodeAssumed&&(r.setCode||"").trim()===rowSetCode);
+      r.itemType==="Box"&&!r.setCodeAssumed&&sameSetCode(r.setCode,rowSetCode)); // D-7
     if(!parentBox)return row;
     const patch={};
     if(row.itemType==="Plate"){

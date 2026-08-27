@@ -9,6 +9,29 @@
 // Pure: no React, no imports.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── D-7: THE ONE PLACE SET CODES ARE COMPARED ────────────────────────────────
+// Before this there were EIGHT comparison sites across six files using THREE
+// conventions: .trim().toUpperCase(), .trim() alone, and raw === with no trim.
+// A SET created in the grid as "Glass180" could never be matched by a row sent
+// from Costing, which stores "GLASS180" — Costing's input uppercases, the grid's
+// does not, and the grid's parent predicates compared case-sensitively.
+//
+// The defect was never any single comparison. It was that there were several,
+// and nothing kept them aligned. Four comparisons can drift; one cannot.
+//
+// ⚠️ DO NOT compare setCode with === anywhere else. scripts/audit-setcode.py
+// fails the build-adjacent gate if you do. Three sites are deliberately excluded
+// and the script names why for each — an exception without its reason recorded
+// is indistinguishable from a bug, and copying it is how the next drift starts.
+//
+// EMPTY MATCHES EMPTY, exactly as the previous code did. sameSetCode("","") is
+// TRUE. That is preserved deliberately: this change alters CASE SENSITIVITY and
+// nothing else. Two of the four call sites have no empty-guard of their own, so
+// two rows with blank SET Codes match each other today — see the D-7 note in the
+// register. Whether they should is a separate ruling, not smuggled in here.
+export const normSetCode=v=>(v||"").trim().toUpperCase();
+export const sameSetCode=(a,b)=>normSetCode(a)===normSetCode(b);
+
 // R-1: single authoritative add-ons injection — replaces three identical inline blocks.
 // buildSpecFromRow (costing.js) does not accept row.addOns; callers must inject them.
 // Extracting here means a new add-on field is added in exactly one place.
