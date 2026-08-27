@@ -399,6 +399,35 @@ the moves were clean.
    guard breaks, it must be unambiguous which change did it.
 6. **Nothing commits with verification outstanding**, and **UI verification is permanently the
    user's.** No amount of automated green discharges a manual guard.
+
+   > ### 🔒 A STRUCTURAL FACT, not a rule — state it as one
+   >
+   > **The implementer cannot reach any authenticated screen of this app.** Login is required, and
+   > entering credentials is prohibited. There is no version of this project in which UI
+   > verification becomes the implementer's, and **nobody should plan around that changing.**
+   > It is a property of the setup, not a policy that could be relaxed.
+
+   > ### The ONE granted exception, and its three conditions
+   >
+   > `73a0948` (D-5's age label, Stage 2) is the **first and so far only** fix committed without the
+   > user running it. Granted deliberately, recorded so it is traceable, and **not a precedent to
+   > widen.**
+   >
+   > **Why it was granted:** display-only with no behaviour attached; the one real risk
+   > (`Date.now()` during render) had already been caught by `react-hooks/purity` and fixed; and the
+   > worst case is a wrong or missing date label — visible and harmless.
+   >
+   > **It applies only where ALL THREE hold:**
+   >
+   > 1. the change is **display-only, with no behaviour attached to it**
+   > 2. the logic is **separately verifiable outside the browser** (it was: extracted verbatim and
+   >    run in Node, 9/9, both sides of the threshold)
+   > 3. the unverified part **fails visibly rather than silently**
+   >
+   > **Anything failing any one of the three still needs the user's run.** The scope must also be
+   > stated honestly in the commit — *what* was verified and *what* was not — as `73a0948` does.
+   > **"You verified it last time" is not a reason.** The exception is about the class of change,
+   > never about accumulated trust.
 7. **Derive assertions programmatically from source — never type them.** Two concrete bans: no
    hand-written string assertions, and no positional element selection (`input[N]`) where a named or
    labelled selector exists.
