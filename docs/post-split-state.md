@@ -100,7 +100,7 @@ number; it was the engine golden wearing a UI label, and nothing said so.
 
 ```
 src/
-  QuotationApp.jsx           84   shell: provider + chrome + tab switch. NOTHING else
+  QuotationApp.jsx           72   shell: provider + chrome + tab switch. NOTHING else
   App.jsx                         AuthProvider > Gate > QuotationApp
   main.jsx  theme.js  index.css  AuthContext.jsx  LoginScreen.jsx
   AccountMenu.jsx  ProfileModal.jsx  ChangePasswordModal.jsx
@@ -147,7 +147,7 @@ calls `useAppState()` directly. Do not reintroduce prop-drilling.
 | `useMastersState` | `rates`, `freight`, `locations`, `sectors`, `boxTrim`, `partitionsMaster`, `constructionLib`, rate-master knobs |
 | `useCostingState` | `spec`, `s()`, `setAutoFill`, `costingContext`, `specCommitted`, `activeBatchRowId`, `aiNotes` |
 | `useQuoteItemsState` | `items`, `savedQuotes`, quote ref and dates, template |
-| `useBatchState` | `batchProfile`, `batchRows`, `batchResults`, `expandedRows`, `pinnedAddOns`, `autoCode*`, overlay state, autosave |
+| `useBatchState` | `batchProfile`, `batchRows` (**hydrated on mount since D-5**), `batchResults`, `expandedRows`, `pinnedAddOns`, `autoCode*`, overlay state, autosave, `batchAgeLabel` |
 | `useCostingResult` | the derived costing block, memoised |
 | `useBatchInvalidation` | two staleness effects — returns nothing |
 | `useCostingBatchBridge` | **the Costing↔Batch bridge** |
@@ -163,7 +163,7 @@ useUiState()              FIRST — showToast is used by every slice below
 useMastersState()         no deps
 useCostingState()         no deps
 useQuoteItemsState(st)    needs profile (ui)
-useBatchState(st)         needs sectorCodes + constructionLib (masters), setTab/showToast (ui)
+useBatchState(st)         needs sectorCodes + constructionLib (masters). NO ui dep since D-5
 useCostingResult(st)      needs spec (costing), masters, batchRows/batchProfile (batch)
 useBatchInvalidation(st)  AFTER masters AND batch: reads both, calls invalidateAllBatchResults
 useCostingBatchBridge(st) AFTER useCostingResult: consumes resolveSpecWasteConv
@@ -241,7 +241,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 
 | # | Defect | Why it blocks |
 |---|---|---|
-| **D-5** | Autosave silently overwrites a larger batch | Destroys committed work with no undo. It destroyed a test fixture during this project. **Refined at Stage 2:** the effect fires on every intermediate state, so the guard's only effective firing is at mount — it preserves whatever the second-to-last state was, not a larger prior save. Deleting all rows leaves a 1-row residue. |
+| ~~**D-5**~~ | **FIXED** — Stage 2. `batchRows` hydrates on mount, so state and storage agree from the first render; the write guard is deleted and the banner with it. Autosave silently overwrites a larger batch | Destroys committed work with no undo. It destroyed a test fixture during this project. **Refined at Stage 2:** the effect fires on every intermediate state, so the guard's only effective firing is at mount — it preserves whatever the second-to-last state was, not a larger prior save. Deleting all rows leaves a 1-row residue. |
 | **D-8** | Unguarded master-data edits — a *category*, not one bug | Admin edits to shared reference data are direct writes with no confirmation, no validation, no undo. Corrupts every quote computed afterwards, silently. |
 | **D-11** | Construction Library duplicates instead of matching | Four creation paths with four different checks — one, `ConstructionLibTab.jsx:196`, has **none**. **And path 1's STD-tier prompt treats Cancel as "keep my grades", which deliberately creates a duplicate** — so there is an unguarded route *and* a sanctioned one, needing different remedies. Corrupts a master that is already an informal join key. |
 | **D-12** | Toast overlay makes a destructive button clickable-by-accident | The toast container is `pointerEvents:"none"` and no toast has an `onClick`, so clicks pass **through** to the Costing `+ New Batch` beneath. **Corrected at Stage 2:** narrower than first recorded — it does *not* reach `startNewBatch`, so the batch and Quote Items are never at risk — but **worse in one case**, since that button confirms only `if(batchRows.length>0)`, so with an empty batch an unsaved Costing spec is discarded with **no dialog at all**. D-2's loss without D-2's dialog. |

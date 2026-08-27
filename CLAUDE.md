@@ -79,9 +79,10 @@ must be `true` (confirms `CFB_Quotation_Master_v7.xlsx` is found beside `server.
 > blockers marked, the standing rules, and what was deliberately *not* done. The exhaustive record,
 > every decision and its reasoning, is [`docs/component-split-plan.md`](docs/component-split-plan.md).
 
-- `QuotationApp.jsx` (**84 lines**) — a thin shell. It mounts `AppStateProvider`, renders
-  `<Sidebar/>` and `<TopBar/>`, switches on `tab`, and holds the autosave banner, `<ToastStack/>`
-  and two modals. Nothing else. **All state lives in `src/state/`, not here.**
+- `QuotationApp.jsx` (**72 lines**) — a thin shell. It mounts `AppStateProvider`, renders
+  `<Sidebar/>` and `<TopBar/>`, switches on `tab`, and holds `<ToastStack/>` and two modals.
+  Nothing else. **All state lives in `src/state/`, not here.** The autosave banner went with D-5 —
+  `batchRows` hydrates on mount, so there is nothing left for it to offer.
 - `state/` — the store: **one** `AppStateProvider` composed from domain-sliced hooks, exposed by a
   single `useAppState()`. **Composition order in `AppStateProvider.jsx` is load-bearing** — each
   hook destructures the accumulator on entry, so a slice cannot see anything composed below it, and

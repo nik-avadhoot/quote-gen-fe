@@ -1769,7 +1769,21 @@ no confirmation.
 > product owner's domain input, not the implementer's judgement. **Record it as needing a design
 > decision, not a patch.**
 
-### D-5 — 🚨 BETA BLOCKER — autosave silently overwrites a larger batch
+### D-5 — ✅ FIXED at Stage 2 (was 🚨 BETA BLOCKER) — autosave silently overwrites a larger batch
+
+> **Resolved.** `batchRows` now hydrates from `cbb_batch_autosave` on mount, so state and storage
+> agree from the first render and the divergence the defect rested on cannot occur. The write guard
+> is deleted — after hydration an empty batch means the batch is empty, so every write persists,
+> including a deliberate delete-to-zero. The banner and `restoreAutosave` went with it.
+>
+> **DP-2's confirmation survives**, moved to where it belongs: `handleRestoreFile` asks before the
+> write, unconditionally, naming both row counts. It cannot expire, unlike the 7-day banner gate it
+> replaces. The age is now surfaced in the Batch Profile bar with no behaviour attached.
+>
+> `+ New Batch` archives to `cbb_batch_previous` first — one slot, most recent non-empty batch. The
+> route for a user to reach that archive is **D-2's** decision and is still open.
+>
+> Commits: `53676f4` archive · `1408df8` hydration · `fdf19a7` restore confirmation · `73a0948` age.
 
 `state/useBatchState.js:69–80`. The comment and the code disagree:
 
