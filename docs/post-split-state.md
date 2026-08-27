@@ -207,6 +207,12 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 **None is a refactor regression; all predate Phase 0** except the observations, which were found
 *during* verification but are not caused by it.
 
+> 🔷 **Before fixing D-23 or D-24, read the `batchRows.length` pattern** in the register
+> introduction of [`component-split-plan.md`](component-split-plan.md). Those two and the
+> two-context hard gate are **three instances of one reasoning error** — row count used as a proxy
+> for spec state, profile identity and batch existence respectively. Fixing them separately fixes
+> symptoms and leaves the pattern.
+
 > **D-10 does not exist.** The number was skipped, not lost. D-1 to D-9 and D-11 to D-24 are the
 > whole register.
 >

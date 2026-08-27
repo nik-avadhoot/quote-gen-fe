@@ -926,6 +926,32 @@ D-1 is the exception and stays as committed — written and verified before the 
 **Standing rule for every commit from here: one concern per commit.** Structural moves and
 behaviour changes never share a commit. If a guard breaks, it must be unambiguous which change did it.
 
+> ## 🔷 A DESIGN-LEVEL PATTERN, NOT THREE BUGS — read this before fixing any one of them
+>
+> **`batchRows.length` is used as a proxy for three different questions, and it answers none of
+> them.** Three guards, in three different files, each written deliberately with a comment
+> explaining its assumption, all gate on row count when row count is not the thing at stake:
+>
+> | | Site | Gates on | What is actually at stake |
+> |---|---|---|---|
+> | **Two-context hard gate** | `useCostingBatchBridge.js` | `batchRows.length>0` | Whether a *batch exists to protect* — the one case where row count is arguably the right signal |
+> | **D-23** | `OutputPanel.jsx:84` | `batchRows.length>0` | **Spec state.** It confirms about the batch and destroys the scratchpad |
+> | **D-24** | `useCostingBatchBridge.js:306` | `batchRows.length>0` | **Profile identity.** A populated profile with an empty grid is still a batch identity, and the guard never reads the profile |
+>
+> **None of these is a typo or an oversight.** Each carries a comment stating the reasoning, and in
+> each the reasoning is internally coherent — *"profile is committed when rows exist"*, *"the batch
+> is what the user cares about"*. The error is upstream of all three: **an empty grid was taken to
+> mean an empty batch**, and a batch is more than its rows. It has an identity (`batchProfile`), a
+> context (`costingContext`), and a scratchpad (`spec`) — none of which `batchRows.length` reports on.
+>
+> **Fixing D-23 and D-24 separately fixes two symptoms and leaves the pattern**, along with every
+> future guard written to the same instinct. Whoever takes Stage 2 should settle *what state actually
+> defines "a batch in progress"* before patching either — that single answer determines both fixes
+> and is the same question D-5 and D-13 are circling from other directions.
+>
+> **No number of its own. This is an observation about the code's reasoning, not a defect** — the
+> defects are D-23 and D-24, and they are recorded there.
+
 ### D-1 — Glass SKU Type never reaches the batch grid
 
 > ### ⚠️ FIXED, but with a live consequence — see D-22
@@ -1391,6 +1417,11 @@ With an empty batch there is no dialog and the loss is immediate and total.
 
 ### D-24 — 🚨 G1 identity guards gate on ROW COUNT, not on whether the profile holds an identity
 
+> 🔷 **One of three instances of the same reasoning error** — see the `batchRows.length` pattern in
+> the register introduction, and **read it before fixing this.** D-24, D-23 and the two-context hard
+> gate all use row count as a proxy for a question it does not answer. Fixing this one alone leaves
+> the pattern.
+
 **Severity: HIGH.** Found at Stage 2 while setting up D-12's verification. **Pre-existing — not a
 Stage-1 regression**, confirmed: Stage 1's only change to this file is `300e68c`, five lines at
 `463–467` inside the `newConstr` literal, nowhere near the guard.
@@ -1475,6 +1506,11 @@ guard that is narrower than its description.**
 ### D-23 — the Costing `+ New Batch` guards on batch state to protect spec state
 
 **Recorded, not fixed. Independent of the toast.**
+
+> 🔷 **One of three instances of the same reasoning error** — see the `batchRows.length` pattern in
+> the register introduction, and **read it before fixing this.** D-23, D-24 and the two-context hard
+> gate all use row count as a proxy for a question it does not answer. Fixing this one alone leaves
+> the pattern.
 
 `OutputPanel.jsx:84` gates its confirm on `batchRows.length>0`, but the thing it destroys is
 `spec` — `setSpec({...INIT_SPEC,plant:"",delivery:""})`. **It guards X to protect Y.** The batch it
