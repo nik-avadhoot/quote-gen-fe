@@ -100,7 +100,7 @@ number; it was the engine golden wearing a UI label, and nothing said so.
 
 ```
 src/
-  QuotationApp.jsx           83   shell: provider + chrome + tab switch. NOTHING else
+  QuotationApp.jsx           84   shell: provider + chrome + tab switch. NOTHING else
   App.jsx                         AuthProvider > Gate > QuotationApp
   main.jsx  theme.js  index.css  AuthContext.jsx  LoginScreen.jsx
   AccountMenu.jsx  ProfileModal.jsx  ChangePasswordModal.jsx
@@ -125,7 +125,7 @@ src/
     ConstructionLibTab 480 · QuoteItemsTab 246 · DefaultsTab 243
     RateMasterTab 209 · FreightTab 83 · UserManagementTab 220
 
-  ui/         Sidebar 60 (owns NAV_ITEMS) · TopBar 38 · primitives 54 · styles 11
+  ui/         Sidebar 60 (owns NAV_ITEMS) · TopBar 38 · ToastStack 37 · primitives 54 · styles 11
   components/ BoxDieline 189
   engine/     costing 219 (NEVER EDIT) · rowType 33
   export/     excel 357 · pdf 121 · importExcel 53 · toB64 7

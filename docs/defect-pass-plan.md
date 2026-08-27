@@ -275,7 +275,8 @@ D-6 is independent by cause and clustered only by file.
 
 > **Post-split line numbers.** Every site reference in the register points at the pre-split
 > 5,402-line `QuotationApp.jsx`. Current locations for the main ones: the toast stack is
-> `QuotationApp.jsx:78` (**inside the 83-line shell**), autosave is `useBatchState.js:69–80`,
+> `ui/ToastStack.jsx` (extracted from the shell at Stage 2; it was `QuotationApp.jsx:78`),
+> autosave is `useBatchState.js:69–80`,
 > `startNewBatch` is in `useCostingBatchBridge.js`, the SET Code inputs are `SpecForm.jsx:147`
 > (uppercases) and `BatchGrid.jsx:309` (does not), and the sector selects are `SpecForm.jsx:88`
 > and `BatchProfileBar.jsx:51`.
