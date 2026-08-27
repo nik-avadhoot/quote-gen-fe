@@ -24,6 +24,7 @@
 import { INIT_SPEC } from "../data/defaults.js";
 import { buildSpecFromRow } from "../engine/costing.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
+import { getItem, setItem } from "../lib/persist.js";
 
 export function useCostingBatchBridge(st){
   const { activeBatchRowId, autoCalcPPDims, batchProfile, batchRows, constructionLib, costingContext, freight, invalidateBatchRow, resolveSpecWasteConv, sectors, setActiveBatchRowId, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setCostingContext, setSetAutoFill, setSpec, setSpecCommitted, setTab, showToast, spec } = st;
@@ -638,6 +639,44 @@ export function useCostingBatchBridge(st){
   const startNewBatch=()=>{
             // Fix 5: also clear Quote Items on New Batch so prior customer's data cannot leak
           if(!window.confirm("Start a new batch? This will clear the current profile, all SKU rows, results, and Quote Items."))return;
+            // ── D-5 prerequisite: archive the batch being cleared ────────────────
+            // INVARIANT: cbb_batch_previous holds the most recent NON-EMPTY batch
+            // cleared by + New Batch. One slot. Nothing else.
+            //
+            // startNewBatch does NOT clear cbb_batch_autosave. Today the autosave
+            // write guard blocks the empty write, so the old rows survive in storage
+            // and the recovery banner offers them back — which is the only reason
+            // + New Batch is currently recoverable at all (see D-2).
+            //
+            // Once batchRows hydrates on mount that stops being true: the old rows
+            // would load straight back into the grid and + New Batch would appear not
+            // to work across a reload. Archiving here keeps the batch recoverable
+            // WITHOUT the archive being the live autosave.
+            //
+            // POLICY — decided, not emergent. Read this before adding to it:
+            //   * ONE SLOT. A second + New Batch OVERWRITES this key. It is not a
+            //     stack and must not become one — a lone key with no reader grows a
+            //     policy by accident otherwise.
+            //   * Bounded by one batch. Worst case adds a single batch's storage,
+            //     not unbounded growth.
+            //   * Absent, unparseable, or zero rows => write NOTHING and leave any
+            //     existing archive intact. Never destroy a real earlier archive to
+            //     record that there was nothing to archive.
+            //   * archivedAt is stamped so this can never be mistaken for the batch
+            //     just cleared. The invariant is "the most recent NON-EMPTY batch
+            //     cleared by + New Batch", not "the batch cleared by the last click".
+            //
+            // ⚠️ HALF A DESIGN, DELIBERATELY. The archive exists; the route for a
+            // user to reach it does NOT. That is D-2's decision, not this one. Do not
+            // leave it unreachable indefinitely — see the open item on D-2.
+            try{
+              const _prevRaw=getItem('cbb_batch_autosave');
+              if(_prevRaw){
+                const _prev=JSON.parse(_prevRaw);
+                if(_prev?.rows?.length)
+                  setItem('cbb_batch_previous',JSON.stringify({..._prev,archivedAt:Date.now()}));
+              }
+            }catch{ /* unparseable autosave — leave any existing archive intact */ }
             const fresh={client:'',sector:'',plant:'',delivery:'',
               margin:8,marginPP:8,interest:0.5,paymentDisc:'30',freightOverride:'',
               waste:5,convRate:7,wastePP:5,convRatePP:12.5,
