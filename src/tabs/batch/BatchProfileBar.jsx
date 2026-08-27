@@ -19,8 +19,9 @@ import { C } from "../../theme.js";
 import { useAppState } from "../../state/AppStateContext.js";
 
 export default function BatchProfileBar(){
-  const {batchProfile,copyCostingToProfile,freight,importConstrFromSpec,locations,
+  const {batchAgeLabel,batchProfile,copyCostingToProfile,freight,importConstrFromSpec,locations,
     sectorCodes,sectors,setBatchProfile,startNewBatch}=useAppState();
+
   return(
     <div style={{background:"#FEF8F0",borderBottom:`2px solid ${C.amber}`,
       padding:"4px 12px 4px",flexShrink:0,display:"flex",gap:8,alignItems:"stretch"}}>
@@ -31,6 +32,21 @@ export default function BatchProfileBar(){
           letterSpacing:"0.1em",writingMode:"vertical-rl",transform:"rotate(180deg)",
           whiteSpace:"nowrap"}}>Batch Profile</span>
       </div>
+
+      {/* ── D-5: batch age — SURFACED, NOT GATED ────────────────────────────────
+          The autosave used to be age-gated: past 7 days the recovery banner did not
+          appear and the rows became unreachable through the UI even though they were
+          still in localStorage. That gate is gone — batchRows hydrates regardless of
+          age. This is what replaces it: information, with no behaviour attached.
+          Do NOT hang a condition off this. A quieter age gate is still an age gate,
+          and the gate is what created the hole. */}
+      {batchAgeLabel&&(
+        <div style={{display:"flex",alignItems:"center",marginRight:2}}
+          title="This batch was last saved some time ago. It loads normally; this is a reminder, not a warning.">
+          <span style={{fontSize:8,color:C.slateL,fontWeight:600,whiteSpace:"nowrap",
+            background:C.cream,border:`1px solid ${C.border}`,borderRadius:3,padding:"2px 5px"}}>
+            🕐 {batchAgeLabel}</span>
+        </div>)}
 
       {/* ── 1. CUSTOMER DETAILS — 3 × 2 grid (label | field) ── */}
       <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,

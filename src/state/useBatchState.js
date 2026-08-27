@@ -85,6 +85,22 @@ export function useBatchState(st){
   // the start of this session, which stays true regardless of later edits. There is
   // NO behaviour attached to it anywhere — see the note at its render site in
   // BatchProfileBar.jsx. The old 7-day gate hid rows; this only mentions them.
+  // The finished label is computed HERE, once, in the lazy initialiser — not in
+  // the component. Date.now() during render is impure (react-hooks/purity) and a
+  // label that recomputes on every re-render is exactly the instability that rule
+  // exists to prevent. 7 days is a DISPLAY threshold: nothing is hidden or blocked
+  // by it, unlike the gate it replaces.
+  const[batchAgeLabel]=useState(()=>{
+    try{
+      const s=getItem('cbb_batch_autosave');
+      if(!s)return null;
+      const{ts,rows}=JSON.parse(s);
+      if(!ts||!Array.isArray(rows)||!rows.length)return null;
+      if((Date.now()-ts)/86400000<7)return null;
+      return`batch from ${new Date(ts).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}`;
+    }catch{return null;}
+  });
+
   // ── AUTO-SAVE: batch rows ─────────────────────────────────────────────────
   // Must be declared AFTER batchRows and batchProfile (both used in dep array).
   useEffect(()=>{
@@ -180,5 +196,5 @@ export function useBatchState(st){
   });
   const invalidateAllBatchResults=()=>setBatchResults({});
 
-  return { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchConstrOverlay, batchConstrOverlayFilter, batchConstrOverlayQuery, batchConstrTargetRowId, batchProfile, batchResults, batchRows, constrFilter, constrQuery, expandedConstr, expandedRows, invalidateAllBatchResults, invalidateBatchRow, parseConstrQuery, pinnedAddOns, setAutoCodeEnabled, setAutoCodeSeq, setBatchConstrOverlay, setBatchConstrOverlayFilter, setBatchConstrOverlayQuery, setBatchConstrTargetRowId, setBatchProfile, setBatchResults, setBatchRows, setConstrFilter, setConstrQuery, setExpandedConstr, setExpandedRows, setPinnedAddOns, togglePinAddOn, toggleRowExpand };
+  return { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchConstrOverlay, batchConstrOverlayFilter, batchConstrOverlayQuery, batchAgeLabel, batchConstrTargetRowId, batchProfile, batchResults, batchRows, constrFilter, constrQuery, expandedConstr, expandedRows, invalidateAllBatchResults, invalidateBatchRow, parseConstrQuery, pinnedAddOns, setAutoCodeEnabled, setAutoCodeSeq, setBatchConstrOverlay, setBatchConstrOverlayFilter, setBatchConstrOverlayQuery, setBatchConstrTargetRowId, setBatchProfile, setBatchResults, setBatchRows, setConstrFilter, setConstrQuery, setExpandedConstr, setExpandedRows, setPinnedAddOns, togglePinAddOn, toggleRowExpand };
 }
