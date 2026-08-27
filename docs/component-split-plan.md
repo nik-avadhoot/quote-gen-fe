@@ -1389,6 +1389,89 @@ Items and the Costing spec"* is a single reflexive click on a control the user c
 gets a dialog — which, per **D-2**, names what is recoverable and stays silent about what is not.
 With an empty batch there is no dialog and the loss is immediate and total.
 
+### D-24 — 🚨 G1 identity guards gate on ROW COUNT, not on whether the profile holds an identity
+
+**Severity: HIGH.** Found at Stage 2 while setting up D-12's verification. **Pre-existing — not a
+Stage-1 regression**, confirmed: Stage 1's only change to this file is `300e68c`, five lines at
+`463–467` inside the `newConstr` literal, nowhere near the guard.
+
+#### Reproduction
+
+| | |
+|---|---|
+| Setup | Batch Entry grid **empty**, `batchProfile` **fully populated** with an old client and sector |
+| Action | Costing → Start New Batch → enter a **new** client and sector → Send to Batch |
+| Expected | Negative Case 2 (client/sector mismatch) warns |
+| Actual | **No guard fires, no toast at all.** The SKU is accepted and the profile is silently rewritten |
+
+#### Mechanism — the guard never looks at the profile
+
+All four identity guards — client, sector, plant, delivery — sit inside one condition at
+`useCostingBatchBridge.js:306`:
+
+```js
+if(batchRows.length>0){
+```
+
+**The guard's own comment states the assumption, and the assumption is false:**
+
+> *"These guards fire only when `batchRows.length > 0` (profile is committed). On first Send (empty
+> batch), the seeding block below establishes the profile."*
+
+An empty grid is taken to mean *no committed profile*. **A populated `batchProfile` with an empty
+grid is still a batch identity**, and the guard cannot see it, because it never reads the profile —
+only the row count.
+
+Negative Case 1 (the two-context hard gate) correctly did **not** fire: `batchRows` is empty, so by
+its own condition it has nothing to protect. That part is working as designed.
+
+#### The seeding block turns a missed warning into a silent rewrite
+
+`:556`, on the same Send:
+
+```js
+if(batchRows.length===0){
+  if(spec.client)   profilePatch.client=spec.client;
+  if(spec.sector){  profilePatch.sector=spec.sector; /* + waste, convRate, wastePP, convRatePP */ }
+  …
+}
+```
+
+Its comment — *"existing profile defaults such as 'Nagpur' must not silently win over the Maker's
+explicit Costing values"* — was written for a **fresh** profile holding defaults, not a populated
+one holding a real prior identity.
+
+#### BOTH branches, recorded explicitly
+
+| Branch | Outcome | Severity |
+|---|---|---|
+| **`spec.client` AND `spec.sector` both set** | Profile **silently overwritten**. The batch is coherently re-identified to the new customer, along with four derived waste/conv values. No mis-filed SKU, no split identity | **High** |
+| **Either field blank** | That field **keeps its old value**. The SKU is attributed under a **mixed identity** — new client, old sector, or the reverse | **Worse, and still unguarded** |
+
+> ### The silence is the defect, and it does not shrink on the safer branch
+>
+> Even where the outcome is coherent and may be what the Maker intended:
+>
+> * **The app reassigned an existing batch to a different customer without asking.**
+> * **There is no record it happened.** Rows carry no `client` and no `sector` — every field on
+>   `newRow` was checked, and identity of that kind lives only on `batchProfile`. `buildSpecFromRow`
+>   reads both from the profile (`engine/costing.js:186–187`), as do export, PDF, Quote Items
+>   grouping and `generateCode`. The old profile value is retained nowhere.
+> * **A Maker returning to a batch they set aside earlier cannot discover it** — not before the
+>   Send, and not after.
+
+#### Why 7a and 7b passed it
+
+Negative Case 2 is listed among the four manual guards as *"client/sector mismatch against the Batch
+Profile must warn"* — with **no mention of a row-count precondition.** Verified twice by a route
+that had rows present, which is the only route where the guard exists. **The checklist describes a
+guard that is narrower than its description.**
+
+> **NO FIX PROPOSED. The question is the product owner's:** does an empty grid with a populated
+> profile mean the profile is **still committed**, or is an empty batch a **blank slate**? Every
+> reasonable fix follows from that answer and none can be derived without it. **Rule at Stage 2,
+> alongside D-5.**
+
 ### D-23 — the Costing `+ New Batch` guards on batch state to protect spec state
 
 **Recorded, not fixed. Independent of the toast.**

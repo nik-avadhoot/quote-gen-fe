@@ -67,7 +67,10 @@ It exercises **`engine/costing.js` only**, against pinned `DEFAULT_*` masters, v
 **It cannot see any of the four bridge/UI guards:**
 
 1. new-batch context with a non-empty batch must **block**
-2. client/sector mismatch against the Batch Profile must **warn**
+2. client/sector mismatch against the Batch Profile must **warn** — ⚠️ **but see D-24: this guard
+   only fires when `batchRows.length > 0`.** Verifying it with rows present never exercises the
+   empty-grid-populated-profile path, where it does not fire at all. 7a and 7b both passed it
+   this way
 3. an unconfirmed SET Code must **block** auto-dims, Calculate All and Send-to-Quote-Items
 4. a Part row with `wastePP` explicitly `0` must **keep 0**, not fall back to the sector default
 
@@ -198,13 +201,13 @@ in Supabase. One seam to change instead of thirty-seven.
 
 ---
 
-## 3. Defect register — D-1 to D-23
+## 3. Defect register — D-1 to D-24
 
 Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](component-split-plan.md).
 **None is a refactor regression; all predate Phase 0** except the observations, which were found
 *during* verification but are not caused by it.
 
-> **D-10 does not exist.** The number was skipped, not lost. D-1 to D-9 and D-11 to D-23 are the
+> **D-10 does not exist.** The number was skipped, not lost. D-1 to D-9 and D-11 to D-24 are the
 > whole register.
 >
 > **D-19 was added at the defect pass**, promoted out of the §4 cleanup list rather than newly
@@ -264,6 +267,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | D-21 | Defaults/Masters screen cut off at the bottom, no scroll affordance | Layout | Open — observation, Stage-1 verification |
 | D-22 | 🍶 badge below Nos/Set renders for some Part rows and not others | Cosmetic | Open — **the first version of this entry was wrong and was retracted.** Not a data defect and not D-8: the badge (`BatchGrid.jsx:340`) is the only one of three Part-row consumers with no parent fallback. Related to **D-1**. Nos/Set auto-fill is **verified correct** |
 | D-23 | Costing `+ New Batch` guards on batch state to protect spec state | High | Open — the defect underneath D-12. Confirms on `batchRows.length>0` but destroys `spec`. Same family as D-2; rule on it with D-2 at Stage 2 |
+| D-24 | G1 identity guards gate on row count, not on whether the profile holds an identity | High | Open — an empty grid with a populated profile passes every mismatch guard, and the seeding block then **silently rewrites the profile**. Rows carry no client/sector, so nothing records it. Pre-existing, **not** a Stage-1 regression. Rule at Stage 2 with D-5 |
 
 **Context, recorded but not attributed:** the Batch Entry toolbar's `+ Constr` button switches to
 the Construction Library tab instead of opening the slide-over overlay. The per-row route into the
