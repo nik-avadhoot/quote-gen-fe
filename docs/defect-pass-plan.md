@@ -319,13 +319,18 @@ than four bespoke guards.
 |---|---|---|---|
 | **D-8e** | **Warn on backward propagation.** `useBatchInvalidation.js:34` wipes every cached result on any rate change, so a quote costed this morning silently recomputes. Report *"this edit invalidated N calculated rows."* | Smallest | Nothing |
 | **D-8b** | **Blanket operations.** Confirmed at source: `blanketDisc` runs `setRates(prev=>prev.map(r=>({...r,disc:blanketDisc})))` — every grade, one click. `Apply GY` and `blanketInterest` likewise. Confirmation naming scope and affected count | Small | Nothing |
-| **D-8a** | **The write model.** Per-keystroke `onChange` → draft plus explicit Save/Cancel. Build on Rate Master as the pattern, then replicate | Large | Confirm the pattern on one surface before replicating |
-| **D-8c** | **Plausible-range validation.** ₹450 for ₹45 | Medium | **Domain input — the ranges. Cannot be derived by an implementer** |
-| **D-8d** | **Change history / undo** | Largest | **Recommend deferring** — masters are heading to Supabase per §2 of the handoff, and building history on `localStorage` first builds it twice |
+| ~~**D-8a**~~ | ~~The write model~~ | — | **DEFERRED to [`post-model-defects.md`](post-model-defects.md) PM-1.** A draft/Save-Cancel model over `localStorage` and one over a server are different artefacts; it is the largest piece in the pass and the most expensive to build twice |
+| **D-8c** | **Plausible-range validation.** ₹450 for ₹45 | **SPLIT** | **The RANGES stay in scope** — domain knowledge survives the migration and the product owner is supplying them. **Where validation runs is deferred.** Record the ranges when supplied so they are not lost |
+| ~~**D-8d**~~ | ~~Change history / undo~~ | — | **DEFERRED — PM-2.** History on `localStorage` is discarded entirely by a migration that will have its own audit trail |
 
-**Do D-8e and D-8b first.** Highest value per unit of effort, zero design input, and D-8e alone
-converts the defect's worst property — that the damage is invisible where it occurs — into something
-visible.
+**D-8e and D-8b are now the whole of D-8's code scope**, plus recording D-8c's ranges. Highest value
+per unit of effort, zero design input, and D-8e alone converts the defect's worst property — that
+the damage is invisible where it occurs — into something visible.
+
+> **They matter MORE now that D-8a is deferred, not less.** The unguarded per-keystroke write model
+> stays live until the migration. D-8e and D-8b are the cheap mitigations that make it survivable in
+> the meantime — a warning when an edit invalidates calculated rows, and a confirmation on the
+> blanket operations that write across every grade at once.
 
 > **One existing guard, easily misread as protection.** These controls are gated on
 > `role!=="admin"`. That is **authorization, not confirmation**: it stops the wrong person editing,
@@ -374,9 +379,21 @@ must be derived exhaustively first, because a partial fix produces inconsistent 
 paths — worse than the current uniform wrongness. Its four known sites now live in three files.
 
 ### Stage 5 — Construction identity
-`D-11` decision → prevention across **all four** paths → existing-duplicate cleanup as its own task
+`D-11` decision → **minimum prevention** across all four paths. **Cleanup is DEFERRED — PM-3.**
 
 Latest: most design input needed, and the enabler has been collecting data since Stage 1.
+
+> ### 🔻 BUILD THE MINIMUM — ruled 2026-08-28
+>
+> **Stop new duplicates. Do not design an identity model.** Once constructions have database
+> identity, the A–Z allocator, the `C${length}` fallback and every duplicate predicate are replaced
+> by a key and a constraint. **The interim fix must be small enough that discarding it costs
+> nothing.**
+>
+> Minimum means: one shared predicate, applied at all four creation paths including the currently
+> unguarded `ConstructionLibTab.jsx:196`. Not a new identity scheme, not a merge tool, not a
+> `createdVia`-driven policy. The enabler already shipped keeps gathering evidence for the real
+> model either way.
 
 > 🛑 **The register's trap holds.** Unify the two `importConstrFromSpec` copies and leave
 > `ConstructionLibTab.jsx:196` (`+ New Construction`, **no check at all**) unguarded, and the library
