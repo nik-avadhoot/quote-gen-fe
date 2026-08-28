@@ -81,6 +81,17 @@ Guard 4 depends on `resolveSpecWasteConv`, which is declared **inside** `useCost
 > **A green harness on a broken gate is the exact failure this warning exists to prevent.**
 > Every one of these four is a **manual** check.
 
+> ### 🛑 IT ALSO DOES NOT COVER THE BATCH CALCULATION PATH — added at Stage 4
+>
+> The fixtures call `engine/costing.js` **directly**, against pinned `DEFAULT_*` masters. They never
+> run `calcBatchRow`, never run `buildSpecFromRow` against a real `batchProfile`, and therefore never
+> exercise the `??` chains that assemble a spec on the batch path.
+>
+> **A green `test:costing` is NOT coverage of a calculation change that reaches the engine through
+> Batch Entry.** This was found by **D-25**: blanking the initial waste/conv values would send `""`
+> into `calcCosting`, whose destructuring defaults fire only on `undefined`, producing **NaN
+> silently** — and every fixture would still pass.
+
 `ref:case4` derives Case 4's expected numbers instead of transcribing them. It optionally takes a
 Backup file so it computes against real masters rather than `DEFAULT_*`:
 
@@ -201,7 +212,7 @@ in Supabase. One seam to change instead of thirty-seven.
 
 ---
 
-## 3. Defect register — D-1 to D-24
+## 3. Defect register — D-1 to D-25
 
 Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](component-split-plan.md).
 **None is a refactor regression; all predate Phase 0** except the observations, which were found
@@ -213,7 +224,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 > for spec state, profile identity and batch existence respectively. Fixing them separately fixes
 > symptoms and leaves the pattern.
 
-> **D-10 does not exist.** The number was skipped, not lost. D-1 to D-9 and D-11 to D-24 are the
+> **D-10 does not exist.** The number was skipped, not lost. D-1 to D-9 and D-11 to D-25 are the
 > whole register.
 >
 > **D-19 was added at the defect pass**, promoted out of the §4 cleanup list rather than newly
@@ -274,6 +285,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | D-22 | 🍶 badge below Nos/Set renders for some Part rows and not others | Cosmetic | Open — **the first version of this entry was wrong and was retracted.** Not a data defect and not D-8: the badge (`BatchGrid.jsx:340`) is the only one of three Part-row consumers with no parent fallback. Related to **D-1**. Nos/Set auto-fill is **verified correct** |
 | D-23 | Costing `+ New Batch` guards on batch state to protect spec state | High | Open — the defect underneath D-12. Confirms on `batchRows.length>0` but destroys `spec`. Same family as D-2; rule on it with D-2 at Stage 2 |
 | D-24 | G1 identity guards gate on row count, not on whether the profile holds an identity | High | Open — an empty grid with a populated profile passes every mismatch guard, and the seeding block then **silently rewrites the profile**. Rows carry no client/sector, so nothing records it. Pre-existing, **not** a Stage-1 regression. Rule at Stage 2 with D-5 |
+| D-25 | Blank-means-inherit is **unreachable**: nothing starts blank, and the batch path cannot consume a blank if one arrives | High | Open — `INIT_SPEC` and the initial `batchProfile` ship concrete numbers, and `calcCosting`'s destructuring defaults fire only on `undefined`, so `""` yields **NaN silently**. The cause of D-9's symptom. **Real scope: three `??` chains made blank-aware BEFORE any literal is blanked.** `data/defaults.js` **not** approved |
 
 **Context, recorded but not attributed:** the Batch Entry toolbar's `+ Constr` button switches to
 the Construction Library tab instead of opening the slide-over overlay. The per-row route into the

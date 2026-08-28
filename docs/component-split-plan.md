@@ -961,6 +961,16 @@ behaviour changes never share a commit. If a guard breaks, it must be unambiguou
 > **Remedy: treat a stated site count as a FLOOR and re-derive the set before proposing.** Minutes to
 > do; the cost of skipping it has been a doubled scope and a refinement.
 >
+> > ### ⚠️ "Floor" understates it — the set moves SIDEWAYS, not just up
+> >
+> > The Stage 4 survey of D-9 + D-16 was expected to find five sites and found four. **One recorded
+> > site turned out to be correct** (`bridge:624`'s `spec.waste ?? p.waste ?? 5` — `??` preserves
+> > `""`, so blank survives), **and one unrecorded site turned out to be broken** (`bridge:568`, the
+> > first-Send seeding block).
+> >
+> > **So re-deriving is not only about finding more.** It is about finding *which* — a recorded site
+> > may not belong, and an unrecorded one may. Counting is not the check; tracing each site is.
+>
 > ### Mode B — UNTRACED OBSERVATION. The symptom was recorded; the code path never was.
 >
 > | Defect | Recorded | Actual |
@@ -987,6 +997,13 @@ behaviour changes never share a commit. If a guard breaks, it must be unambiguou
 > **A DESIGN failure, not a triage one.** Modes A and B above are about how the register has been
 > wrong. This is about how the code is wrong, and it predicts where the next defect will be.
 >
+> ### ⚠️ AND NOTHING EVER STARTS BLANK — see D-25
+>
+> `INIT_SPEC` ships `waste:5, convRate:7, wastePP:5, convRatePP:12.5`, and so does the initial
+> `batchProfile`. **A fresh spec is never in inherit state**, so the model is not merely bypassed at
+> four sites — it is **unreachable in normal use**. That is the cause of what D-9 recorded as a
+> symptom, and it is why fixing the four write sites alone changes nothing.
+>
 > **The app has a blank-means-inherit model.** A blank `waste`, `convRate`, `L` or `W` means *"follow
 > the authority"* — the sector master, the Batch Profile, or the parent Box. It is resolved **fresh
 > on every render**, which is what keeps it live. `useCostingResult` says so in its own comment:
@@ -1004,6 +1021,25 @@ behaviour changes never share a commit. If a guard breaks, it must be unambiguou
 > **Both are silent, both are permanent, and both defeat a documented authority model.** D-9 bypasses
 > the Batch Profile; D-16 severs the parent-Box link. In each case the app's own override indicator
 > stays off, because the written value equals the inherited one at the instant it is written.
+>
+> ### The two override indicators are DIFFERENT TESTS, not strong and weak versions of one
+>
+> ```js
+> BatchGrid.jsx:438   isOvr  = row.wasteConv_waste !== "" && != null            // BLANKNESS test
+> SpecForm.jsx:564    _isOvW = spec[k] !== "" && != null && +spec[k] !== +_effWaste   // VALUE comparison
+> ```
+>
+> `BatchGrid`'s is correct because its field is **blank when inherited**, so *non-blank* MEANS
+> override. `SpecForm`'s cannot be: its field is never blank, so it has to guess by comparing against
+> the default — **and at the instant of writing, the written value EQUALS the default.** That is
+> precisely why the write is silent.
+>
+> **The value comparison is not a weaker blankness test. It is a different one, and it is unfixable
+> as written** — no refinement of the comparison detects a value that is legitimately equal to the
+> default. Once the field starts blank, the trivial test works everywhere and `SpecForm:564`'s
+> comparison should be **simplified away**, not kept alongside.
+>
+> **See D-25: making the field start blank is a larger change than it looks.**
 >
 > ### Where to look for the next one
 >
@@ -1858,6 +1894,74 @@ A spec loaded via Deep Dive matches its own construction on all 9 fields, as exp
 circular, since `buildSpecFromRow` builds the spec *from* the construction. Constructions carry **no
 timestamps**, so stored data cannot say whether an entry was duplicated at creation or edited into
 identity afterwards. A `createdAt` field would make this diagnosable.
+
+### D-25 — the blank-means-inherit model is UNREACHABLE: the batch path cannot consume blanks
+
+**Found at Stage 4 while scoping D-9's fix. Its own entry, not a note inside D-9, because it is a
+structural mismatch rather than another write site — and it explains why the model has been broken
+everywhere rather than in four places.**
+
+#### The two halves that do not meet
+
+**The app declares a blank-means-inherit model.** A blank `waste`/`convRate`/`wastePP`/`convRatePP`
+means *"follow the authority"*, resolved fresh on every render so it stays live.
+
+**But nothing ever starts blank.** `INIT_SPEC` ships `waste:5, convRate:7, wastePP:5,
+convRatePP:12.5` (`data/defaults.js:94`) and the initial `batchProfile` ships the same four
+(`useBatchState.js:26`). **A fresh spec is never in inherit state at all.** Blank is reachable only
+via `specFromProfile` — Unlink or Start New SKU.
+
+> **This is the CAUSE of what D-9 recorded as a symptom.** D-9 observed that *"blank = inherit almost
+> never occurs in normal use, so the inherit path is largely untested in practice"* — correctly, but
+> without explaining why. This is why.
+
+#### And the calculation path cannot accept a blank if one arrives
+
+**`calcCosting` uses destructuring defaults** (`engine/costing.js:34`):
+
+```js
+const{ … waste=5, convRate=7, wastePP=5, convRatePP=12.5, … }=spec;
+```
+
+**Destructuring defaults fire only on `undefined` — never on `""`.** A blank sails through as `""`
+and every arithmetic operation on it yields **`NaN`, silently**. No throw, no visible failure.
+
+**And a live route delivers one.** `useQuoteActions.js:210`:
+
+```js
+const profWaste=isPP?(batchProfile.wastePP??5):(batchProfile.waste??5);
+```
+
+`??` is nullish coalescing, so **`""` does not trigger the fallback** — it is preserved and passed
+on. `buildSpecFromRow` (`engine/costing.js:201`) has the identical `constEntry.waste??prof.waste??5`
+shape, and so does `pushCostingToBatchRow`.
+
+> **Two paths, only one of which resolves blanks.** The **Costing** tab is safe: `useCostingResult`
+> builds `_calcSpec`, which substitutes defaults for blanks before calling `calcCosting`. The
+> **batch** path is not: `calcBatchRow` and `sendAllToQuoteItems` assemble their spec independently
+> and **never pass through `_calcSpec`**.
+
+#### Consequence for the D-9 / D-16 fix
+
+**Making the model real is not a two-literal change.** Blanking `INIT_SPEC` and the initial
+`batchProfile` without first making the batch path blank-aware would produce **NaN costings on
+Calculate All** — silently, and on the path that produces quotes.
+
+**The real scope is three `??` chains made blank-aware** — `buildSpecFromRow`, `calcBatchRow`, and
+`pushCostingToBatchRow` — *before* any initial value is blanked. `data/defaults.js` is **not**
+approved for this; the narrow approval given for two literals was withdrawn once the true scope was
+established.
+
+> ### ⚠️ `test:costing` WOULD NOT HAVE CAUGHT THIS
+>
+> **The batch path is not covered by the fixtures.** `scripts/costing-fixtures.mjs` exercises
+> `engine/costing.js` directly against pinned `DEFAULT_*` masters. It never runs `calcBatchRow`,
+> never runs `buildSpecFromRow` against a real `batchProfile`, and therefore never sees the `??`
+> chains that would carry a blank into the engine.
+>
+> **A green `test:costing` is not coverage of a calculation change that goes through the batch.**
+> This is a gap in the harness, not just in this defect — see §1 of the handoff, which lists what the
+> fixtures cannot see.
 
 ### D-9 — Selecting a sector silently converts inheritance into an override
 

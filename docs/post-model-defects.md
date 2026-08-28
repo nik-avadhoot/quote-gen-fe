@@ -106,6 +106,33 @@ Nos/Set** — no error, no toast, nothing to indicate a step was skipped.
 > and did not auto-fill Nos/Set. Initially read as a D-7 failure; it is neither a D-7 failure nor a
 > gate — the code path simply never executes.
 
+### PM-5 — the add-on pin control LOOKS disabled at the limit and silently destroys a pin
+
+**Not a styling note. A control that reads as unavailable and, when clicked, discards something the
+user cannot see being discarded.**
+
+At two pinned add-ons, the third button renders at `opacity:0.3` — the universal signal for
+*disabled* — but **there is no `disabled` attribute**. It is fully clickable, and
+`togglePinAddOn` (`useBatchState.js:31`) does:
+
+```js
+const next=prev.includes(k)?prev.filter(x=>x!==k):[...prev,k].slice(-2);
+```
+
+`.slice(-2)` keeps the last two, so clicking a third **silently evicts the oldest pin**. No
+confirmation, no toast, no indication of which column just disappeared from the grid.
+
+> **The affordance says "unavailable"; the behaviour says "replaces something, and you will not see
+> which."** Those are contradictory, and the destructive reading is the true one.
+
+**Also, and separately:** pinned state is signalled by **colour alone** — `C.amber` when pinned,
+`C.slateL` when not. No shape, fill or text differs.
+
+**Relationship to D-17.** D-17 is the *glyph* — a bare `⊕` that reads as "add"/"increment" rather
+than "pin", with `title` as its only explanation. That is cosmetic and in scope. **This is
+behavioural and was found after the freeze**, so it is here. The glyph fix touches the same lines;
+whoever does it should read this first and deliberately choose not to fix it, rather than not notice.
+
 ---
 
 ## Migration requirements
