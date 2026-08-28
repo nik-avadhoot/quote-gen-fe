@@ -50,6 +50,19 @@ being found late. Each carries the reasoning, so it is not re-litigated.
 
 ### PM-1 — D-8a, the master-data write model
 
+> ## ⚠️ THIS DEFERRAL IS CONDITIONAL — it rests on two entries staying in scope
+>
+> **PM-1 fails test 2: unguarded per-keystroke master edits ARE wrong today.** A typo flows into
+> every subsequent quote, and `useBatchInvalidation.js:34` wipes cached results so a quote costed
+> this morning silently recomputes with no explanation.
+>
+> **It is filed here only because D-8e and D-8b remain in scope to mitigate it** — the invalidation
+> warning and the blanket-operation confirmation.
+>
+> **If either is dropped in a later scope trim, PM-1 must come back into the register.** That
+> dependency is invisible to anyone reading PM-1 alone, and it is exactly the kind of thing a scope
+> trim removes without noticing what it was holding up.
+
 **Was:** replace per-keystroke `onChange` writes on Rate Master / Freight / Defaults / Partitions
 with a draft plus an explicit Save/Cancel step.
 
@@ -86,25 +99,15 @@ consolidation is a different, safer operation.
 > **D-11's PREVENTION fix stays in scope** — see the plan. Only the cleanup moves here. Prevention
 > stops the set growing; cleanup is what the migration should absorb.
 
-### PM-4 — typing a SET Code silently skips the Nos/Set auto-fill
+### ~~PM-4~~ — MOVED INTO THE REGISTER as **D-26**, 2026-08-28
 
-**Found at Stage 3 while verifying D-7. Pre-existing, unrelated to D-7, found after the freeze —
-so it is here rather than in the register.** It blocks nothing in scope.
+**Not withdrawn — refiled.** The two-test audit found it failed both: the masters migration makes
+nothing about it tractable (a UI entry-point problem, not an identity one), and live data is wrong
+today — `nosPerSet` stays at its default and multiplies through the SET rate.
 
-**Two behaviours both depend on resolving the same parent Box, and they have different entry
-points:**
-
-* **Auto-dims** run on render, via `autoCalcPPDims` in `useBatchState.js`.
-* **Nos/Set auto-fill** runs *only* inside `handleConfirm` (`BatchGrid.jsx:250`), which is reachable
-  only while `setCodeAssumed` is true.
-
-**Typing in the SET Code field clears `setCodeAssumed`** (`BatchGrid.jsx:311`), which removes the
-confirm control from the DOM. So a user who types a SET Code gets auto-dims and **silently no
-Nos/Set** — no error, no toast, nothing to indicate a step was skipped.
-
-> Demonstrated live: a Part-L created with SET Code typed as `glass180` resolved its parent for dims
-> and did not auto-fill Nos/Set. Initially read as a D-7 failure; it is neither a D-7 failure nor a
-> gate — the code path simply never executes.
+**Left as a pointer rather than deleted**, so the move is traceable and nobody looks for PM-4 and
+concludes it was dropped. Full entry: **D-26** in
+[`component-split-plan.md`](component-split-plan.md).
 
 ### PM-5 — the add-on pin control LOOKS disabled at the limit and silently destroys a pin
 
@@ -234,10 +237,10 @@ real fix is customer identity, not another guard on a string.**
 >
 > | Entry | Test 1 | Test 2 | Verdict |
 > |---|---|---|---|
-> | **PM-1** D-8a write model | ✅ server-side model | ⚠️ unguarded edits **are** wrong today — **but D-8e and D-8b are in scope precisely to mitigate that** | **Correctly filed**, and only because the harm is covered by in-scope work. If D-8e/D-8b are ever dropped, this must come back |
+> | **PM-1** D-8a write model | ✅ | ⚠️ wrong today — **mitigated by D-8e/D-8b, in scope** | **CONDITIONALLY filed** — see the warning on PM-1 itself |
 > | **PM-2** D-8d change history | ✅ | ✅ absence of history corrupts nothing | **Correctly filed** |
 > | **PM-3** D-11 cleanup | ✅ | ✅ duplicates are identical, so costings are unaffected | **Correctly filed** |
-> | **PM-4** typing skips Nos/Set auto-fill | ❌ **the migration makes nothing about this easier** — it is a UI entry-point problem, not an identity one | ❌ `nosPerSet` stays at its default and `qtyPerSet` multiplies the SET rate (`costing.js:212`), so a **wrong SET total** is reachable | **MISFILED — fails BOTH tests** |
+> | ~~**PM-4**~~ typing skips Nos/Set auto-fill | ❌ | ❌ | **WAS MISFILED — now moved to the register as D-26** |
 > | **PM-5** pin control silent eviction | ❌ pure UI, unaffected by entities | ✅ a lost pin loses a view, not data | **MISFILED by category** — deferred work, but never post-model work |
 >
 > **PM-4 is the one that matters.** It fails both tests: the migration will not help, and it can

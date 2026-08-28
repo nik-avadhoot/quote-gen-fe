@@ -1689,6 +1689,20 @@ Its comment — *"existing profile defaults such as 'Nagpur' must not silently w
 explicit Costing values"* — was written for a **fresh** profile holding defaults, not a populated
 one holding a real prior identity.
 
+#### Site 4 — harmless IN CONTEXT after this fix, NOT resolved
+
+The seeding block that D-24 gates also carries **site 4** of the inheritance-materialisation pattern
+(D-9 / D-16): it writes the sector's derived waste/conv into `batchProfile`.
+
+**D-24's fix does not fix site 4. It restricts when the block runs**, so the write now lands only in
+a profile with no identity — initial state, not a frozen inheritance.
+
+> **And that is contingent, not permanent.** It holds only because **D-25** means the profile cannot
+> express blank-means-inherit. When D-25 is fixed, this write becomes materialisation again.
+> **D-25 carries a hard precondition to revisit `bridge:568`, and the code carries the matching
+> comment.** Three places, deliberately — this is the exact shape of thing that gets lost between
+> sessions.
+
 #### BOTH branches, recorded explicitly
 
 | Branch | Outcome | Severity |
@@ -1919,6 +1933,42 @@ circular, since `buildSpecFromRow` builds the spec *from* the construction. Cons
 timestamps**, so stored data cannot say whether an entry was duplicated at creation or edited into
 identity afterwards. A `createdAt` field would make this diagnosable.
 
+### D-26 — typing a SET Code silently skips the Nos/Set auto-fill
+
+**Moved into the register from `post-model-defects.md` (was PM-4), 2026-08-28. Not a new finding —
+a corrected filing.** The scope freeze exists to stop the register *growing*; it is not a reason to
+leave a misclassified entry in the wrong list.
+
+**Found by applying the two-test sorting rule to post-model, on its first use.** PM-4 failed both:
+
+| Test | Answer |
+|---|---|
+| Does the masters migration make this tractable? | **No.** It is a UI entry-point problem, not an identity one. Entities change nothing about it |
+| Is live data wrong today? | **Yes.** `nosPerSet` stays at its default and `qtyPerSet` multiplies the SET rate (`engine/costing.js:212`) — a **wrong SET total**, not friction |
+
+#### Mechanism — two entry points to one resolution
+
+**Auto-dims and Nos/Set auto-fill both depend on resolving the same parent Box, and they are reached
+differently:**
+
+* **Auto-dims** run on render, via `autoCalcPPDims` in `useBatchState.js`.
+* **Nos/Set auto-fill** runs *only* inside `handleConfirm` (`BatchGrid.jsx:250`), which renders only
+  while `setCodeAssumed` is true.
+
+**Typing in the SET Code field clears `setCodeAssumed`** (`BatchGrid.jsx:311`), which removes the
+confirm control from the DOM. So a Maker who *types* a SET Code gets auto-dims and **silently no
+Nos/Set** — no error, no toast, nothing indicating a step was skipped.
+
+> **Demonstrated live at Stage 3.** A Part-L created with its SET Code typed as `glass180` resolved
+> its parent for dims and did not auto-fill Nos/Set. Initially read as a D-7 failure; it is neither a
+> D-7 failure nor a gate — **the code path simply never executes.**
+
+> **Severity: HIGH.** The wrong value is *visible* in the grid's Nos/Set column, so it is not
+> invisible in the way D-16 was. But nothing draws attention to it, and the default silently
+> multiplies through the SET rate.
+
+> **Sequenced after D-18.** Small, blocks nothing.
+
 ### D-25 — the blank-means-inherit model is UNREACHABLE: the batch path cannot consume blanks
 
 **Found at Stage 4 while scoping D-9's fix. Its own entry, not a note inside D-9, because it is a
@@ -1964,6 +2014,24 @@ shape, and so does `pushCostingToBatchRow`.
 > builds `_calcSpec`, which substitutes defaults for blanks before calling `calcCosting`. The
 > **batch** path is not: `calcBatchRow` and `sendAllToQuoteItems` assemble their spec independently
 > and **never pass through `_calcSpec`**.
+
+> ## 🛑 HARD PRECONDITION — revisit `bridge:568` BEFORE blanking the profile
+>
+> **Before blanking the profile's `waste`/`convRate`/`wastePP`/`convRatePP`, revisit the first-Send
+> seeding block at `useCostingBatchBridge.js:568`** — **site 4** of the inheritance-materialisation
+> pattern.
+>
+> That block writes the sector's derived waste/conv into `batchProfile`. **D-24's fix made it
+> harmless IN CONTEXT** by restricting it to run only into a profile with no identity — establishing
+> initial state rather than freezing an inheritance. **That holds only because of D-25 itself:** the
+> profile cannot express blank-means-inherit today, so there is nothing to freeze.
+>
+> **Blanking the profile removes exactly that protection.** A blank profile would then mean "follow
+> the sector", and these writes become materialisation again — **re-creating the defect inside the
+> commit that fixes it.**
+>
+> **This is not a note. It is a precondition on D-25's fix**, and the matching pointer is in the code
+> at `bridge:568`.
 
 #### Consequence for the D-9 / D-16 fix
 
