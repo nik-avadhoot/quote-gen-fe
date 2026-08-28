@@ -263,8 +263,8 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | D-6 | Backup filenames cannot distinguish two same-day snapshots | Medium | Open |
 | ~~D-7~~ | SET Code case normalisation is asymmetric | High | **FIXED** — Stage 3. One helper `sameSetCode()`, enforced by `scripts/audit-setcode.py`. Extent was 8 sites, not 4 |
 | D-9 | Selecting a sector silently converts inheritance into an override | High | Open |
-| D-14 | Unconfirmed SET Code does not block Deep Dive | Medium | Open — observation |
-| D-15 | Unconfirmed SET Code blocks only the offending row, not globally | — | **Undecided** — may be correct by design |
+| ~~D-14~~ | Unconfirmed SET Code does not block Deep Dive | — | **CLOSED — NOT A DEFECT.** The guard exists at `useCostingBatchBridge.js:33`, dates to the repo's first commit, is the sole route, has no bypass, and is stricter than the other three gates |
+| ~~D-15~~ | Unconfirmed SET Code blocks only the offending row | — | **CLOSED — CORRECT BY DESIGN.** Ruled per-row |
 | D-16 | After Deep Dive then Unlink, auto-dims stop recalculating | High | Open — observation. *Unverified:* whether conv/waste re-resolve per sector after a Set Role or Box Type change post-Unlink |
 | D-17 | Add-on pin control is an unlabelled circled-plus | Cosmetic | Open — see cleanup list |
 | D-18 | Row-level Interest override missing from xlsx export | High | Open — **RESOLVED at source, and it is a category.** See below |

@@ -943,23 +943,44 @@ D-1 is the exception and stays as committed — written and verified before the 
 **Standing rule for every commit from here: one concern per commit.** Structural moves and
 behaviour changes never share a commit. If a guard breaks, it must be unambiguous which change did it.
 
-> ## 📏 THE RECORDED EXTENT IS A FLOOR, NOT A FIGURE — three instances
+> ## 📏 TWO WAYS THE REGISTER HAS BEEN WRONG — they are NOT the same failure
 >
-> **Three times in this pass the stated extent of a defect has been narrower than reality, and every
-> time it surfaced during implementation rather than triage:**
+> Four entries have now proved inaccurate under implementation. Conflating them into one warning
+> loses the useful part: **they have different causes and different remedies.**
+>
+> ### Mode A — EXTENT UNDERCOUNT. The mechanism was right; the scope was low.
 >
 > | Defect | Recorded | Actual |
 > |---|---|---|
-> | **D-5** | a guard that "never lets a smaller batch overwrite a larger one" | it fires only at mount; every other path writes through it, leaving a 1-row residue |
-> | **D-22** | a data defect, D-8's mechanism in the wild | the wrong render path entirely — the badge never consults the master |
+> | **D-5** | a guard that "never lets a smaller batch overwrite a larger one" | fires only at mount; every other path writes straight through it, leaving a 1-row residue |
 > | **D-7** | four comparison sites | **eight sites, six files, three conventions** |
 >
-> **The mechanism was right every time. The extent was wrong every time.** In each case the entry
-> was written from one observation and the survey was never done.
+> **Cause: triage stopped at the first instance.** The entry was written from the example that
+> prompted it, and the survey was never done.
 >
-> **Whoever scopes a remaining entry should treat its stated site count as a floor and re-derive the
-> set before proposing.** The cost of doing so is minutes; the cost of not doing so has been a
-> retraction, a refinement and a doubled scope.
+> **Remedy: treat a stated site count as a FLOOR and re-derive the set before proposing.** Minutes to
+> do; the cost of skipping it has been a doubled scope and a refinement.
+>
+> ### Mode B — UNTRACED OBSERVATION. The symptom was recorded; the code path never was.
+>
+> | Defect | Recorded | Actual |
+> |---|---|---|
+> | **D-22** | a data defect — a stale `skuType` orphaned by a master edit, "D-8's mechanism in the wild" | **the wrong render path entirely.** The badge never consults the master |
+> | **D-14** | an unconfirmed SET Code does not block Deep Dive | **the guard exists, predates the observation by the whole history of the repo, is the sole route, and has no bypass** |
+>
+> **Cause: an observation entered the register without anyone confirming which code produced it.**
+>
+> **This is NOT carelessness — it is the designed cost of §6 rule 9** (*record, do not fix, do not
+> investigate*), tightened at `b52c681` to *one line each, no hypothesis, no mechanism*. That rule
+> was correct for a refactor: it stopped verification turning into an endless fix-and-discover loop.
+> **What it bought in speed during the split, it deferred to this pass — and two of the four
+> observations it produced have now proved wrong.**
+>
+> **Remedy: confirm the code path from source BEFORE scoping any entry recorded under that rule.**
+> D-15, D-16 and D-17 are from the same batch as D-14 and carry the same risk.
+>
+> > **The two modes need opposite reflexes.** Mode A says *look wider than the entry*. Mode B says
+> > *do not trust the entry at all until the code confirms it*. An entry can suffer both.
 
 > ## 🔷 A DESIGN-LEVEL PATTERN, NOT THREE BUGS — read this before fixing any one of them
 >
@@ -1269,10 +1290,40 @@ bookmarks for the post-split defect pass, not tickets.
 
 | # | Observed | Class |
 |---|---|---|
-| **D-14** | An unconfirmed SET Code does **not** block Deep Dive — it blocks auto-dims, Calculate All and Send All to Quote Items, but Deep Dive opens for the unconfirmed SKU | gate gap |
-| **D-15** | An unconfirmed SET Code blocks only the offending row, not globally — **may be correct by design**, decide post-split | undecided |
+| ~~**D-14**~~ | ~~unconfirmed SET Code does not block Deep Dive~~ | **CLOSED at Stage 3 — NOT A DEFECT.** See below |
+| ~~**D-15**~~ | ~~blocks only the offending row, not globally~~ | **CLOSED at Stage 3 — CORRECT BY DESIGN.** Ruled per-row. Calculate All and Send All are already effectively global, so the safety property exists where wrong attribution would escape; extending it to every action buys little and costs a lot of friction. Its dependent D-14 is closed as not-a-defect, so nothing follows from it |
 | **D-16** | After Deep Dive → Unlink, auto-dims stop recalculating. Unlink itself behaves correctly and its notice matches what it does. **Unverified:** whether conv/waste re-resolve per sector after a Set Role / Box Type change post-Unlink | correctness |
 | **D-17** | The add-on pin control is a bare ⊕ beside a number input — no label, hover tooltip only, reads as "add"/"increment" rather than "pin to grid". Discoverability only, not correctness. Fix is a pin glyph | cosmetic |
+
+#### D-14 — CLOSED. The guard exists, has always existed, and has no bypass
+
+**Settled from source at Stage 3, before any scoping. The code cannot produce the behaviour the
+entry describes.**
+
+| Check | Result |
+|---|---|
+| Does the guard exist? | Yes — `useCostingBatchBridge.js:33`, `if(row.setCodeAssumed){ showToast(…); return; }` |
+| Does it post-date the 7b observation? | **No.** `git log -S` puts it in `986033e`, the repo's **first commit**. `c7d7b83` (Phase 4) only moved it into the bridge |
+| Is it the only route? | Yes — `BatchGrid.jsx:544` (🔍) is the sole caller |
+| Can it be bypassed? | No. The guard returns before the `setTab("costing")` at `:59`. The only other route into Costing is `loadItem` from **Quote Items**, which requires passing the Send All gate that already blocks unconfirmed rows |
+| Is it weaker than the other gates? | **No — stricter.** `useQuoteActions.js:227`/`:301` filter `itemType!=="Box" && setCodeAssumed`; this one has no `itemType` exemption |
+
+**Most likely the observed row had `setCodeAssumed:false` already** — Deep Dive correctly opened, and
+that was read as a missing gate. What can be established from source is narrower and sufficient: **the
+described behaviour is not producible from this code.** Why the observation was made cannot be
+recovered, and is not worth recovering.
+
+> **Closed as not-a-defect.** No fix, no commit, nothing to verify.
+
+> ### ⚠️ D-15, D-16 and D-17 COME FROM THE SAME BATCH AND CARRY THE SAME RISK
+>
+> All four were recorded together under the tightened rule at `b52c681` — *one line each, what was
+> observed and where; no hypothesis, no reproduction, no mechanism*. **D-14 is the first of that
+> batch to be checked, and it did not survive.**
+>
+> **Confirm D-15, D-16 and D-17 from source BEFORE scoping any of them.** They are untraced
+> observations by construction, not by carelessness — see the two failure modes in the register
+> introduction.
 
 > **D-17 carries more weight than "cosmetic" suggests.** It was not found by someone new to the app
 > — it was not found by its author, who knew the feature existed and was looking for it. That is a
