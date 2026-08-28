@@ -982,6 +982,40 @@ behaviour changes never share a commit. If a guard breaks, it must be unambiguou
 > > **The two modes need opposite reflexes.** Mode A says *look wider than the entry*. Mode B says
 > > *do not trust the entry at all until the code confirms it*. An entry can suffer both.
 
+> ## 🧊 BLANK MEANS INHERIT — AND SEVERAL PATHS QUIETLY FILL THE BLANK
+>
+> **A DESIGN failure, not a triage one.** Modes A and B above are about how the register has been
+> wrong. This is about how the code is wrong, and it predicts where the next defect will be.
+>
+> **The app has a blank-means-inherit model.** A blank `waste`, `convRate`, `L` or `W` means *"follow
+> the authority"* — the sector master, the Batch Profile, or the parent Box. It is resolved **fresh
+> on every render**, which is what keeps it live. `useCostingResult` says so in its own comment:
+> *"resolved fresh here (not baked into spec) so it stays live if sector changes."*
+>
+> **And multiple paths write a resolved value back into the blank**, converting inheritance into a
+> frozen override — **with no visual signal, because the number is identical at the moment it
+> happens:**
+>
+> | Defect | Path | Blank filled |
+> |---|---|---|
+> | **D-9** | Selecting a sector in Costing | `waste`, `convRate`, `wastePP`, `convRatePP` — written straight into `spec` |
+> | **D-16** | Push to Batch Row after Deep Dive | `L`, `W` — written into the row from values Deep Dive **derived** from the parent Box |
+>
+> **Both are silent, both are permanent, and both defeat a documented authority model.** D-9 bypasses
+> the Batch Profile; D-16 severs the parent-Box link. In each case the app's own override indicator
+> stays off, because the written value equals the inherited one at the instant it is written.
+>
+> ### Where to look for the next one
+>
+> **Any code that resolves an inherited value and then stores it.** The tell is a read of a derived
+> value followed by a write into the field it was derived from. `autoCalcPPDims`, `resolveSpecWasteConv`,
+> `buildSpecFromRow` and `specFromProfile` all produce resolved values; **anything that persists their
+> output into a field that was blank is a candidate.**
+>
+> **Fixing D-9 or D-16 alone leaves the model broken.** The question underneath both is whether a
+> resolved value may ever be written back — and if so, whether the UI must mark it as no longer
+> inherited.
+
 > ## 🔷 A DESIGN-LEVEL PATTERN, NOT THREE BUGS — read this before fixing any one of them
 >
 > **`batchRows.length` is used as a proxy for three different questions, and it answers none of
@@ -1292,8 +1326,45 @@ bookmarks for the post-split defect pass, not tickets.
 |---|---|---|
 | ~~**D-14**~~ | ~~unconfirmed SET Code does not block Deep Dive~~ | **CLOSED at Stage 3 — NOT A DEFECT.** See below |
 | ~~**D-15**~~ | ~~blocks only the offending row, not globally~~ | **CLOSED at Stage 3 — CORRECT BY DESIGN.** Ruled per-row. Calculate All and Send All are already effectively global, so the safety property exists where wrong attribution would escape; extending it to every action buys little and costs a lot of friction. Its dependent D-14 is closed as not-a-defect, so nothing follows from it |
-| **D-16** | After Deep Dive → Unlink, auto-dims stop recalculating. Unlink itself behaves correctly and its notice matches what it does. **Unverified:** whether conv/waste re-resolve per sector after a Set Role / Box Type change post-Unlink | correctness |
+| **D-16** | **REWRITTEN at Stage 3 — the trigger is PUSH, not Unlink, and the effect is permanent.** See below | **High — silent, permanent** |
 | **D-17** | The add-on pin control is a bare ⊕ beside a number input — no label, hover tooltip only, reads as "add"/"increment" rather than "pin to grid". Discoverability only, not correctness. Fix is a pin glyph | cosmetic |
+
+#### D-16 — REWRITTEN. Push materialises derived dims and severs the parent link
+
+**Confirmed by the product owner's run at Stage 3, against the source mechanism below.**
+**Severity raised: silent and permanent, not a transient recalculation glitch.**
+
+| | |
+|---|---|
+| **TRIGGER** | **Push, not Unlink.** `Unlink` writes nothing to the row — `setSpec`, `setActiveBatchRowId(null)`, `setSpecCommitted(false)`, `setCostingContext` — and **cannot cause this** |
+| **MECHANISM** | Deep Dive reads the row through `autoCalcPPDims` (`useCostingBatchBridge.js:40`), so `spec.L`/`spec.W` hold values **derived from the parent Box**. `pushCostingToBatchRow` then writes `spec.L` and `spec.W` into the row (falling back to `""`). **A computed number is materialised into a field that was blank by design.** |
+| **CONSEQUENCE** | **Permanent.** `autoCalcPPDims` returns early forever (`needsL`/`needsW` are now false) and `isAutoDim` at `BatchGrid.jsx:388` flips false, so the greyed live placeholder becomes a hard value. **The row silently stops tracking its parent Box.** Change the Box's dimensions afterwards and the Part does not follow |
+| **WHY IT IS INVISIBLE** | **The number is identical at the moment it happens.** Nothing on screen changes. The link is severed and the only evidence is the absence of an update that arrives later, or never |
+
+> **The 7b observation is recorded separately below and is NOT reconciled with this.** The mechanism
+> above stands on source and on a confirmed run; the original report named a different trigger. Both
+> are kept as they are.
+
+##### The original 7b observation — untraced, kept as recorded
+
+> *"After Deep Dive → Unlink, auto-dims stop recalculating. Unlink itself behaves correctly and its
+> notice matches what it does."*
+
+**Unlink cannot produce this** — it writes nothing to the row. The observation gestured at a real
+defect one button away and named the wrong control. **A Mode B entry that happened to point
+somewhere true.** Why it named Unlink is not recoverable and is not worth recovering; it is recorded
+so the next reader can see that the entry and the mechanism disagree, and that the mechanism won.
+
+> **The unverified sub-question is answered and is NOT part of this defect.** *"Do conv/waste
+> re-resolve per sector after a Set Role or Box Type change post-Unlink?"* **Yes.**
+> `specFromProfile` blanks `waste`/`convRate`/`wastePP`/`convRatePP` deliberately, so they inherit
+> and `_calcSpec` re-resolves every render from `_sectorForCalc`. Changing Set Role or Box Type does
+> not touch them. **What stops re-resolution is changing the SECTOR — and that is D-9.**
+
+> ### 🔗 SAME SHAPE AS D-9 — see the inheritance-materialisation pattern in the register introduction
+>
+> D-9 fills the blank on **sector selection**; D-16 fills it on **push**. Two paths, one design
+> failure. Fixing either alone leaves the model broken.
 
 #### D-14 — CLOSED. The guard exists, has always existed, and has no bypass
 
@@ -1839,6 +1910,13 @@ survey**:
 
 > **Severity: HIGH.** Not data loss (D-5) nor wrong-quote-by-typo (D-8), but it **silently defeats a
 > documented authority model.**
+
+> ### 🔗 SAME SHAPE AS D-16 — see the inheritance-materialisation pattern in the register introduction
+>
+> D-9 fills the blank on **sector selection**; D-16 fills it on **push to batch row**. Two paths, one
+> design failure: a blank-means-inherit model with several paths that quietly fill the blank. **Fixing
+> either alone leaves the model broken** — the question underneath both is whether a resolved value
+> may ever be written back, and if so whether the UI must mark it as no longer inherited.
 
 > **NO FIX WINDOW. Do not propose a fix.** Post-Phase-8 this needs a product decision first: should
 > selecting a sector pre-fill visible values (arguably friendlier) or leave them blank with the

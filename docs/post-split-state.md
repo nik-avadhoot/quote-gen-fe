@@ -262,10 +262,10 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | D-4 | Identity freeze is lost on reload while the batch survives | High | Open |
 | D-6 | Backup filenames cannot distinguish two same-day snapshots | Medium | Open |
 | ~~D-7~~ | SET Code case normalisation is asymmetric | High | **FIXED** — Stage 3. One helper `sameSetCode()`, enforced by `scripts/audit-setcode.py`. Extent was 8 sites, not 4 |
-| D-9 | Selecting a sector silently converts inheritance into an override | High | Open |
+| D-9 | Selecting a sector silently converts inheritance into an override | High | Open — same shape as **D-16**; see the inheritance-materialisation pattern |
 | ~~D-14~~ | Unconfirmed SET Code does not block Deep Dive | — | **CLOSED — NOT A DEFECT.** The guard exists at `useCostingBatchBridge.js:33`, dates to the repo's first commit, is the sole route, has no bypass, and is stricter than the other three gates |
 | ~~D-15~~ | Unconfirmed SET Code blocks only the offending row | — | **CLOSED — CORRECT BY DESIGN.** Ruled per-row |
-| D-16 | After Deep Dive then Unlink, auto-dims stop recalculating | High | Open — observation. *Unverified:* whether conv/waste re-resolve per sector after a Set Role or Box Type change post-Unlink |
+| D-16 | **Push after Deep Dive severs a row's link to its parent Box** | **High — silent, permanent** | Open — **REWRITTEN at Stage 3.** Trigger is Push, not Unlink; Unlink writes nothing to the row and cannot cause it. `pushCostingToBatchRow` writes back the L/W that Deep Dive *derived* from the parent, so `autoCalcPPDims` returns early forever and the row stops tracking. Invisible: the number is identical when it happens. Same shape as **D-9** |
 | D-17 | Add-on pin control is an unlabelled circled-plus | Cosmetic | Open — see cleanup list |
 | D-18 | Row-level Interest override missing from xlsx export | High | Open — **RESOLVED at source, and it is a category.** See below |
 | D-19 | `exportExcelFull` throws `ReferenceError` on every call | High | Open — **in D-3's scope.** Promoted from the §4 cleanup list; D-3 is not discharged without it |
