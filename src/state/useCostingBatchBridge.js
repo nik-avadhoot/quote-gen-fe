@@ -330,12 +330,23 @@ export function useCostingBatchBridge(st){
       return;
     }
 
-    // ── G1: Identity-first guards — only for non-empty batches ───────────────
+    // ── G1: Identity-first guards — gated on the PROFILE, not the row count ──
     // The TEXTILE/ICECREAM rule: batch-wide identity must match before any numeric
     // delta is computed. A mismatch must never become a row override.
-    // These guards fire only when batchRows.length > 0 (profile is committed).
-    // On first Send (empty batch), the seeding block below establishes the profile.
-    if(batchRows.length>0){
+    //
+    // D-24: these guards used to fire only when batchRows.length > 0, on the
+    // assumption that "no rows" means "no committed profile". That assumption is
+    // false. A populated batchProfile with an empty grid IS a batch identity —
+    // and before hydrate-on-mount (D-5) it was the state after EVERY reload.
+    //
+    // With the old condition an empty grid let every mismatch through, and the
+    // seeding block below then silently rewrote the profile to the new client and
+    // sector. Nothing recorded that it happened: rows carry no client or sector of
+    // their own, so a returning Maker could not discover it before or after.
+    //
+    // RULED: a populated profile is still committed. Ask the profile.
+    const _profileHasIdentity=!!(batchProfile.client||batchProfile.sector);
+    if(_profileHasIdentity){
       // Normalise: trim + lowercase for reliable comparison (sameClient helper inline)
       const _norm=v=>(v||"").trim().toLowerCase().replace(/\s+/g," ");
       const _specClient=_norm(spec.client);
@@ -581,11 +592,25 @@ export function useCostingBatchBridge(st){
     // "Nagpur" must not silently win over the Maker's explicit Costing values.
     // On subsequent Sends (batch non-empty), the profile already owns these fields and mismatches
     // are caught above by the identity guards — no further seeding is needed here.
-    if(batchRows.length===0){
+    if(!_profileHasIdentity){
       const profilePatch={};
       if(spec.client)   profilePatch.client=spec.client;
       if(spec.sector){
         profilePatch.sector=spec.sector;
+        // ⚠️ SITE 4 of the inheritance-materialisation pattern (D-9 / D-16) lives
+        // in the four lines below, and D-24's fix made it HARMLESS IN CONTEXT —
+        // NOT RESOLVED. Read this before touching either.
+        //
+        // This block now runs only into a profile with NO identity, so writing the
+        // sector's derived waste/conv establishes initial state rather than freezing
+        // an inheritance. That holds ONLY because of D-25: the profile cannot
+        // express blank-means-inherit today — its waste is the literal 5, never a
+        // blank meaning "follow the sector" — so there is no inheritance to freeze.
+        //
+        // 🛑 THE MOMENT D-25 LANDS and a blank profile means "follow the sector",
+        // these writes become materialisation again. REVISIT HERE when D-25 is
+        // fixed. D-25's entry carries the matching precondition; if you are here
+        // because of that pointer, this is the code it meant.
         // Mirror Batch Profile sector-change handler (lines 3042-3046): when sector is seeded
         // on first Send, also establish its derived waste/conv values so the profile is internally
         // consistent. Without this, batchProfile.sector=ICECREAM but waste/conv remain defaults.
