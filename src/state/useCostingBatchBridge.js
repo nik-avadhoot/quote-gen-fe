@@ -186,7 +186,14 @@ export function useCostingBatchBridge(st){
     // Same delta shape as wasteOverride above, and the same 0.001 tolerance:
     // write only what the Maker actually CHANGED. Both directions resolve through
     // autoCalcPPDims, so there is one derivation, not two that can disagree.
-    const _derivedDims=autoCalcPPDims(row);
+    // Blank L/W FIRST. autoCalcPPDims returns the row untouched when both dims are
+    // already filled (useBatchState.js:168), so passing `row` as-is made _derivedDims
+    // EQUAL to `cur` for exactly the rows this guard protects: the delta was always
+    // zero and every explicit dim was rewritten to "". Deriving from a blanked copy
+    // asks the real question - "what WOULD this row inherit?" - which is the only
+    // value `cur` can meaningfully be compared against. The spread keeps row.id, so
+    // the parent lookup still resolves.
+    const _derivedDims=autoCalcPPDims({...row,L:"",W:""});
     const _dimBack=k=>{
       const cur=spec[k];
       if(cur===""||cur==null)return"";              // nothing typed — stay inherited
