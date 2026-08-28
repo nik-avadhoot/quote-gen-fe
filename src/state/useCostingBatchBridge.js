@@ -665,7 +665,41 @@ export function useCostingBatchBridge(st){
   // scratchpad, unnamed. Recorded, deliberately NOT fixed here (defect freeze).
   const startNewBatch=()=>{
             // Fix 5: also clear Quote Items on New Batch so prior customer's data cannot leak
-          if(!window.confirm("Start a new batch? This will clear the current profile, all SKU rows, results, and Quote Items."))return;
+            // ── D-2: name what CHANGES, not four of ten things ───────────────
+            // The old confirm named the profile, rows, results and Quote Items —
+            // four state changes out of ten — and stayed silent about setSpec,
+            // which discarded the Costing scratchpad. It named what was
+            // RECOVERABLE and hid the one thing that was not. Inverted warning.
+            //
+            // The spec is now preserved (below), so nothing unrecoverable is
+            // destroyed and this stops being a last line of defence. It is not
+            // merely informational either: the identity freeze releases and any
+            // Deep-Dive link breaks, which change what MODE the Maker is in.
+            // So: three lines grouped by effect, not ten setter names — a Maker
+            // does not know what setSetAutoFill is and should not have to.
+            //
+            // NO RECOVERABILITY CLAIM. cbb_batch_previous holds the cleared batch
+            // but has no reader yet, so from the Maker's position it is gone.
+            // An unqualified "recoverable" would invite reliance on a route that
+            // does not exist — see D-2's entry and the open item on the archive.
+            //
+            // The kept client/sector are NAMED because the spec survives now:
+            // a stale client can silently seed the next batch's blank profile,
+            // and no guard catches it (D-24's cannot — a blank profile has
+            // nothing to mismatch against). Mitigation is visibility at the
+            // decision point, not a guard. See PM-6.
+            const _keptId=[spec.client&&`client "${spec.client}"`,
+                           spec.sector&&`sector "${spec.sector}"`].filter(Boolean).join(" and ");
+            const _keepLine=_keptId
+              ?`• Keeps your Costing spec, including ${_keptId} — change these in Costing if this batch is for a different customer.\n`
+              :"• Keeps your Costing spec — you will not have to re-enter it.\n";
+            if(!window.confirm(
+              "Start a new batch?\n\n"+
+              "• Clears the current batch — profile, all SKU rows, results and Quote Items.\n"+
+              _keepLine+
+              "• Returns Costing to same-batch context: the identity freeze is released and any Deep-Dive review is unlinked.\n\n"+
+              "OK = Start new batch   |   Cancel = Stay"
+            ))return;
             // ── D-5 prerequisite: archive the batch being cleared ────────────────
             // INVARIANT: cbb_batch_previous holds the most recent NON-EMPTY batch
             // cleared by + New Batch. One slot. Nothing else.
@@ -718,9 +752,21 @@ export function useCostingBatchBridge(st){
             // Batch Entry cleared → Costing re-attaches to the now-empty batch (same-batch context)
             // Also reset Costing spec so the panel reflects the fresh state immediately
             setCostingContext("same-batch");
-            setSpec({...INIT_SPEC,plant:"",delivery:""});
-            setSetAutoFill(true);
-            showToast("✅ New batch started — Quote Items cleared",'success');
+            // ── D-2: the Costing scratchpad SURVIVES ─────────────────────────
+            // setSpec({...INIT_SPEC,...}) was here and silently discarded it.
+            // The spec is never persisted anywhere, so that was the one
+            // unrecoverable loss in this handler — and the confirm did not
+            // mention it. RULED: the spec has nothing to do with the batch;
+            // there is no reason clearing one should clear the other.
+            //
+            // setSetAutoFill(true) was here too and is removed as an EXTENSION
+            // OF THE SAME RULING, not a separate change: setAutoFill is the
+            // "auto-derive SET Code from Mat Code" checkbox in the Costing form
+            // (SpecForm.jsx:132) — Costing workspace configuration, the same
+            // category as the spec, not batch state. Resetting it would make
+            // "keeps your Costing spec" partly false, since a preserved spec
+            // would stop behaving the way the Maker left it.
+            showToast("✅ New batch started — Costing spec kept",'success');
   };
 
   return { copyCostingToProfile, loadBatchRowIntoCosting, pushCostingToBatchRow, sendCostingToBatch, specForNewBatch, specFromProfile, startNewBatch };
