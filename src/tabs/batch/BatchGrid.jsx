@@ -19,7 +19,7 @@
 //
 // Never reflow this file, never run Prettier or eslint --fix over it.
 // ═══════════════════════════════════════════════════════════════════════════
-import { Fragment } from "react";
+import { Fragment, useRef } from "react";
 import { BOX_TYPES } from "../../data/defaults.js";
 import { buildSpecFromRow, checkSpecCompliance } from "../../engine/costing.js";
 import { isPPType, sameSetCode } from "../../engine/rowType.js";
@@ -36,6 +36,14 @@ export default function BatchGrid(){
     sendAllToQuoteItems,setAutoCodeEnabled,setBatchConstrOverlay,
     setBatchConstrOverlayFilter,setBatchConstrOverlayQuery,setBatchConstrTargetRowId,
     setBatchRows,showToast,togglePinAddOn,toggleRowExpand}=useAppState();
+  // D-26: the SET Code value as it stood when the input took focus, so blur can
+  // tell an edit from a tab-through and only re-resolve Nos/Set on a real change.
+  //
+  // Declared HERE, at the top level of the component — NOT inside the row .map()
+  // where it is used. Hooks in a .map() break the Rules of Hooks and have caused
+  // blank-screen crashes in this file before (see CLAUDE.md). One ref serves every
+  // row because only one input holds focus at a time.
+  const _setCodeAtFocus=useRef("");
   return(
     <div style={{display:"flex",flex:1,overflow:"hidden",position:"relative"}}>
       {/* FULL WIDTH: SKU Grid (Construction Library now in overlay + separate tab) */}
@@ -244,9 +252,18 @@ export default function BatchGrid(){
                         {(()=>{
                           const isAssumed=!!row.setCodeAssumed;
                           const isNonBox=row.itemType!=="Box";
-                          // Confirm handler: clears assumed flag, triggers auto-dims + Glass SKU fill
-                          const handleConfirm=()=>{
-                            upd("setCodeAssumed",false);
+                          // D-26: THE RESOLUTION, LIFTED OUT OF THE CONTROL.
+                          // This used to live inside handleConfirm only — and handleConfirm renders
+                          // only while setCodeAssumed is true. Typing in the SET Code field clears
+                          // that flag below, which removes the confirm control from the DOM, so a
+                          // Maker who TYPED a code got auto-dims (they run on render, via
+                          // autoCalcPPDims) and SILENTLY NO Nos/Set. Two behaviours resolving the
+                          // same parent, one of them reachable only through a control that typing
+                          // destroys.
+                          //
+                          // One resolution, two entry points: the confirm button, and blur of the
+                          // SET Code input.
+                          const applyGlassSKUNos=()=>{
                             // Glass SKU auto-fill for ALCOBEV Part-L / Part-W rows
                             if(batchProfile.sector==="ALCOBEV"&&(row.itemType==="Part-L"||row.itemType==="Part-W")){
                               const confirmedSetCode=(row.setCode||"").trim();
@@ -269,6 +286,11 @@ export default function BatchGrid(){
                                 showToast(`⚠️ Glass SKU Type not yet set on the parent Box — set it first to auto-fill Nos/Set`,'info',5000);
                               }
                             }
+                          };
+                          // Confirm handler: clears assumed flag, triggers auto-dims + Glass SKU fill
+                          const handleConfirm=()=>{
+                            upd("setCodeAssumed",false);
+                            applyGlassSKUNos();
                           };
                           // Clear handler: blank SET Code, mark as standalone, disable SET Role
                           const handleClear=()=>{
@@ -302,6 +324,15 @@ export default function BatchGrid(){
                                 style={{position:"absolute",left:3,top:"50%",transform:"translateY(-50%)",
                                   accentColor:"#9A7B4A",cursor:"pointer",width:10,height:10,zIndex:1}}/>
                               <input value={row.setCode||""} placeholder="SET code"
+                                // D-26: resolve on BLUR, not onChange — onChange fires per keystroke
+                                // and would resolve against half-typed codes.
+                                //
+                                // ⚠️ ONLY when the code actually CHANGED during this focus. Without
+                                // that guard, tabbing through the field re-runs the resolution and
+                                // overwrites a Nos/Set the Maker set deliberately — materialising
+                                // over an explicit value, the same hazard as D-9 and D-16.
+                                onFocus={e=>{_setCodeAtFocus.current=e.target.value;}}
+                                onBlur={e=>{if(e.target.value!==_setCodeAtFocus.current)applyGlassSKUNos();}}
                                 onChange={e=>{
                                   // setCode is cross-row: autoCalcPPDims finds a Part row's parent Box by matching
                                   // r.setCode across all batch rows. Changing any setCode can alter another row's
