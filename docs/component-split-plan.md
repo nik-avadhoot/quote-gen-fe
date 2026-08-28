@@ -2089,6 +2089,136 @@ circular, since `buildSpecFromRow` builds the spec *from* the construction. Cons
 timestamps**, so stored data cannot say whether an entry was duplicated at creation or edited into
 identity afterwards. A `createdAt` field would make this diagnosable.
 
+## 🧭 RESTRUCTURE READ — what a Costing START/REVIEW split would OBSOLETE
+
+**Analysis only, requested 2026-08-28, committed BEFORE the storage call is made** so the reasoning
+is in version control as the thing the ruling is made against, not a rationalisation written after
+it. **No design here, and no recommendation on whether to do the split.**
+
+### The modes already exist. What is missing is separation
+
+They are named in the source today:
+
+| Source | Text |
+|---|---|
+| `SpecForm.jsx:53` | *"MatCode is locked only in REVIEW (`activeBatchRowId` set)"* |
+| `SpecForm.jsx:55` | *"Exit from START lock: click 'Start new SKU'"* |
+| `useCostingBatchBridge.js:57` | *"REVIEW mode uses `activeBatchRowId`, not `specCommitted`"* |
+
+`OutputPanel.jsx` disables **all three** START controls — Send, Start new SKU, + New Batch — on
+`!!activeBatchRowId`. **The app already treats these as mutually exclusive modes and enforces it by
+greying out half the toolbar.** What it does not do is give them separate state: one `spec`, one
+surface, mode inferred from three flags (`activeBatchRowId`, `specCommitted`, `costingContext`).
+
+> ## 🔑 THE ANSWER HANGS ON ONE DESIGN CHOICE, NOT ON THE SPLIT
+>
+> **Does START own a persisted draft, or do START and REVIEW keep sharing the single global `spec`?**
+>
+> **If they keep sharing it, the split is a UI reorganisation and obsoletes NOTHING in this
+> register.** Every entry marked obsoleted below is obsoleted by *separate persisted draft state* —
+> which a split makes natural but does not require. **Read no entry below as obsoleted by the split
+> itself.**
+
+### Obsoleted — *conditional on START owning a persisted draft*
+
+| Entry | Why it stops being expressible |
+|---|---|
+| **D-23** | `+ New Batch` gates its confirm on `batchRows.length>0` then runs `setSpec({...INIT_SPEC,plant:"",delivery:""})` (`OutputPanel.jsx:84-95`). It guards the batch to protect the spec. If the draft is not what that button clears, **the defect has no subject** — not a corrected predicate, an absent one |
+| **PM-6** | A *stale* spec seeding a *legitimately empty* profile is possible only because one anonymous `spec` outlives the batch it came from. A draft carrying explicit batch linkage cannot go stale unnoticed |
+| **D-4** | `specCommitted` is a session flag standing in for *"this spec already became a row."* Persist the draft→row relationship and the freeze is **derived**, so a reload has nothing to lose |
+| **D-13** | **Half only — see below** |
+
+**D-13 splits cleanly in two, and the halves must not be conflated.** Its *destruction* half — both
+mandated exits destroy the scratchpad, so *"a user who follows the instructions correctly still
+loses work"* — is **obsoleted**: the work no longer dies. Its *graduation* half — promote a
+scratchpad into a batch of its own — is **not obsoleted at all** and remains a capability to
+design. What the split does is create the surface that would own it.
+
+> This strengthens rather than weakens D-13's sequencing as design input to the masters work. It
+> also means **in-scope restructure work will partially defuse D-13, and that must not be mistaken
+> for D-13 having been addressed** — the same warning already recorded against it.
+
+### NOT obsoleted — the split does not reach them
+
+| Entry | Where it actually lives |
+|---|---|
+| **D-9, D-25** | `INIT_SPEC` ships concrete numbers (`defaults.js:94`); `calcCosting` destructures with defaults that fire only on `undefined`, never `""` (`costing.js:34`); the batch path never passes through `_calcSpec`. **Engine and defaults — independent of modes entirely** |
+| **D-11** | Four construction creation paths; the unguarded one is `+ New Construction` (`ConstructionLibTab.jsx:196`), in the library tab |
+| **D-8e, D-8b** | Rate Master — invalidation warning and blanket operations |
+| **D-17, PM-5** | The add-on pin control is in **`BatchGrid.jsx`**, not Costing — outside the blast radius, not merely unaffected |
+
+> **D-16's family does not survive as a family here.** D-16 is fixed; D-9 and D-25 are engine-side.
+> Grouping them as "the restructure candidates" would be wrong — what they share is the
+> inheritance-materialisation **pattern**, not a location the split touches.
+
+> ## 🛑 THE RISK THE RESTRUCTURE INTRODUCES — read this before designing the split
+>
+> **D-25 carries a hard precondition: D-24's fix is safe ONLY because the profile cannot express
+> blank today.**
+>
+> **A restructure is exactly the moment someone reasons *"let's have specs start blank so inherit
+> finally works."*** It is the natural thought, it is aimed at a real defect, and acting on it
+> without D-25's full fix **re-creates materialisation inside the new structure — where it is
+> hardest to see**, because the new structure is unfamiliar and the old landmarks are gone.
+>
+> Blanking the profile removes exactly the protection that makes `useCostingBatchBridge.js:568`
+> harmless. **Carry this into the design as a stated constraint, not as something to remember.**
+
+### Correction to the candidate list as originally framed
+
+The candidates offered were D-23, D-4, PM-6, D-13 and D-16's family. On the evidence: **D-16's
+family is not touched**, **D-13 is half-obsoleted at best**, and **D-4 and PM-6 — not among the
+first-named — are the cleanest obsoletions after D-23**, both being artefacts of one anonymous
+`spec` outliving its context. **Accepted by the product owner, 2026-08-28.**
+
+### D-27 — 🚨 waste%/conv DIVERGE between the two exporters on a PP row override
+
+**Found at Stage 4 by applying §6 rule 3's mirror check while matching D-18's interest fix.** Not a
+note on D-18 — a **separate live divergence** in a different parameter, with the same severity
+logic: **a quote costs differently depending on which path served it.**
+
+**Recorded, not fixed.** Its own entry and its own decision.
+
+#### The two implementations disagree, verified at source
+
+| | Source | What it resolves from |
+|---|---|---|
+| **Frontend** `excel.js:265,267` | `_nv(_ppSpec.wastePP??_ppSpec.waste??f0.wastePP??f0.waste,5)/100`<br>`_nv(_ppSpec.convRatePP??f0.convRatePP,12.5)` | **`_ppSpec`** — the first `Plate`/`Part-L`/`Part-W` row, i.e. the PP row's **applied** value |
+| **Backend** `server.py:238,239` | `waste_pp = num(f0.get("wastePP"), 5)`<br>`conv_pp = num(f0.get("convRatePP"), 12.5)` | **`f0`** — `items[0]["spec"]` (`:219`), the **first item whatever its row type**, normally the Box |
+
+#### When they coincide, and when they do not
+
+`buildSpecFromRow` puts the profile's `wastePP`/`convRatePP` on **every** spec, Box rows included,
+so `f0.wastePP` and `_ppSpec.wastePP` normally hold the same profile value. **They agree, and have
+always appeared to agree.**
+
+**They diverge when a PP row carries a ROW-LEVEL override.** `wasteConv_waste`/`wasteConv_conv` are
+applied as `if(isPP) sp.wastePP=+rowWaste`, so the override lands on the **PP row's** spec and
+nowhere else. The frontend reads it; the backend reads the Box row and never sees it.
+
+> A Box-row override does **not** diverge — `isPP` is false, so it sets `sp.waste`, and both
+> exporters read `AY3` from `f0.waste`. **The divergence is specific to a PP row-level override**,
+> which is exactly the case row-level overrides exist for.
+
+#### Consequence
+
+**Backend up:** `server.py` serves the export and the PP override is silently dropped — the sheet
+computes on the profile default. **Backend down or past Vercel's 10s cap:** the `xlsx-js-style`
+fallback runs and the override is honoured. **Same quote, two costs, selected by infrastructure
+state.** Identical in shape to D-18's interest defect and found the same way.
+
+> ### 🔁 THIS IS THE SHAPE §6 RULE 3 NOW WARNS ABOUT
+>
+> D-18 was one defect present identically in both mirrors. **D-27 is the two mirrors having already
+> drifted** — no shared defect to fix, just two implementations that answer the same question
+> differently. It was invisible until someone read both sides for the same parameter, and it would
+> have stayed invisible indefinitely: neither side is wrong on its own terms, and no gate compares
+> them.
+>
+> **Which one is correct is a ruling, not a derivation.** The frontend's reading is the more
+> obviously *intended* one — a PP row's override should reach the PP cells — but that is an
+> argument, not a decision, and the workbook's own semantics for `AY4`/`BA4` are the authority.
+
 ### D-26 — typing a SET Code silently skips the Nos/Set auto-fill
 
 > **✅ FIXED at Stage 4 (`ce800ca`).** The resolution logic is extracted from `handleConfirm` into

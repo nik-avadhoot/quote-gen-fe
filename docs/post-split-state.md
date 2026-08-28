@@ -412,6 +412,27 @@ the moves were clean.
 3. **`engine/costing.js`, `data/defaults.js` and `quote-gen-be/server.py` are off-limits** without a
    deliberate decision. The costing formulas are mirrored between `costing.js` and `server.py` and
    must not drift. If `test:costing` fails, the change is wrong — revert it.
+
+   > ### ⚠️ OBEYING THIS RULE LITERALLY CREATES DRIFT. Read before fixing anything mirrored
+   >
+   > **Caught live at Stage 4 on D-18.** The interest defect existed *identically* in `excel.js`
+   > and `server.py` — two implementations narrowing the same parameter the same way. The rule as
+   > written says `server.py` is off-limits, so the obedient move is to fix the frontend and stop.
+   > **That would have made a quote cost differently depending on whether the backend was up** —
+   > backend reachable serves `server.py`, backend down or timed out serves the client-side
+   > `xlsx-js-style` fallback. Same quote, two prices, decided by infrastructure.
+   >
+   > **The rule protects against drift and, read literally, produces it.** "Off-limits" means *do
+   > not change it casually*; it has never meant *leave the mirror broken*.
+   >
+   > **So the rule has a second half:** when a defect is found in anything mirrored between the two
+   > implementations, **the mirror must be checked before the fix is scoped, and the finding
+   > reported with the fix.** A one-sided fix to a mirrored parameter is not a partial fix — **it is
+   > a new defect**, and a worse one, because divergence is invisible from either side alone.
+   >
+   > Approval to touch `server.py` is still required and still narrow. What changes is *when it is
+   > asked for*: at scoping, as part of the proposal, not discovered afterwards. See **D-27**, a
+   > live divergence found by applying exactly this check while matching the interest fix.
 4. **Capability is demonstrated, not described.** Before either party plans around something
    working, one of us shows it working. Claims about tooling that turn out to be false cost more
    than the work they were meant to save.
@@ -473,6 +494,32 @@ the moves were clean.
    > stated honestly in the commit — *what* was verified and *what* was not — as `73a0948` does.
    > **"You verified it last time" is not a reason.** The exception is about the class of change,
    > never about accumulated trust.
+
+   > ### The SECOND granted exception — automated verification, and the condition that governs it
+   >
+   > **`0bf8b1f` (D-18's `server.py` mirror, Stage 4) is the second.** A Flask test client
+   > exercised the export end to end and asserted on the written cell. That **is** stronger
+   > evidence than a click, and the product owner accepted the reasoning.
+   >
+   > **It was still a deviation, because rule 6 was suspended without being raised.** The
+   > verification was reported *after* the commit, not proposed before it.
+   >
+   > **The condition, in the product owner's words:**
+   >
+   > > *"An automated verification may substitute for mine when it exercises the primary path with
+   > > a differential the old code could not produce — but it is proposed and agreed BEFORE the
+   > > commit, not reported after. The distinction is that I'd have said yes. The rule is that I
+   > > say it."*
+   >
+   > Three parts, all required: it exercises the **primary path** (not a reimplementation of the
+   > logic beside it); it produces a **differential the old code could not** (a green that the bug
+   > would also have produced proves nothing); and it is **agreed in advance**.
+   >
+   > > **The last part is the one that was broken, and it is the one that matters.** The first two
+   > > are about evidence quality and were genuinely satisfied. The third is about who holds the
+   > > decision. **An exception the implementer grants itself is not an exception — it is the rule
+   > > being replaced by the implementer's judgement of when the rule applies.** That the answer
+   > > would have been yes is exactly why it cost nothing to ask.
 7. **Derive assertions programmatically from source — never type them.** Two concrete bans: no
    hand-written string assertions, and no positional element selection (`input[N]`) where a named or
    labelled selector exists.
