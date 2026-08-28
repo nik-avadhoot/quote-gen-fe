@@ -1689,6 +1689,26 @@ Its comment — *"existing profile defaults such as 'Nagpur' must not silently w
 explicit Costing values"* — was written for a **fresh** profile holding defaults, not a populated
 one holding a real prior identity.
 
+#### ⚠️ "Identity" is `client || sector` — an IMPLEMENTATION CHOICE, not the ruling
+
+**The ruling was "a populated profile is still committed". It did not say which fields constitute
+an identity.** That `_profileHasIdentity = !!(batchProfile.client || batchProfile.sector)` is the
+implementer's choice, and it is recorded here so it reads as a decision rather than an inherited
+assumption.
+
+**What it means in practice:**
+
+* A profile with **either** field set counts as committed, so the guards run.
+* A profile with **only a sector** — no client — still blocks a sector mismatch. **Verified**: with
+  both clients blank so only the sector guard could fire, a PAINTS spec against an ALCOBEV profile
+  was blocked.
+* `plant` and `delivery` are **deliberately excluded**. They have guards of their own, but they
+  default to concrete values (`Nagpur`) on a fresh profile, so including them would make *every*
+  profile "committed" and the seeding block unreachable.
+
+> **If the definition should be narrower (client only) or wider (any of the four), that is a
+> different decision and this line is where to change it.**
+
 #### Site 4 — harmless IN CONTEXT after this fix, NOT resolved
 
 The seeding block that D-24 gates also carries **site 4** of the inheritance-materialisation pattern

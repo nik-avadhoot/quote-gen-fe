@@ -446,6 +446,31 @@ the moves were clean.
    >    run in Node, 9/9, both sides of the threshold)
    > 3. the unverified part **fails visibly rather than silently**
    >
+   > ### 🔧 VERIFICATION TECHNIQUE — two findings that cost real time and will recur
+   >
+   > **1 · Snapshot live state via a `localStorage` KEY, never through tool output.**
+   > Reading the store back through the tool's return value **truncated**, and a lossy backup of
+   > live data is worse than none. Instead, inside the browser:
+   >
+   > ```js
+   > const KEYS=['cbb_batch_autosave','cbb_batchprofile','cbb_quoteitems','cbb_batch_previous'];
+   > const snap={}; KEYS.forEach(k=>snap[k]=localStorage.getItem(k));
+   > localStorage.setItem('__snapshot', JSON.stringify(snap));
+   > ```
+   >
+   > Atomic, survives reloads, and **verifiable byte-identical on save AND on restore** — compare
+   > each key against the snapshot and only then delete the snapshot key. Restore requires a page
+   > reload to hydrate the grid, since `batchRows` loads at mount.
+   >
+   > **2 · Any check needing a RELOAD risks logging the session out, and the implementer cannot
+   > recover alone.** Observed with the backend **UP**, so this is **session expiry** — a distinct
+   > case from the backend-down mechanism recorded against D-19's verification, which only covers
+   > `refreshSession()` failing because nothing is listening.
+   >
+   > **Prefer UI routes over reloads when setting up state.** Clearing a profile field through the
+   > Batch Profile bar, or deleting rows with the grid's × button, updates React state directly and
+   > keeps the Costing spec alive — a reload loses the spec *and* risks the session.
+
    > **Anything failing any one of the three still needs the user's run.** The scope must also be
    > stated honestly in the commit — *what* was verified and *what* was not — as `73a0948` does.
    > **"You verified it last time" is not a reason.** The exception is about the class of change,
