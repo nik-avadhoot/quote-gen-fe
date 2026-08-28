@@ -1438,10 +1438,30 @@ looks, and that must be visible before anyone scopes one.
 | Parameter | Template supports | App allows | The gap |
 |---|---|---|---|
 | **Freight** 🚨 | `BK4` override, else a VLOOKUP per delivery location | per row | **Worst of the five.** `BK3` is written only when `f0.freightOverride` is set, so a row-2 override is **not written AND the VLOOKUP silently computes something else in its place.** A wrong number with no trace, not a missing one |
-| Margin | Box + PP | per row | rows within each type. `BM4` already follows `batchProfile.marginPP` rather than row 1 — **a third behaviour**, better than the others and still not per-row |
-| Waste | Box + PP — feeding **six** columns | per row | rows within each type |
-| Conv | Box + PP | per row | rows within each type |
+| ~~Margin~~ | **per row — `BM` column** | per row | **NO GAP. This row was wrong.** `BM6` is *"Margin %"* and `BM7` is `=IFERROR(IF(B7="Box",$BM$3,$BM$4),0)` — a per-row cell defaulting to the two slots, which BOTH exporters overwrite per row (`excel.js:358-359`, `server.py:409-412`). Margin is fully per-row. Corrected 2026-08-29 while ruling D-27, whose ruling turns on margin being the one parameter the template DOES make per-row |
+| Waste | Box + PP — feeding **six** columns | per row | rows within each type. **Code half fixed for the PP slot (D-27)**; see the three limitations below |
+| Conv | Box + PP | per row | rows within each type. **Code half fixed for the PP slot (D-27)** |
 | Interest | Box + PP | per row | **code half now fixed**; rows within each type remain |
+
+#### The three surviving waste/conv limitations — recorded in full, none of them fixable in code
+
+**Filed here rather than under D-27 because a perfect exporter still loses all three.** D-27's code
+half closes only the case where the PP rows agree with each other.
+
+| # | Limitation | Who loses it |
+|---|---|---|
+| **1** | **Multiple PP rows with different overrides** — one cell, two values. `AY4`/`BA4` take the *first* PP row; every later PP row with a different override is silently costed at the first one's rate | Both exporters, equally |
+| **2** | **`AY3`/`BA3` take `items[0]`'s applied Box waste/conv.** A *later* Box row with a different override is dropped | Both exporters, equally — they read `f0.waste`/`f0.convRate` identically, so this is a limitation with **no divergence** |
+| **3** | 🚨 **If `items[0]` is a PP row** — a batch whose first row is a Plate or Partition — **A1-02 leaves that row's `sp.waste` at the profile default, so `AY3` is the profile default and EVERY Box row's override is dropped** | Both exporters. **The worst of the three** |
+
+> **Limitation 3 is the worst and was in no entry until now.** The others degrade one row; this one
+> silently discards **every** Box-side override in the batch, and it is triggered by nothing more
+> exotic than **the row ordering of the grid**. A Maker who happens to enter a Plate first gets a
+> different quote from one who enters the Box first, with nothing on screen distinguishing the two.
+>
+> It is also the one most likely to be misread as a D-27-style bug and "fixed" in one exporter.
+> **It is not a divergence** — both sides do the same thing — so a one-sided fix would *create* the
+> drift that D-27 is about.
 
 > ### ⚠️ APPROVING `server.py` WOULD NOT HELP — someone will assume it can carry this
 >
@@ -2186,15 +2206,24 @@ logic: **a quote costs differently depending on which path served it.**
 | **Frontend** `excel.js:265,267` | `_nv(_ppSpec.wastePP??_ppSpec.waste??f0.wastePP??f0.waste,5)/100`<br>`_nv(_ppSpec.convRatePP??f0.convRatePP,12.5)` | **`_ppSpec`** — the first `Plate`/`Part-L`/`Part-W` row, i.e. the PP row's **applied** value |
 | **Backend** `server.py:238,239` | `waste_pp = num(f0.get("wastePP"), 5)`<br>`conv_pp = num(f0.get("convRatePP"), 12.5)` | **`f0`** — `items[0]["spec"]` (`:219`), the **first item whatever its row type**, normally the Box |
 
-#### When they coincide, and when they do not
+#### ⚠️ IT IS UNCONDITIONAL, NOT AN EDGE CASE — the first framing of this entry was too weak
 
-`buildSpecFromRow` puts the profile's `wastePP`/`convRatePP` on **every** spec, Box rows included,
-so `f0.wastePP` and `_ppSpec.wastePP` normally hold the same profile value. **They agree, and have
-always appeared to agree.**
+**This entry originally said the backend "diverges when a PP row carries a row-level override."
+That understates it as an occasional disagreement. It is neither occasional nor a disagreement
+about which row to read.**
 
-**They diverge when a PP row carries a ROW-LEVEL override.** `wasteConv_waste`/`wasteConv_conv` are
-applied as `if(isPP) sp.wastePP=+rowWaste`, so the override lands on the **PP row's** spec and
-nowhere else. The frontend reads it; the backend reads the Box row and never sees it.
+`useQuoteActions.js` A1-02 assigns a row-level override as
+`sp.wastePP = isPP ? (rowWaste ?? profWaste) : sp.wastePP` — **the override lands on `sp.wastePP` of
+the PP row and nowhere else. A Box row's `wastePP` is never assigned one.** The backend reads
+`f0.wastePP`, and `f0` is `items[0]`, normally the Box.
+
+> **So the backend reads a field that BY CONSTRUCTION never carries an override.** The PP slot held
+> the profile default **100% of the time** — not merely when the two happened to differ. It does not
+> read the wrong row *sometimes*; it reads a field that cannot hold the value it is looking for.
+
+They *appeared* to agree because `buildSpecFromRow` puts the profile's `wastePP`/`convRatePP` on
+every spec, Box rows included. **Two sources that are equal whenever neither is overridden look
+identical until the moment one of them matters.**
 
 > A Box-row override does **not** diverge — `isPP` is false, so it sets `sp.waste`, and both
 > exporters read `AY3` from `f0.waste`. **The divergence is specific to a PP row-level override**,
@@ -2211,13 +2240,63 @@ state.** Identical in shape to D-18's interest defect and found the same way.
 >
 > D-18 was one defect present identically in both mirrors. **D-27 is the two mirrors having already
 > drifted** — no shared defect to fix, just two implementations that answer the same question
-> differently. It was invisible until someone read both sides for the same parameter, and it would
+> differently.
+>
+> ### 🧨 PORTING HAZARD — `??` IS NOT FALSY-COALESCING, AND THIS IS THE THIRD TIME IT HAS MATTERED
+>
+> **Record this as a standing hazard when porting between `excel.js` and `server.py`, not as a
+> comment in one function.** JavaScript's `??` falls through on `null`/`undefined` **only** — it does
+> *not* skip `""` and does *not* skip `0`. Python's `or` skips both. A chain ported as `or` would
+> swallow a legitimate `0`, and **several sectors set `wastePP`/`convRatePP` to 0** (CLAUDE.md names
+> this explicitly). `num()` and `_nv()` already agree — default on `None`/`undefined`/`""` — so the
+> *helpers* mirror correctly and only the *chaining operator* can drift.
+>
+> `server.py` gains `first_set(*vals)` for exactly this: `next((v for v in vals if v is not None), None)`.
+>
+> **The three instances so far in this pass:** D-25's finding that `??` preserves `""` so a blank
+> sails into `calcCosting` and yields silent `NaN`; the D-25 site-3 misclassification, where the
+> implementer judged `spec.waste ?? p.waste ?? 5` on its shape without checking the operator; and
+> this port. **Three different failures of the same distinction is a pattern, not a coincidence.** It was invisible until someone read both sides for the same parameter, and it would
 > have stayed invisible indefinitely: neither side is wrong on its own terms, and no gate compares
 > them.
 >
-> **Which one is correct is a ruling, not a derivation.** The frontend's reading is the more
-> obviously *intended* one — a PP row's override should reach the PP cells — but that is an
-> argument, not a decision, and the workbook's own semantics for `AY4`/`BA4` are the authority.
+#### ✅ RULED 2026-08-28 — `excel.js` is correct, `server.py` is wrong. The template settles it
+
+Answered from the workbook, not from which implementation reads better. Three findings, **the third
+being the one that decides it**:
+
+1. **There is no per-row waste or conv input.** Row 6 headers, read from the file: `AY6` is
+   *"Sheet Wt_exWst (kg/box)"* and `BA6` is *"Conv Cost (Rs)"* — computed **outputs**. Nothing in
+   A–BT is a per-row waste% or conv-rate input. `$AY$4` is therefore not a default rows may deviate
+   from; it is **the only waste any PP row can have.**
+2. **`$AY$4` is load-bearing on cost, not just AY7's divisor.** It also appears in `AS7:AW7` — every
+   layer weight is grossed up by `*(1+IF(B7="Box",$AY$3,$AY$4))`, feeding `AX7` Paper Consumed →
+   `AZ7` Material Cost, and `BA7 = AX7*IF(B7="Box",$BA$3,$BA$4)`. A wrong `$AY$4` is a wrong
+   material cost.
+3. **The template deliberately makes margin per-row and these three not.**
+
+> ## 🔑 FINDING 3 IS THE RULING, AND ITS EXACT WORDING MATTERS
+>
+> **`BM6` is "Margin %" and `BM7` is `=IFERROR(IF(B7="Box",$BM$3,$BM$4),0)`** — a per-row cell
+> **pre-filled with a formula that falls back to the two slots**, which both exporters overwrite
+> with a literal when a row's margin differs (`excel.js:358-359`, `server.py:409-412`). That is a
+> complete per-row override mechanism, built deliberately.
+>
+> **Waste, conv and interest have no such cell.** Their column-position equivalents — `AY`, `BA`,
+> `BJ` — are computed costs, not writable rate inputs.
+>
+> **"The template does not support per-row" and "the template DELIBERATELY does not support per-row"
+> lead to different decisions if anyone revisits the workbook.** The author demonstrably knew how to
+> make a parameter per-row — margin proves the pattern was available and understood — and did not
+> apply it to these three. **That is design intent, not absence.** Anyone adding per-row waste
+> columns later is overriding a choice, not filling a hole, and should know which they are doing.
+
+Writing the profile default when the rows were costed at an override therefore produces a workbook
+that **cannot reproduce its own quote**. The frontend already states this intent in
+`useQuoteActions.js:319-322` (A1-02): *"used for Excel export columns AY3/AY4/BA3/BA4 … reflects the
+exact effective values the engine used, not the profile defaults."* **The semantic was settled on
+the frontend; `server.py` never received it.**
+
 
 ### D-26 — typing a SET Code silently skips the Nos/Set auto-fill
 
