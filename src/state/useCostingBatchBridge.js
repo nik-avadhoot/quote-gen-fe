@@ -173,8 +173,35 @@ export function useCostingBatchBridge(st){
     const convOverride=(!_rwc.isConvBlank&&Math.abs(specConv-libConv)>0.001)?specConv:"";
     // ─────────────────────────────────────────────────────────────────────────
 
+    // ── D-16: do NOT materialise derived dims back into the row ───────────────
+    // loadBatchRowIntoCosting reads the row through autoCalcPPDims (:40), so a
+    // Plate/Partition row whose L/W are BLANK arrives in Costing carrying the
+    // values derived from its parent Box. Writing those straight back turns a
+    // field that was blank by design into a concrete number: autoCalcPPDims then
+    // returns early forever (needsL/needsW false), isAutoDim at BatchGrid.jsx:388
+    // flips false, and the row SILENTLY STOPS TRACKING ITS PARENT. Change the Box
+    // afterwards and the Part no longer follows. Invisible when it happens,
+    // because the number written is identical to the one displayed.
+    //
+    // Same delta shape as wasteOverride above, and the same 0.001 tolerance:
+    // write only what the Maker actually CHANGED. Both directions resolve through
+    // autoCalcPPDims, so there is one derivation, not two that can disagree.
+    const _derivedDims=autoCalcPPDims(row);
+    const _dimBack=k=>{
+      const cur=spec[k];
+      if(cur===""||cur==null)return"";              // nothing typed — stay inherited
+      if(row.itemType==="Box")return cur;           // Box rows never auto-derive
+      const d=_derivedDims[k];
+      // No parent to derive from: write the value. Deliberately asymmetric —
+      // writing a number that may be redundant is recoverable; dropping one the
+      // Maker can see on screen is not.
+      if(d===""||d==null)return cur;
+      return Math.abs(+cur-+d)<0.001?"":cur;        // unchanged — leave it inheriting
+    };
+
     const rowPatch={
-      L:spec.L||"",W:spec.W||"",H:spec.H||"",ups:spec.ups||1,
+      // H and ups are untouched: autoCalcPPDims derives only L and W.
+      L:_dimBack("L"),W:_dimBack("W"),H:spec.H||"",ups:spec.ups||1,
       // G5: SKU/Product is editable in REVIEW and must be pushed back so the grid reflects the correction
       product:spec.product||"",
       // B1: nosPerSet was missing — a Maker correcting partition count in deep-dive lost it on Calculate All
