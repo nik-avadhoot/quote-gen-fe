@@ -265,8 +265,20 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
   sc(ws_cbb,'BA4',_nv(_ppSpec.convRatePP??f0.convRatePP,12.5));  // BA4=Conv Cost Board/PP (Rs/kg)
   sc(ws_cbb,'AY3',_nv(f0.waste,5)/100);      // AY3=Waste% decimal (RS4)
   sc(ws_cbb,'AY4',_nv(_ppSpec.wastePP??_ppSpec.waste??f0.wastePP??f0.waste,5)/100); // AY4=Waste% decimal (Board/PP) — uses PP row's applied value
-  sc(ws_cbb,'BJ3',_nv(f0.interest,0.5)/100); // BJ3=Interest% decimal
-  sc(ws_cbb,'BJ4',_nv(f0.interest,0.5)/100); // BJ4=same for PP rows
+  // D-18: the template models these as BOX vs PP — every data row computes
+  // IF(B7="Box",$BJ$3,$BJ$4). TWO slots, not one. BJ4 was written with the BOX
+  // row's interest, so the code narrowed the template's two slots to one value
+  // and every PP row was costed at the Box row's rate.
+  //
+  // Same treatment AY4/BA4 already get from _ppSpec three lines above — that was
+  // never a "partial patch" of a per-row problem, it was filling the second
+  // supported slot. This does the same for interest.
+  //
+  // What remains is a TEMPLATE limitation, not a code one: per-ROW overrides
+  // (interest, margin, waste, conv, freight) have nowhere to go, because the
+  // workbook offers exactly two values per parameter. See D-18's entry.
+  sc(ws_cbb,'BJ3',_nv(f0.interest,0.5)/100);                    // BJ3=Interest% decimal, Box rows
+  sc(ws_cbb,'BJ4',_nv(_ppSpec.interest??f0.interest,0.5)/100);  // BJ4=PP rows' own interest
   sc(ws_cbb,'BM3',_nv(f0.margin,8)/100);     // BM3=Box margin decimal
   sc(ws_cbb,'BM4',_marginPP/100);             // BM4=PP margin decimal
   // Freight override — BK3 has VLOOKUP formula; only override if explicitly set
