@@ -277,7 +277,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 
 | # | Defect | Severity | Status |
 |---|---|---|---|
-| D-1 | Glass SKU Type never reaches the batch grid | High | **FIXED** — `06c1522`, written before the freeze. ⚠️ Its accepted limitation has surfaced as a live UI inconsistency — see **D-22** |
+| D-1 | Glass SKU Type never reaches the batch grid | High | **FORWARD LEG FIXED** — `06c1522`. ⚠️ **The RETURN leg is still open and now observed in use**: Deep Dive blanks `skuType` (`costing.js:213`), so the Costing↔Batch↔Deep-Dive loop loses the Glass SKU on send-as-new-row. Push masks it via its row fallback. Needs `engine/costing.js` approval. Its accepted limitation also surfaced as **D-22** |
 | ~~D-2~~ | New Batch warns about what IS recoverable and hides what ISN'T | High | **FIXED** — Stage 4. Spec preserved, confirm rewritten to three grouped lines, `setSetAutoFill` reset removed as an extension of the ruling. Creates **PM-6**, which it does not close. Reduces D-13's edge but **does not resolve it** |
 | D-3 | Backup silently discards the two raw-string keys | High | Open |
 | D-4 | Identity freeze is lost on reload while the batch survives | High | Open |

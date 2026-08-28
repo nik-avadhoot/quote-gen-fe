@@ -1174,6 +1174,30 @@ Every guard is falsy-safe — `row.glassSKUType||""`, `isAlcoPart && row.glassSK
 today, and the existing *"⚠️ Glass SKU Type not yet set on the parent Box"* toast already says what
 to do. No backfill.
 
+> ### 🔴 THE RETURN LEG IS STILL OPEN AND HAS NOW BEEN OBSERVED IN USE
+>
+> **Reported live by the product owner at Stage 4:** the
+> Costing → Send to Batch → Deep Dive → Send/Push loop does not carry `glassSKUType`.
+> **This entry predicted it and it was never built.** D-1 is marked FIXED because the *forward* leg
+> shipped at `06c1522`; the return leg below was scoped as its own commit and left.
+>
+> **Traced, and the loss is asymmetric — which is why it went unnoticed:**
+>
+> | Step | Behaviour |
+> |---|---|
+> | Costing → **Send** | `useCostingBatchBridge.js:558` writes `spec.skuType`, falling back to blank — the row gets the value ✓ |
+> | Row → **Deep Dive** | `buildSpecFromRow` sets `skuType:""` (`engine/costing.js:213`), so **the Costing form loses it immediately** ✗ |
+> | Deep Dive → **Push** | `:214` writes `spec.skuType`, falling back to **`row.glassSKUType`** — the row's own value survives, so **push MASKS the loss** |
+> | Deep Dive → **Send as a NEW row** | `:558` has no row to fall back on, so the new row gets **`""`** ✗ |
+>
+> **Push is protected by the fallback D-1 already documents as an accepted limitation; Send is not.**
+> The blank in the form is visible immediately, but the data loss only materialises on the
+> send-as-new-row path — which is why the loop appears to work.
+>
+> ⚠️ **The fix touches `engine/costing.js`, which is off-limits without a deliberate decision.**
+> D-1 argues it is safe — `server.py` has zero references to `skuType` or `glass`, so there is no
+> mirror to drift — but **that argument is not the approval.** Needs the product owner's call.
+
 #### Return leg — `buildSpecFromRow` hardcodes `skuType:""`
 `engine/costing.js:213` blanks the field, so Deep Dive from a row that has `glassSKUType` loses it.
 **No mirroring risk: `server.py` has zero references to `skuType` or `glass`** — the field never
@@ -2035,7 +2059,38 @@ leave a misclassified entry in the wrong list.
 | Test | Answer |
 |---|---|
 | Does the masters migration make this tractable? | **No.** It is a UI entry-point problem, not an identity one. Entities change nothing about it |
-| Is live data wrong today? | **Yes.** `nosPerSet` stays at its default and `qtyPerSet` multiplies the SET rate (`engine/costing.js:212`) — a **wrong SET total**, not friction |
+| Is live data wrong today? | **Yes** — but see the correction below. The wrong number reaches the **client-facing quote**, not the costing |
+
+> ### ⚠️ CORRECTED — the consequence was overstated, and in the direction that matters
+>
+> This entry first claimed `qtyPerSet` *"multiplies the SET rate at `engine/costing.js:212`"*,
+> producing a wrong SET **total**. **That is wrong.** Line 212 is the only mention of `qtyPerSet` in
+> the engine and it is an **assignment inside `buildSpecFromRow`, not arithmetic**. `calcCosting`
+> never reads it.
+>
+> **So the per-box rate, material cost, margin and MOQ are all correct.** The claim came from a grep
+> hit that was never checked for read-versus-write — **Mode B, in the implementer's own analysis.**
+>
+> **What is actually wrong is client-facing, which is why the entry stands:**
+>
+> | Site | Effect of a stale `nosPerSet` |
+> |---|---|
+> | `excel.js:324` / `server.py:337` → **`BS{r}`** | The workbook's **Nos/Set** column shows `1` instead of the true count |
+> | Template **`BT`** — *SET Rate Contribution (Rs/set)* | Computed from `BS`, so the per-set contribution is wrong |
+> | `pdf.js:79,81` | The PDF's *"SET: X — combined rate ₹N/set"* is wrong |
+>
+> **A Maker quoting a five-piece partition set shows the customer the price of one piece.** A wrong
+> number on a document that leaves the building — but not a costing error, and the entry should not
+> be read as one.
+
+#### Scope is narrower than recorded
+
+The auto-fill is gated on `batchProfile.sector === "ALCOBEV"` **and** `itemType` in
+`Part-L`/`Part-W`. Rows **sent from Costing** take `nosPerSet` from `spec.qtyPerSet`
+(`useCostingBatchBridge.js:571`) and never reach `handleConfirm` at all.
+
+**So D-26 affects exactly: ALCOBEV Part-L/Part-W rows created IN THE GRID, where the Maker types the
+SET Code instead of confirming the inherited one.** Narrow — and an ordinary thing to do.
 
 #### Mechanism — two entry points to one resolution
 
