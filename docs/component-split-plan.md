@@ -954,9 +954,15 @@ behaviour changes never share a commit. If a guard breaks, it must be unambiguou
 > |---|---|---|
 > | **D-5** | a guard that "never lets a smaller batch overwrite a larger one" | fires only at mount; every other path writes straight through it, leaving a 1-row residue |
 > | **D-7** | four comparison sites | **eight sites, six files, three conventions** |
+> | **D-18** | "all four sheet-level parameters" | **five** — `freightRowOverride` was never named, and it is the **worst** of them |
 >
 > **Cause: triage stopped at the first instance.** The entry was written from the example that
 > prompted it, and the survey was never done.
+>
+> **D-18 is the fourth instance, and it was the implementer's count, not the register's** — "all four
+> sheet-level parameters" was asserted in a proposal without enumerating the row-level override
+> fields. Enumerating them took one grep and found five. **The habit is not specific to the original
+> triage; it recurs whenever a set is described from memory instead of derived.**
 >
 > **Remedy: treat a stated site count as a FLOOR and re-derive the set before proposing.** Minutes to
 > do; the cost of skipping it has been a doubled scope and a refinement.
@@ -1319,38 +1325,103 @@ Observed at Phase 8. Everything else in the export is correct.
 1. the export writes a **stale** interest value, or
 2. the export writes **nothing** and the template's own cell stands.
 
-> ## RESOLVED AT THE DEFECT PASS — and it is a CATEGORY, not one cell
+> ## PARTLY RESOLVED, PARTLY A TEMPLATE LIMITATION — and the earlier framing was wrong
 >
-> **Neither of the two.** `export/excel.js:251–252` writes `f0.interest` — **`items[0]`'s** interest
-> — into `BJ3`/`BJ4`. Those are *sheet-level parameter cells*: every data row from `DATA_START=7`
-> onward computes against them. Meanwhile `useQuoteActions.js:266` correctly folds each row's
-> `interestOverride` into that item's own `sp.interest`, so the data going in is right.
+> **The recorded framing — "sheet-level parameters, one value for all rows" — was wrong**, and so was
+> the reading of `_ppSpec` as a prior partial patch. Both are corrected below against the actual
+> workbook.
+
+#### ✅ THE CODE HALF — fixed in BOTH exporters
+
+> ### ⚠️ TWO EXPORTERS FILL THIS TEMPLATE, AND THEY MUST NOT DRIFT
 >
-> **The app models interest per-row. The template models it per-sheet.** Every row after the first
-> is costed in the workbook at row 1's interest rate. Row 1 exports correctly, which is why the
-> defect presents as intermittent rather than total — and why "does not reach the file" fitted both
-> original hypotheses badly.
+> `/export` POSTs to **`quote-gen-be/server.py`** (openpyxl) and falls back to
+> **`quote-gen-fe/src/export/excel.js`** (xlsx-js-style) only when the backend is unreachable.
+> **Both write the same parameter cells.**
 >
-> ### Three siblings have the identical shape
+> **`server.py:245-246` carried the identical defect** — `ws_cbb["BJ3"] = ws_cbb["BJ4"] = interest/100`
+> — while its siblings all took proper pairs (`conv_box`/`conv_pp`, `waste`/`waste_pp`,
+> `margin`/`margin_pp`). **Interest was the one narrowed parameter, narrowed the same way in two
+> independent implementations.**
 >
-> | Cells | Written from | Per-row override |
-> |---|---|---|
-> | `BJ3` / `BJ4` | `f0.interest` | **yes** — `row.interestOverride`, editable at `BatchGrid.jsx:646` |
-> | `BM3` | `f0.margin` | confirm during the fix |
-> | `AY3` / `BA3` | `f0.waste` / `f0.convRate` | confirm during the fix |
-> | `AY4` / `BA4` | `_ppSpec` with `f0` fallback | **already partially patched** |
+> **Fixing only the frontend would have created a drift where a quote costs differently depending on
+> whether the backend was reachable** — worse than being consistently wrong, and undetectable from
+> the output. `server.py` was opened by explicit approval for these lines alone. §6 rule 3 applies:
+> **change one, change both.**
+
+> ### 🔎 A PRE-EXISTING DRIFT, found while matching them — NOT fixed, NOT in the approval
 >
-> 🛑 **`excel.js:244–250` is a prior partial patch of this same defect.** The `FIX:` comment and the
-> `_ppItem` / `_ppSpec` workaround exist because someone hit this once for the PP row and repaired
-> that one instance without generalising. **Fixing interest the same way makes the same mistake a
-> third time.** Whatever lands must decide the per-row-vs-per-sheet question for all four.
+> The two exporters already disagree on **waste and conv**:
 >
-> ⚠️ **The ASI landmine is five lines from the fix site.** `const _ppItem=items.find(...) // R-2;`
-> at `excel.js:246` carries its statement terminator **inside the comment**; the interest writes are
-> at `251–252`. Same screen. No reflow, no Prettier, no `eslint --fix` — see the standing rules.
+> | | `AY4` / `BA4` source |
+> |---|---|
+> | `excel.js` | `_ppSpec.wastePP ?? _ppSpec.waste ?? f0.wastePP ?? f0.waste` — the **PP row's applied** value |
+> | `server.py` | `f0.get("wastePP")` — the **first item's** `wastePP` field |
 >
-> **Still the user's to verify:** opening an exported workbook confirms the rendered result. The
-> mechanism is settled from source; the output is not.
+> These coincide until a PP row carries a row-level waste/conv override, at which point the two
+> exporters produce different workbooks from the same quote. **Pre-existing, out of the approved
+> scope, and recorded here rather than fixed.**
+
+`BJ3` and `BJ4` are **two slots the template offers**, and the code wrote the Box row's interest into
+both — a code-level narrowing on top of the template's limit, so every PP row was costed at the Box
+row's rate. `BJ4` now reads `_ppSpec.interest ?? f0.interest`, exactly as `AY4`/`BA4` already do.
+
+#### 🛑 THE TEMPLATE HALF — a limitation, not a fix. Read this before attempting one.
+
+**1 · The template models BOX vs PP, NOT per-sheet.** Every parameter is
+`IF(B7="Box", row3, row4)` — **two slots, not one.** The gap is not "one value for all rows"; it is
+**two values for all rows**, split by row type. Verified in
+`quote-gen-be/CFB_Quotation_Master_v7.xlsx`:
+
+```
+AY7 = IFERROR(AX7/(1+IF(B7="Box",$AY$3,$AY$4)),0)     waste
+BA7 = IFERROR(AX7*IF(B7="Box",$BA$3,$BA$4),0)          conv
+BJ7 = IFERROR(SUM(AZ7:BI7)*$BJ$3,0)                    interest
+BM7 = IFERROR(IF(B7="Box",$BM$3,$BM$4),0)              margin
+BK7 = IFERROR(AY7*IFERROR(IF($BK$4="",VLOOKUP(E7,…),$BK$4),0),0)   freight
+```
+
+**2 · `_ppSpec` WAS NOT A PARTIAL PATCH.** It filled **the second of the template's two supported
+slots** — the correct and complete treatment for a Box/PP model. It was cited twice in this document
+as evidence of a prior partial fix; **that reading is withdrawn.** The interest fix above is the same
+act, not a repetition of a mistake.
+
+**3 · 🪤 THE COLUMNS ARE DUAL-PURPOSE — this is the trap a future session will walk into.**
+Rows 3/4 hold the parameter; rows 7+ hold the computed result **in the same column**. `BM6`'s header
+reads *"Margin %"*, so `BM7` looks exactly like a per-row margin input. **It is
+`=IFERROR(IF(B7="Box",$BM$3,$BM$4),0)`.**
+
+> **Writing a per-row value there overwrites the formula.** That row then reads correctly — and every
+> other row is still on the formula. `BN7 = BL7*BM7` consumes it, so the workbook produces a
+> silently inconsistent quote. **The "obvious" fix is worse than the defect.**
+
+**4 · `$AY$3` reaches beyond its own column.** `AS7`, `AT7`, `AU7`, `AV7`, `AW7` and `AY7` all apply
+the waste parameter — **six columns, not one.** Even a deliberate template change is wider than it
+looks, and that must be visible before anyone scopes one.
+
+#### The per-parameter gap — this table is the specification for whoever takes the template on
+
+**Freight is the worst, and it is listed first for that reason.**
+
+| Parameter | Template supports | App allows | The gap |
+|---|---|---|---|
+| **Freight** 🚨 | `BK4` override, else a VLOOKUP per delivery location | per row | **Worst of the five.** `BK3` is written only when `f0.freightOverride` is set, so a row-2 override is **not written AND the VLOOKUP silently computes something else in its place.** A wrong number with no trace, not a missing one |
+| Margin | Box + PP | per row | rows within each type. `BM4` already follows `batchProfile.marginPP` rather than row 1 — **a third behaviour**, better than the others and still not per-row |
+| Waste | Box + PP — feeding **six** columns | per row | rows within each type |
+| Conv | Box + PP | per row | rows within each type |
+| Interest | Box + PP | per row | **code half now fixed**; rows within each type remain |
+
+> ### ⚠️ APPROVING `server.py` WOULD NOT HELP — someone will assume it can carry this
+>
+> The backend fills **the same v7 template** with the same hard-coded cell addressing, so it inherits
+> the identical ceiling. **The constraint is the workbook, not the code that fills it.** No amount of
+> access to `server.py` creates a per-row cell that does not exist.
+
+> ### 📋 OPEN QUESTION — not decided, and not this pass's to decide
+>
+> **Whether the template changes at all.** Different work, different owner, and it interacts with
+> `server.py`'s hard-coded addressing and the masters migration. The table above is the
+> specification for whoever takes it.
 
 ### D-14 … D-17 — observations from Phase 7b verification
 

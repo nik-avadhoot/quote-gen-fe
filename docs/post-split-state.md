@@ -288,7 +288,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | ~~D-15~~ | Unconfirmed SET Code blocks only the offending row | — | **CLOSED — CORRECT BY DESIGN.** Ruled per-row |
 | ~~D-16~~ | **Push after Deep Dive severs a row's link to its parent Box** | High | **FIXED** — Stage 4, `c5f3e85`. Delta-aware write: only what the Maker changed. **REWRITTEN at Stage 3.** Trigger is Push, not Unlink; Unlink writes nothing to the row and cannot cause it. `pushCostingToBatchRow` writes back the L/W that Deep Dive *derived* from the parent, so `autoCalcPPDims` returns early forever and the row stops tracking. Invisible: the number is identical when it happens. Same shape as **D-9** |
 | D-17 | Add-on pin control is an unlabelled circled-plus | Cosmetic | Open — see cleanup list |
-| D-18 | Row-level Interest override missing from xlsx export | High | Open — **RESOLVED at source, and it is a category.** See below |
+| D-18 | Row-level overrides do not reach the exported xlsx | High | **PART FIXED** — Stage 4. Interest's `BJ4` now takes the PP rows' own value. **The rest is a TEMPLATE limitation**: the workbook models Box-vs-PP (two slots), not per-row, so freight/margin/waste/conv have nowhere to go. Freight is worst — its VLOOKUP silently substitutes. `server.py` approval would not help |
 | D-19 | `exportExcelFull` throws `ReferenceError` on every call | High | Open — **in D-3's scope.** Promoted from the §4 cleanup list; D-3 is not discharged without it |
 | D-20 | `+ New Construction` gives no visible feedback — draft appended off-screen | UX | Open — observation, Stage-1 verification |
 | D-21 | Defaults/Masters screen cut off at the bottom, no scroll affordance | Layout | Open — observation, Stage-1 verification |
@@ -301,26 +301,24 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 the Construction Library tab instead of opening the slide-over overlay. The per-row route into the
 overlay opens correctly. Filed against D-16 and D-6.
 
-> ### D-18 is a CATEGORY, not one cell — resolved at source, do not fix interest alone
+> ### D-18 — PART fixed in code, PART a template limitation
 >
-> The two recorded possibilities were *writes a stale value* and *writes nothing*. **Neither.**
-> `export/excel.js:251–252` writes `f0.interest` — **`items[0]`'s** value — into `BJ3`/`BJ4`, which
-> are *sheet-level* parameter cells that every data row from row 7 computes against.
-> `useQuoteActions.js:266` correctly folds each row's `interestOverride` into that item's own spec.
+> **The original framing here was wrong and is withdrawn.** It said the export writes one value for
+> all rows, and cited `AY4`/`BA4` as "already partially patched". Neither holds.
 >
-> **The app models interest per-row; the template models it per-sheet. Every row after the first is
-> costed in the workbook at row 1's rate.** Row 1 is correct, which is why it presents as
-> intermittent.
+> **The template models BOX vs PP — two slots per parameter**, not one:
+> every data row computes `IF(B7="Box",$row3,$row4)`. `_ppSpec` was **not** a partial patch; it
+> filled the second supported slot correctly.
 >
-> **Three siblings share the shape** — `BM3` from `f0.margin`, `AY3`/`BA3` from `f0.waste` /
-> `f0.convRate`, and `AY4`/`BA4` which are **already partially patched**. The `FIX:` comment and
-> `_ppSpec` workaround at `excel.js:244–250` exist because someone hit this once for the PP row and
-> repaired that instance without generalising. **Fixing interest the same way makes the same mistake
-> a third time.**
+> **Interest was the real code defect** — `BJ3`'s value was written into `BJ4` too, so PP rows were
+> costed at the Box row's rate. **Fixed at Stage 4.**
 >
-> 🛑 **The ASI landmine is five lines from the fix site.** `const _ppItem=items.find(...) // R-2;`
-> at `excel.js:246` has its terminator inside a comment; the interest writes are at `251–252`. See
-> §6 rule 1 — no reflow, no Prettier, no `eslint --fix`, anywhere near this.
+> **The remainder is a template limitation.** Per-row overrides for **freight** (worst — the
+> VLOOKUP silently substitutes), margin, waste and conv have no per-row cell to target. Approving
+> `server.py` would **not** help: it fills the same template with the same addressing.
+>
+> Full analysis and the per-parameter gap table are in
+> [`component-split-plan.md`](component-split-plan.md).
 
 Sequencing, clusters and the Stage-1 rulings for the defect pass are in
 [`defect-pass-plan.md`](defect-pass-plan.md).

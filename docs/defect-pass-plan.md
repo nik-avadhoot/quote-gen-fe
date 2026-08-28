@@ -53,40 +53,31 @@ D-18 · **D-19** (new — see §3).
 Three things surfaced while reading the register in final code. Each replaced a piece of recorded
 triage with a determination.
 
-### 2.1 D-18 is a CATEGORY, not one cell — and it is resolved at source
+### 2.1 D-18 — PART code fix, PART template limitation. The original framing was WRONG.
 
-The register left D-18 as one of two possibilities: *the export writes a stale value*, or *it writes
-nothing and the template cell stands*. **Neither, exactly.**
+**Recorded first as "sheet-level parameters, one value for all rows", with `_ppSpec` cited as a prior
+partial patch. Both readings are withdrawn**, corrected against the actual workbook at Stage 4.
 
-`export/excel.js:251–252` writes `f0.interest` — **`items[0]`'s** interest — into `BJ3`/`BJ4`, which
-are *sheet-level parameter cells*. Every data row from row 7 computes against them. Meanwhile
-`useQuoteActions.js:266` correctly folds each row's `interestOverride` into that item's own
-`sp.interest`.
+**The template models BOX vs PP — two slots, not one.** Every data row computes
+`IF(B7="Box",$row3,$row4)`. So the gap is not one value for all rows; it is **two values for all
+rows**, split by row type.
 
-**The app models interest per-row; the template models it per-sheet. Every row after the first is
-costed in the workbook at row 1's interest rate.** Row 1 exports correctly, which is why the defect
-presents as intermittent.
+**`_ppSpec` was therefore never a partial patch.** It filled the *second* of the two supported slots
+— the correct and complete treatment. Interest was the one parameter where the code wrote the Box
+value into **both** slots, narrowing the template further than it needed to. **That half is fixed.**
 
-> ### ⚠️ Do NOT fix interest alone
->
-> Three sibling parameters have the identical shape, all reading `f0` into sheet-level cells:
->
-> | Cells | Written from | Per-row override exists? |
-> |---|---|---|
-> | `BJ3` / `BJ4` | `f0.interest` | **yes** — `row.interestOverride`, `BatchGrid.jsx:646` |
-> | `BM3` | `f0.margin` | to be confirmed during the fix |
-> | `AY3` / `BA3` | `f0.waste` / `f0.convRate` | to be confirmed during the fix |
-> | `AY4` / `BA4` | `_ppSpec` with `f0` fallback | **already partially patched** |
->
-> **`excel.js:244–250` is a prior partial patch of this exact defect.** The `FIX:` comment and the
-> `_ppItem` / `_ppSpec` workaround exist because someone hit this once for the PP row and repaired
-> that one instance without generalising. Fixing interest the same way makes the same mistake a
-> third time.
+**The rest is a template limitation**, not a code defect: per-row overrides for freight, margin,
+waste and conv have nowhere to go, because no per-row cell exists. **Freight is the worst** — its
+sheet cell is written only when row 1 has an override, so a row-2 override is neither written nor
+inert: the template's VLOOKUP computes something else in its place.
 
-> 🛑 **`excel.js` hazard — the ASI landmine is five lines from the fix site.**
-> `const _ppItem=items.find(...) // R-2;` at `excel.js:246` has its statement terminator **inside a
-> comment**. The interest writes are at `251–252`. Same screen. Any editor with format-on-save, any
-> Prettier run, any `eslint --fix` silently breaks the build here. See §6 rule 1.
+> 🪤 **The trap, recorded because a future session will try it:** the columns are dual-purpose.
+> `BM6`'s header says "Margin %" and `BM7` looks like a per-row input — it is
+> `=IF(B7="Box",$BM$3,$BM$4)`. Writing a value there overwrites the formula, makes that one row
+> correct, and leaves the rest on the formula.
+
+**Full analysis, the per-parameter gap table, and why `server.py` approval would not help are in
+D-18's entry in [`component-split-plan.md`](component-split-plan.md).**
 
 ### 2.2 Every backup on disk carries the D-3 signature — the fixture included
 
