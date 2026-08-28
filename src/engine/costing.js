@@ -210,7 +210,12 @@ export const buildSpecFromRow=(row,constEntry,prof)=>{
     printing:0,packing:0,stitching:0,handling:0,coating:0,moqCharge:0,other:0,unloading:0,
     salesMOQ:row.salesMOQ||"",volume:row.volume||"",
     rowType:row.itemType||"Box",setCode:row.setCode||"",qtyPerSet:row.nosPerSet||1,
-    flutingBCF:0.10,skuType:"",
+    // D-1 RETURN LEG: was hardcoded skuType:"", which blanked the Glass SKU on
+    // every Deep Dive. The loss was asymmetric and so went unnoticed: pushing
+    // back falls back to row.glassSKUType and survives, but sending as a NEW row
+    // has no row to fall back on and wrote blank. Costing named it skuType, the
+    // grid names it glassSKUType — same value, D-1's mapping.
+    flutingBCF:0.10,skuType:row.glassSKUType||"",
     paymentDisc:prof.paymentDisc||"30",
     customerType:prof.customerType||"existing",
     priceContext:prof.priceContext||"unknown",
