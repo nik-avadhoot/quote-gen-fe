@@ -278,7 +278,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | # | Defect | Severity | Status |
 |---|---|---|---|
 | D-1 | Glass SKU Type never reaches the batch grid | High | **FIXED** — `06c1522`, written before the freeze. ⚠️ Its accepted limitation has surfaced as a live UI inconsistency — see **D-22** |
-| D-2 | New Batch warns about what IS recoverable and hides what ISN'T | High | Open — interacts with D-13 |
+| ~~D-2~~ | New Batch warns about what IS recoverable and hides what ISN'T | High | **FIXED** — Stage 4. Spec preserved, confirm rewritten to three grouped lines, `setSetAutoFill` reset removed as an extension of the ruling. Creates **PM-6**, which it does not close. Reduces D-13's edge but **does not resolve it** |
 | D-3 | Backup silently discards the two raw-string keys | High | Open |
 | D-4 | Identity freeze is lost on reload while the batch survives | High | Open |
 | D-6 | Backup filenames cannot distinguish two same-day snapshots | Medium | Open |

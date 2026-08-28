@@ -1523,6 +1523,21 @@ into a new batch", no "park it", no "save before proceeding".
 > a Maker can cost something independently while a batch is open — but nothing lets that work
 > *graduate* into a batch of its own without first destroying it.
 
+> ### ⚠️ D-2's FIX REDUCES D-13's SHARPEST EDGE — that is NOT resolution
+>
+> Since D-2 (Stage 4), `+ New Batch` **preserves the Costing spec**, so the two guards that point the
+> user at it no longer instruct them into destroying their scratchpad. **A user who follows the
+> instructions no longer loses work** — which was D-13 stated at its sharpest.
+>
+> **D-13 IS NOT ADDRESSED.** The capability is still missing:
+> * the old batch is **not reachably archived** — `cbb_batch_previous` exists with no reader
+> * the Maker **still cannot hold two batches** concurrently
+> * nothing lets scratchpad work *graduate* into a batch of its own; it survives by accident of the
+>   spec not being cleared, not by design
+>
+> **Do not read reduced severity as resolution.** D-13 remains a product decision and a design input
+> to the masters work.
+
 > **NO FIX WINDOW. Do not propose a fix.** Post-Phase-8 this is a design question the user answers
 > first: what should "promote scratchpad to a new batch" do with the existing batch — archive it,
 > require it be sent to Quote Items first, or hold two batches concurrently? Then, and only then,
@@ -2183,7 +2198,23 @@ divergence that preceded it is.
 > never diverge in the first place, making the banner a genuine choice rather than the only path
 > back to one's own data.
 
-### D-2 — New Batch warns about what IS recoverable and hides what ISN'T
+### D-2 — ✅ FIXED at Stage 4 — New Batch warns about what IS recoverable and hides what ISN'T
+
+> **Resolved.** `startNewBatch` no longer calls `setSpec` — **the Costing scratchpad survives.** The
+> confirm was rewritten from four named items out of ten state changes into **three lines grouped by
+> effect**, naming what changes rather than listing setters.
+>
+> **`setSetAutoFill(true)` was removed as an EXTENSION of the same ruling**, not a separate change:
+> `setAutoFill` is the "auto-derive SET Code from Mat Code" checkbox in the Costing form — workspace
+> configuration, the same category as the spec. Resetting it would have made *"keeps your Costing
+> spec"* partly false, since the preserved spec would stop behaving as the Maker left it.
+>
+> **No recoverability is claimed.** `cbb_batch_previous` holds the cleared batch but has no reader,
+> so from the Maker's position it is gone; an unqualified *"recoverable"* would invite reliance on a
+> route that does not exist.
+>
+> **The retained client and sector are NAMED in the confirm** — see **PM-6**, the hole this fix
+> creates and does not close.
 
 `useCostingBatchBridge.js` → `startNewBatch` (lifted from the Batch Profile bar JSX in the Phase 7
 prerequisite). The confirm reads:

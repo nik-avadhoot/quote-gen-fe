@@ -133,6 +133,93 @@ than "pin", with `title` as its only explanation. That is cosmetic and in scope.
 behavioural and was found after the freeze**, so it is here. The glyph fix touches the same lines;
 whoever does it should read this first and deliberately choose not to fix it, rather than not notice.
 
+### PM-6 — a stale Costing spec silently seeds a legitimately EMPTY batch profile
+
+**Severity proposed: HIGH.** Silent wrong-customer attribution, no guard, and **no ruled fix covers
+it.** Found at Stage 4 while ruling D-2. **Recorded here rather than as D-26 because of the scope
+freeze** — it does not block D-2, which ships with mitigation. If you would rather it sat in the
+register, it is a one-line move.
+
+#### Mechanism
+
+After `+ New Batch`, `batchRows` is `[]` and `batchProfile` is fresh — but **since D-2 the `spec`
+survives**, still carrying the previous batch's `client` and `sector`. On the next Send:
+
+1. **The G1 identity guards do not fire** — they are wrapped in `if(batchRows.length>0)`, and there
+   are no rows.
+2. **The seeding block fires** — `if(batchRows.length===0)` → `if(spec.client)
+   profilePatch.client=spec.client`.
+
+**The blank profile is seeded with the old customer, silently.** The SKU is then filed under a
+client the Maker never chose for this batch.
+
+#### D-2 CREATES this exposure, and the ruling behind it is still correct
+
+Before D-2, `+ New Batch` wiped the spec, so the client was blank and the Maker had to type one.
+After D-2 it persists and can be sent without a second thought. **That is a genuine cost of a ruling
+that remains right** — the spec has nothing to do with the batch, and re-keying client and sector is
+the saving a same-customer Maker most wants.
+
+#### ⚠️ D-24's FIX WILL NOT CLOSE THIS — do not assume it does
+
+**Two independent reasons:**
+
+* The guard requires **both** sides non-empty — `if(_specClient && _profClient && _specClient !== _profClient)`.
+  A fresh profile has `client:''`, so the comparison is skipped **however the outer row-count
+  condition is rewritten.** There is nothing to mismatch against.
+* **D-24's case is a *populated* profile being overwritten.** Here the profile is genuinely blank,
+  and seeding it from the Costing proposal is the block's **intended** behaviour.
+
+**This is a different hole that D-24 was never going to cover:** a *stale* spec seeding a
+*legitimately empty* profile.
+
+#### The mitigation is visibility, NOT a guard — so the hole stays open
+
+D-2's confirm now **names the retained client and sector** at the moment of the decision. That is
+the earliest and cheapest point to catch it, and it degrades to plain wording when neither is set.
+
+> **But a Maker who clicks through the confirm can still file under the wrong customer.** Visibility
+> is not a guard. Nothing downstream will stop them, and nothing will tell them afterwards — rows
+> carry no client of their own, so the mis-attribution is invisible once made.
+
+#### Why post-model is the right window, not merely convenient
+
+When **CustomerMaster** arrives, `client` stops being free text that persists in a form and becomes a
+**selected entity**. "Stale client" changes shape entirely: you would pick a customer for the batch,
+and a spec carrying a previous customer's id becomes detectable rather than indistinguishable. **The
+real fix is customer identity, not another guard on a string.**
+
+> ## 🔑 THE GENERAL PRINCIPLE — string identity becomes tractable when entities become real
+>
+> **This is the strongest argument in the register for why some entries should wait**, and it is not
+> specific to PM-6.
+>
+> Several open items are **string-identity problems**: the app carries identity as free text —
+> a client name, a SET Code, a construction code, a composite key built by concatenation — and then
+> tries to answer *"are these two the same thing?"* by comparing, normalising or guarding strings.
+> **Every such guard is an approximation of an identity the data does not carry.**
+>
+> Once the masters land and identity is an **entity with a key**, those questions stop being
+> approximations. Sameness becomes a key comparison; duplicates become a constraint; staleness
+> becomes a detectable reference to a prior id rather than an indistinguishable string.
+>
+> ### What the masters work inherits — name it now rather than rediscovering it
+>
+> | Entry | The string standing in for identity | What an entity makes possible |
+> |---|---|---|
+> | **PM-6** | `spec.client` as free text that persists in a form | A stale customer becomes a *detectable prior id*, not an indistinguishable name |
+> | **D-11** | construction code allocated A–Z with a `C${length}` fallback, sameness decided by a 9-field predicate | Duplicates become a **uniqueness constraint**; the predicate disappears |
+> | **PM-3** | repointing rows and quote items at a surviving construction code | A foreign key, repointed once during migration rather than twice by hand |
+> | **D-24** | client/sector guards comparing normalised strings | Identity comparison instead of `trim().toLowerCase()` heuristics |
+> | **the quote-item `uid`** *(deferred from D-7)* | `product` + `material_code` + `rowType` + `setCode` concatenated into one string | A real key, and the case question stops mattering |
+> | **D-13** | Prospect → Customer graduation, already noted as carrying two codes for this reason | The transition the masters were designed to model |
+>
+> **The pattern to apply when scoping any of these: ask whether the fix is a better string comparison
+> or a real identity.** If the honest answer is the first, it is probably interim work that the
+> migration discards — which is a reason to keep it minimal, not necessarily to skip it. **D-7 is the
+> counter-example worth remembering:** its fix *was* a better string comparison, it shipped anyway
+> because live data was already broken, and it was deliberately scoped small for exactly this reason.
+
 ---
 
 ## Migration requirements
