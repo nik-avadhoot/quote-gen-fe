@@ -91,6 +91,16 @@ Guard 4 depends on `resolveSpecWasteConv`, which is declared **inside** `useCost
 > Batch Entry.** This was found by **D-25**: blanking the initial waste/conv values would send `""`
 > into `calcCosting`, whose destructuring defaults fire only on `undefined`, producing **NaN
 > silently** — and every fixture would still pass.
+>
+> ### This is the SECOND time the harness has been shown not to cover something a reader assumes
+>
+> The first was the four negative cases at Phase 4, listed above — the bridge/UI guards the fixtures
+> cannot reach. This is the second, and it is broader: **an entire calculation path.**
+>
+> **A green run means the engine's arithmetic is unchanged. Nothing more.** Not that the guards hold,
+> not that Batch Entry computes correctly, not that a spec assembled elsewhere reaches the engine
+> intact. Two independent findings now say the same thing, so treat the next "but the fixtures pass"
+> as a question rather than an answer.
 
 `ref:case4` derives Case 4's expected numbers instead of transcribing them. It optionally takes a
 Backup file so it computes against real masters rather than `DEFAULT_*`:
@@ -276,7 +286,7 @@ Full mechanisms, evidence and reasoning are in [`component-split-plan.md`](compo
 | D-9 | Selecting a sector silently converts inheritance into an override | High | Open — same shape as **D-16**; see the inheritance-materialisation pattern |
 | ~~D-14~~ | Unconfirmed SET Code does not block Deep Dive | — | **CLOSED — NOT A DEFECT.** The guard exists at `useCostingBatchBridge.js:33`, dates to the repo's first commit, is the sole route, has no bypass, and is stricter than the other three gates |
 | ~~D-15~~ | Unconfirmed SET Code blocks only the offending row | — | **CLOSED — CORRECT BY DESIGN.** Ruled per-row |
-| D-16 | **Push after Deep Dive severs a row's link to its parent Box** | **High — silent, permanent** | Open — **REWRITTEN at Stage 3.** Trigger is Push, not Unlink; Unlink writes nothing to the row and cannot cause it. `pushCostingToBatchRow` writes back the L/W that Deep Dive *derived* from the parent, so `autoCalcPPDims` returns early forever and the row stops tracking. Invisible: the number is identical when it happens. Same shape as **D-9** |
+| ~~D-16~~ | **Push after Deep Dive severs a row's link to its parent Box** | High | **FIXED** — Stage 4, `c5f3e85`. Delta-aware write: only what the Maker changed. **REWRITTEN at Stage 3.** Trigger is Push, not Unlink; Unlink writes nothing to the row and cannot cause it. `pushCostingToBatchRow` writes back the L/W that Deep Dive *derived* from the parent, so `autoCalcPPDims` returns early forever and the row stops tracking. Invisible: the number is identical when it happens. Same shape as **D-9** |
 | D-17 | Add-on pin control is an unlabelled circled-plus | Cosmetic | Open — see cleanup list |
 | D-18 | Row-level Interest override missing from xlsx export | High | Open — **RESOLVED at source, and it is a category.** See below |
 | D-19 | `exportExcelFull` throws `ReferenceError` on every call | High | Open — **in D-3's scope.** Promoted from the §4 cleanup list; D-3 is not discharged without it |

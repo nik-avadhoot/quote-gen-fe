@@ -1365,7 +1365,16 @@ bookmarks for the post-split defect pass, not tickets.
 | **D-16** | **REWRITTEN at Stage 3 — the trigger is PUSH, not Unlink, and the effect is permanent.** See below | **High — silent, permanent** |
 | **D-17** | The add-on pin control is a bare ⊕ beside a number input — no label, hover tooltip only, reads as "add"/"increment" rather than "pin to grid". Discoverability only, not correctness. Fix is a pin glyph | cosmetic |
 
-#### D-16 — REWRITTEN. Push materialises derived dims and severs the parent link
+#### D-16 — ✅ FIXED at Stage 4 (`c5f3e85`). Push materialises derived dims and severs the parent link
+
+> **Resolved.** `pushCostingToBatchRow` now writes L/W through a delta check against
+> `autoCalcPPDims` — the same shape and the same `0.001` tolerance as `wasteOverride` twenty lines
+> above. Unchanged dims write `""` and keep inheriting; changed dims write through as a real
+> override, which the grid already marks by turning the greyed placeholder solid.
+>
+> **Verified by the product owner, three cases** — the decisive one being that after a no-change
+> push, moving the parent Box's L from 512 to 600 still moved the Plate to 595. **The link survived,
+> not merely the value.**
 
 **Confirmed by the product owner's run at Stage 3, against the source mechanism below.**
 **Severity raised: silent and permanent, not a transient recalculation glitch.**
