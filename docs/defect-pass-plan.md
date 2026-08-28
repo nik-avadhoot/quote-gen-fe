@@ -260,6 +260,15 @@ identity freeze releases, and any Deep-Dive link breaks.
    > and treat any gap between prediction and result as a defect in the change**, not as slack to
    > absorb.
 
+   > **The live figure is 67, not 76 and not 73.** Recorded because the implementer quoted "the 75
+   > ceiling" from memory while verifying the D-16 regression fix. **75 was never a ceiling** — it
+   > was the transient bad count from the `catch(e){}` run above, remembered as if it were the
+   > standard. The prediction was therefore wrong in its number while right in its delta (zero).
+   >
+   > **Predicting against a remembered number is not predicting.** The delta is the real test, and
+   > the only way to establish it is to measure the baseline: stash the change, run the gate, restore.
+   > That is what settled it here — HEAD also reported 67, so the change added nothing.
+
 ---
 
 ## 6. The map

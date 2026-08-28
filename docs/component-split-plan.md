@@ -1181,6 +1181,14 @@ to do. No backfill.
 > **This entry predicted it and it was never built.** D-1 is marked FIXED because the *forward* leg
 > shipped at `06c1522`; the return leg below was scoped as its own commit and left.
 >
+> **✅ THE RETURN LEG IS NOW FIXED (`8b317a5`).** `engine/costing.js:213` writes
+> `skuType:row.glassSKUType||""` instead of the hardcoded blank. `engine/costing.js` is off-limits
+> without a deliberate decision; this was that decision, granted for one line. `test:costing`
+> remains 5/5. Verified in the UI: a Deep Dive of an ALCOBEV Part-L now shows
+> **"GLASS SKU TYPE (AUTO-FILLS NOS/SET) = Pint 375"** with
+> **"L-wise: 3 pcs · W-wise: 5 pcs → Nos/Set = 3"**. That field was blank before the change, and the
+> full Costing → Push → row loop was re-run end to end.
+>
 > **Traced, and the loss is asymmetric — which is why it went unnoticed:**
 >
 > | Step | Behaviour |
@@ -1470,6 +1478,39 @@ bookmarks for the post-split defect pass, not tickets.
 > **Verified by the product owner, three cases** — the decisive one being that after a no-change
 > push, moving the parent Box's L from 512 to 600 still moved the Plate to 595. **The link survived,
 > not merely the value.**
+
+##### ⚠️ The Stage 4 fix carried a regression that DESTROYED data. Fixed in `53935b0`
+
+> **`c5f3e85` blanked every explicitly typed L/W on push.** It shipped to `origin/main` and stood
+> until it was caught by accident during the D-26 checks.
+>
+> `autoCalcPPDims` returns the row **untouched** when both dims are already filled
+> (`useBatchState.js:168`, `if(!needsL&&!needsW)return row;`). The guard passed `row` as-is, so
+> `_derivedDims[k]` **equalled `cur`** for exactly the rows it was meant to protect. The delta was
+> always zero, so the guard wrote `""` — and the row fell back to inheriting.
+>
+> **Unlike D-16 itself, the number on screen changed.** An ALCOBEV Part-L holding `390×230` became
+> `507×170` after a push that edited only the Glass SKU. Different deckle area, different cost.
+> D-16 was invisible-but-preserving; its fix was visible-but-destroying. **The fix was worse than
+> the defect.**
+>
+> The mixed case failed by a second path: with L typed and W blank there is no early return, but
+> `needsL` is false, so L is returned unchanged and `_derivedDims.L` still equals `cur`.
+>
+> **The fix:** derive from a blanked copy — `autoCalcPPDims({...row,L:"",W:""})` — which asks what
+> the row *would* inherit, the only value `cur` can meaningfully be compared against. The spread
+> keeps `row.id`, so the parent lookup still resolves. The `d===""` branch at `:198`, written for
+> "no parent to derive from", was **unreachable for any dimensioned row** before this.
+
+> ### 🧭 WHY IT ESCAPED — the verification tested only the case the fix was written for
+>
+> All three cases above used a row with **blank** dims. That is the D-16 case. **The case the fix
+> could break — a row with dims already typed — was never run.** A guard that converts one state
+> into another must be tested from both states, not from the one it was designed around.
+>
+> Four cases now stand, all run in the live UI: **blank untouched** (stays `""`), **blank edited**
+> (writes through), **explicit untouched** (survives — the regression), **mixed explicit/blank**
+> (both correct, and a distinct path through `autoCalcPPDims`).
 
 **Confirmed by the product owner's run at Stage 3, against the source mechanism below.**
 **Severity raised: silent and permanent, not a transient recalculation glitch.**
@@ -2049,6 +2090,29 @@ timestamps**, so stored data cannot say whether an entry was duplicated at creat
 identity afterwards. A `createdAt` field would make this diagnosable.
 
 ### D-26 — typing a SET Code silently skips the Nos/Set auto-fill
+
+> **✅ FIXED at Stage 4 (`ce800ca`).** The resolution logic is extracted from `handleConfirm` into
+> `applyGlassSKUNos`, called by both paths — `handleConfirm` as before, and a new `onBlur` on the
+> SET Code input. `onFocus` records the value at focus; `onBlur` re-applies **only if it changed**,
+> so tabbing through an untouched field never overwrites a Nos/Set the Maker set deliberately.
+>
+> The ref is declared at the component top, **not** inside the row `.map()` — hooks inside `.map()`
+> have caused blank-screen crashes in this file before.
+>
+> **Verified in the live UI, two cases plus a positive control.** Typing lowercase `glass180` and
+> blurring filled Nos/Set 1 → 5 from the parent's *Nip 180* (also exercising D-7's case-insensitive
+> match). With Nos/Set set manually to 9, focusing and blurring the SET Code **without editing it**
+> left it at 9.
+>
+> > **The first run of the second check tested nothing** and was nearly recorded as a pass. The
+> > element ref was stale, so the focus landed on a different row's field — Nos/Set held at 9
+> > because the handler never ran, not because the guard worked. Re-run with focus asserted before
+> > the blur, then followed by a **positive control on the same element**: focus, change the value,
+> > blur → 9 → 5. Only that pair makes the negative result mean anything.
+> >
+> > Second instance in this pass of a negative test that proved nothing. **A test whose pass
+> > condition is "nothing happened" is worthless without a paired demonstration that something
+> > *could* have happened.**
 
 **Moved into the register from `post-model-defects.md` (was PM-4), 2026-08-28. Not a new finding —
 a corrected filing.** The scope freeze exists to stop the register *growing*; it is not a reason to

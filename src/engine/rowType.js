@@ -20,7 +20,7 @@
 // and nothing kept them aligned. Four comparisons can drift; one cannot.
 //
 // ⚠️ DO NOT compare setCode with === anywhere else. scripts/audit-setcode.py
-// fails the build-adjacent gate if you do. Three sites are deliberately excluded
+// fails the build-adjacent gate if you do. Two sites are deliberately excluded
 // and the script names why for each — an exception without its reason recorded
 // is indistinguishable from a bug, and copying it is how the next drift starts.
 //
