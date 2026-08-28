@@ -1463,6 +1463,50 @@ half closes only the case where the PP rows agree with each other.
 > **It is not a divergence** — both sides do the same thing — so a one-sided fix would *create* the
 > drift that D-27 is about.
 
+#### ✅ ACCEPTED BY THE PRODUCT OWNER, 2026-08-29 — **INTEREST ONLY**. Read the scope before citing this
+
+> **What was accepted:** that **per-SKU interest** — a Box row and a PP row carrying *different*
+> interest rates within one batch — is not worth supporting. The product owner's words: *"interest
+> differing at SKU level is rarest of the rare possibilities. Not one example that I have come
+> across till date."* **That is a domain judgement, and it is theirs to make.**
+
+> ## ⚠️ THIS DOES NOT EXTEND TO WASTE OR CONV, AND MUST NOT BE READ AS IF IT DID
+>
+> The mechanism is shared; **the frequency is not.** Per-SKU interest is exotic. A **row-level
+> waste% or conv-rate override is ORDINARY** — a normal control in the grid's `ROW OVERRIDES` panel,
+> used routinely.
+>
+> **Where the same mechanism bites, it bites often.** Before D-27, `server.py` read `f0.wastePP` —
+> a field A1-02 never assigns an override to — so **every** PP row-level waste/conv override was
+> silently dropped whenever the backend served the export. That is not a rare case and was not
+> accepted.
+>
+> **Anyone citing "accepted" here must state which parameter they mean.** The three limitations
+> above still stand for waste and conv in full, and limitation 3 in particular — every Box override
+> dropped when `items[0]` is a PP row — was accepted by nobody and is triggered by row ordering
+> alone.
+
+**Accepted-by-ruling, not accepted-because-verified.** The interest behaviour was never demonstrated
+end to end against the live backend; the product owner's own test could not have shown it either way
+(the one row whose interest differed was not the row the exporter reads — limitation 1, live in
+their own data). **The ruling closes the question of whether to support it, not the question of
+whether the code does what this register says.**
+
+> ### 🔍 An unexplained observation is recorded here rather than resolved
+>
+> The product owner exported with a profile interest of 1.0% and read **0.5%** in the workbook.
+> `server.py` was subsequently run in-process against their exact `rowType`/`interest` triple
+> (`Box=1.0 / Plate=1.5 / Part-L=0.5`) and produced `BJ3=1.0%`, `BJ4=1.5%` — **correct**. Three
+> candidates remain open: the RS4 row was read rather than the BOARD row; the export preceded the
+> Quote Items snapshot carrying the value; or the running Flask process did not hold the fix.
+>
+> **`server.py:756` is `app.run(port=3001, debug=False)` — the reloader is OFF**, so a running
+> process is frozen at whatever it loaded and never picks up a file change. There is **no version
+> string, no SHA, and nothing in `/health`** that identifies which code a running process holds.
+> **That is itself a gap:** every backend verification in this project is unfalsifiable until the
+> process can be identified. Recorded, not fixed.
+
+
 > ### ⚠️ APPROVING `server.py` WOULD NOT HELP — someone will assume it can carry this
 >
 > The backend fills **the same v7 template** with the same hard-coded cell addressing, so it inherits

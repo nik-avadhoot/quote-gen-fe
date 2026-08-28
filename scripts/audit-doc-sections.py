@@ -76,6 +76,15 @@ REVIEWED = {
         'Deliberate. The section described a session-handoff capability that did '
         'not exist; the commit removing it exists precisely to correct that claim. '
         'Deleting it was the point.',
+
+    ('c777b08', 'When they coincide'):
+        'Deliberate rewrite, ruled by the product owner. The section framed D-27 as '
+        '"diverges when a PP row carries an override" - an edge case. It is '
+        'unconditional: server.py reads f0.wastePP, and A1-02 assigns an override '
+        'only to sp.wastePP on the PP row itself, so a Box row never carries one in '
+        'that field. The replacement section states exactly that. The old framing '
+        'was not trimmed for length, it was WRONG, and keeping it beside the '
+        'correction would leave two incompatible accounts of one defect.',
 }
 
 
