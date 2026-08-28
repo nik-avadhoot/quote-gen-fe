@@ -189,36 +189,64 @@ When **CustomerMaster** arrives, `client` stops being free text that persists in
 and a spec carrying a previous customer's id becomes detectable rather than indistinguishable. **The
 real fix is customer identity, not another guard on a string.**
 
-> ## 🔑 THE GENERAL PRINCIPLE — string identity becomes tractable when entities become real
+> ## 🔑 TWO TESTS, NOT ONE — and they answer different questions
 >
-> **This is the strongest argument in the register for why some entries should wait**, and it is not
-> specific to PM-6.
+> **An earlier version of this note said string-identity problems "should wait for the masters". That
+> collapsed two questions into one, and D-7 is the counter-example that separates them.**
 >
-> Several open items are **string-identity problems**: the app carries identity as free text —
-> a client name, a SET Code, a construction code, a composite key built by concatenation — and then
-> tries to answer *"are these two the same thing?"* by comparing, normalising or guarding strings.
-> **Every such guard is an approximation of an identity the data does not carry.**
+> | Test | What it decides |
+> |---|---|
+> | **1 · Does the migration make this tractable?** | Whether the *eventual* fix is cheap |
+> | **2 · Is live data wrong TODAY, and unmitigated?** | Whether we can *wait* |
 >
-> Once the masters land and identity is an **entity with a key**, those questions stop being
-> approximations. Sameness becomes a key comparison; duplicates become a constraint; staleness
-> becomes a detectable reference to a prior id rather than an indistinguishable string.
+> **These come apart.** Test 1 tells you what the migration makes easy. It says nothing about what
+> can afford to stay broken until then.
 >
-> ### What the masters work inherits — name it now rather than rediscovering it
+> * **D-7 answered YES to both, and shipped anyway.** Its fix *was* a better string comparison —
+>   exactly the interim work the migration would discard — but live data was already broken: a Part
+>   row was visually inside a SET the grid could not see. Wrong today beat cheap later.
+> * **PM-6 answers YES to the first and NO to the second.** A stale client *can* mis-attribute a
+>   batch, but nothing is wrong yet, and the confirm now names the retained client. So it waits.
 >
-> | Entry | The string standing in for identity | What an entity makes possible |
-> |---|---|---|
-> | **PM-6** | `spec.client` as free text that persists in a form | A stale customer becomes a *detectable prior id*, not an indistinguishable name |
-> | **D-11** | construction code allocated A–Z with a `C${length}` fallback, sameness decided by a 9-field predicate | Duplicates become a **uniqueness constraint**; the predicate disappears |
-> | **PM-3** | repointing rows and quote items at a surviving construction code | A foreign key, repointed once during migration rather than twice by hand |
-> | **D-24** | client/sector guards comparing normalised strings | Identity comparison instead of `trim().toLowerCase()` heuristics |
-> | **the quote-item `uid`** *(deferred from D-7)* | `product` + `material_code` + `rowType` + `setCode` concatenated into one string | A real key, and the case question stops mattering |
-> | **D-13** | Prospect → Customer graduation, already noted as carrying two codes for this reason | The transition the masters were designed to model |
+> **THE SORTING RULE FOR THIS FILE IS THE PAIR, NOT "the masters will handle it."** An entry belongs
+> here when the migration makes it tractable **and** nothing is wrong today that the migration's
+> delay would leave broken. Failing either test means it belongs somewhere else — in the register if
+> data is wrong now, or in an ordinary backlog if the migration was never going to help.
 >
-> **The pattern to apply when scoping any of these: ask whether the fix is a better string comparison
-> or a real identity.** If the honest answer is the first, it is probably interim work that the
-> migration discards — which is a reason to keep it minimal, not necessarily to skip it. **D-7 is the
-> counter-example worth remembering:** its fix *was* a better string comparison, it shipped anyway
-> because live data was already broken, and it was deliberately scoped small for exactly this reason.
+> ### What the masters work inherits — the string-identity group
+>
+> Several open items carry identity as **free text** — a client name, a SET Code, a construction
+> code, a key built by concatenation — and then ask *"are these the same thing?"* by comparing,
+> normalising or guarding strings. **Every such guard approximates an identity the data does not
+> carry.** Once identity is an entity with a key, sameness becomes a key comparison, duplicates
+> become a constraint, and staleness becomes a detectable prior id.
+>
+> | Entry | The string standing in for identity | Test 1 | Test 2 |
+> |---|---|---|---|
+> | **PM-6** | `spec.client` as free text persisting in a form | ✅ | ✅ nothing wrong yet |
+> | **PM-3** | repointing rows at a surviving construction code | ✅ | ✅ — the duplicates are **identical on all 9 fields**, so they cost the same. Messy, not wrong |
+> | **D-11** | code allocated A–Z with a `C${length}` fallback; sameness by a 9-field predicate | ✅ | in scope — prevention only, deliberately minimal |
+> | **D-24** | client/sector guards comparing normalised strings | ✅ | in scope — silent reassignment is wrong **now** |
+> | **quote-item `uid`** *(deferred from D-7)* | four fields concatenated into one string | ✅ | ✅ |
+> | **D-13** | Prospect → Customer graduation | ✅ | out of pass by decision |
+>
+> ### ⚠️ AUDIT OF THIS FILE AGAINST THE PAIR — two entries are MISFILED
+>
+> | Entry | Test 1 | Test 2 | Verdict |
+> |---|---|---|---|
+> | **PM-1** D-8a write model | ✅ server-side model | ⚠️ unguarded edits **are** wrong today — **but D-8e and D-8b are in scope precisely to mitigate that** | **Correctly filed**, and only because the harm is covered by in-scope work. If D-8e/D-8b are ever dropped, this must come back |
+> | **PM-2** D-8d change history | ✅ | ✅ absence of history corrupts nothing | **Correctly filed** |
+> | **PM-3** D-11 cleanup | ✅ | ✅ duplicates are identical, so costings are unaffected | **Correctly filed** |
+> | **PM-4** typing skips Nos/Set auto-fill | ❌ **the migration makes nothing about this easier** — it is a UI entry-point problem, not an identity one | ❌ `nosPerSet` stays at its default and `qtyPerSet` multiplies the SET rate (`costing.js:212`), so a **wrong SET total** is reachable | **MISFILED — fails BOTH tests** |
+> | **PM-5** pin control silent eviction | ❌ pure UI, unaffected by entities | ✅ a lost pin loses a view, not data | **MISFILED by category** — deferred work, but never post-model work |
+>
+> **PM-4 is the one that matters.** It fails both tests: the migration will not help, and it can
+> produce a wrong number today. **It is in the wrong list**, and under the scope freeze that is a
+> ruling for the product owner rather than a move I should make.
+>
+> **PM-5 is misfiled harmlessly** — it belongs in an ordinary backlog rather than here, since nothing
+> about it becomes tractable when entities arrive. Left in place unless the product owner wants a
+> third list; noting it is enough.
 
 ---
 
