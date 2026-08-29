@@ -41,6 +41,10 @@ the shared parent directory, outside both repos, where every edit to it was unve
 
 ## 2. What to read, in order
 
+0. **`docs/defect-pass-close.md`** — ⭐ **START HERE.** The 2026-08 defect pass closed on
+   2026-08-29. This is what closed, what is still open and why, the **three unmade decisions** that
+   gate most remaining work, and the recurring failure patterns gathered in one place. **The
+   register is that pass's deliverable, not the fixes.** Read it before the plan.
 1. **`quote-gen-fe/CLAUDE.md`** — conventions and business-logic guardrails. Loads automatically in
    the frontend. **It does not load when you are working in `quote-gen-be`** — see §5.
 2. **`docs/post-split-state.md`** — the handoff. Architecture, the D-1…D-24 defect register,

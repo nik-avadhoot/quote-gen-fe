@@ -84,7 +84,15 @@ REVIEWED = {
         'only to sp.wastePP on the PP row itself, so a Box row never carries one in '
         'that field. The replacement section states exactly that. The old framing '
         'was not trimmed for length, it was WRONG, and keeping it beside the '
-        'correction would leave two incompatible accounts of one defect.',
+        'correction would leave two incompatible accounts of one defect. '
+        'NOTE: the gate could not tell this apart from a silent deletion, and '
+        'THAT IS THE POINT, not a limitation. A deliberate rewrite and an '
+        'accidental truncation look identical from the outside - same heading '
+        'gone, same fingerprints missing. If the script could distinguish them '
+        'it would be guessing at intent, and it would guess wrong in the case '
+        'that matters. It fired on the implementer commit that wrote this very '
+        'entry, which is exactly the case it exists for: the author is the least '
+        'able to notice what they deleted.',
 }
 
 
