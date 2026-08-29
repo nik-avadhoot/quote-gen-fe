@@ -175,7 +175,7 @@ export default function BatchGrid(){
                   {pinnedAddOns.map(k=>{
                     const AO_LABELS={printing:"Print",stitching:"Stitch",coating:"Coat",handling:"Hdlg",moqCharge:"MOQ Chg",packing:"Pack",other:"Other",unloading:"Unlod"};
                     return<th key={`pin_${k}`} style={{padding:"6px 4px",color:C.amber,fontSize:9,fontWeight:600,textAlign:"center",whiteSpace:"nowrap",borderRight:`1px solid ${C.slateL}44`,background:"#3a2a10"}}>
-                      {AO_LABELS[k]||k}<br/><span style={{fontSize:8,fontWeight:400,opacity:0.7}}>Rs/pc ⊕</span></th>;})}
+                      {AO_LABELS[k]||k}<br/><span style={{fontSize:8,fontWeight:400,opacity:0.7}}>Rs/pc 📌</span></th>;})}
                   <th style={{padding:"6px 4px",color:C.white,fontSize:9,minWidth:52,textAlign:"center"}}>▾ more</th>
                 </tr>
               </thead>
@@ -713,7 +713,7 @@ export default function BatchGrid(){
                                       style={{background:"none",border:"none",cursor:"pointer",fontSize:12,
                                         color:pinnedAddOns.includes(k)?C.amber:C.slateL,
                                         opacity:(!pinnedAddOns.includes(k)&&pinnedAddOns.length>=2)?0.3:1,
-                                        padding:"0 2px"}}>⊕</button>
+                                        padding:"0 2px"}}>📌</button>
                                   </div>))}
                               </div>
                             </div>
