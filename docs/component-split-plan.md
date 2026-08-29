@@ -1549,6 +1549,161 @@ half closes only the case where the PP rows agree with each other.
 > position is about what the template can express; D-27 was about the exporter failing to fill what
 > it can.**
 
+### D-32 — master edits invalidate EVERY row, including rows that cannot be affected
+
+**Observed 2026-08-29 by the product owner, while verifying D-8e. Recorded as an observation — no
+mechanism beyond what is stated, same discipline as D-31.**
+
+#### What was observed
+
+Adding a **blank 26th construction** via `+ New Construction` discarded **all three** calculated
+rows. None of those rows referenced the new construction, and a blank entry cannot change any number
+on them.
+
+> **The effect fired on a change that provably had no effect on the results it wiped.**
+
+#### Confirmed from source — structure only, not cause
+
+| | |
+|---|---|
+| The masters effect watches `[rates, freight, constructionLib]` | the **whole arrays**, by reference |
+| `useBatchInvalidation.js` never references `batchRows` or `constructionCode` | it **structurally cannot** know which rows use what |
+| `invalidateAllBatchResults=()=>setBatchResults({})` | unconditional, all-or-nothing |
+
+**The same applies to `rates` and `freight`:** editing a grade or a freight lane that none of the
+current rows touch discards every calculated row.
+
+> ### 🔁 THE SHARPER HALF — IT ALSO FIRES ON *NO* CHANGE AT ALL
+>
+> The deps are compared **by reference, not by value.** So an operation that produces a **new array
+> with identical contents** wipes every calculated row just as thoroughly.
+>
+> **This is not over-invalidation on a real change. It is invalidation on no change whatsoever.**
+> Any code path doing `setRates(prev=>prev.map(...))` — which is exactly what the blanket operations
+> do — produces a fresh array every time, so re-applying the value a grade already holds discards
+> the entire batch.
+>
+> The observed case (a blank 26th construction) is the milder version: a real change that could not
+> affect the rows. **The identical-array case has no change to point at at all.**
+
+> The effect's own comment states the assumption that makes this a defect: *"rates, freight, or
+> constructions **affect every row**."* **That is false for an added or unrelated entry**, and the
+> comment is the place the belief is recorded.
+
+#### Consequence
+
+**Pure wasted work.** Every calculated row is discarded and must be recomputed, and the recomputation
+produces **identical numbers**. On a large batch that is a real cost paid for nothing.
+
+**Not a correctness defect** — no wrong number is ever produced, and it errs toward recalculating
+rather than trusting stale values. It is the opposite failure to D-31, which does not invalidate
+when it should.
+
+#### Its effect on D-8e's warning — RULED, not deferred
+
+D-8e's toast now announces itself on changes that affected nothing. **The warning stays** — the rows
+genuinely were invalidated, which is the fact it exists to surface — but the wording was amended so
+it does not imply the numbers were at risk. See D-8e.
+
+> **Narrowing invalidation to the rows that actually reference the changed master is a bigger change
+> than this pass carries**, and it is the real fix. Recorded here so it is not mistaken for
+> something D-8e addressed.
+
+> ## ⚖️ READ WITH **D-31**. THEY ARE OPPOSITE FAILURES OF ONE SUBJECT
+>
+> | | |
+> |---|---|
+> | **D-31** | invalidation does **NOT** fire when it should — a profile change leaves stale results on screen |
+> | **D-32** | invalidation fires when it **NEED NOT** — an unrelated master edit, or none at all, wipes everything |
+>
+> **⚠️ FIXING EITHER ONE NAIVELY WORSENS THE OTHER.** Making invalidation more eager to fix D-31
+> increases the wasted recalculation of D-32. Making it narrower to fix D-32 risks widening the
+> window in which D-31 leaves stale numbers on screen.
+>
+> **Anyone picking up "invalidation" as a topic must hold both at once.** They are filed separately
+> so that a fix aimed at the subject cannot quietly assume it is one problem.
+
+### D-31 — 🚨 a costing-relevant PROFILE change leaves STALE RESULTS on screen
+
+**Severity: HIGH.** Silent, and it presents wrong numbers rather than removing them.
+
+**Found 2026-08-29 while building D-8e, and confirmed pre-existing by STASHING the D-8e change and
+re-running the same sequence at `HEAD`** — not by assuming. That distinction mattered: reporting a
+self-inflicted bug as pre-existing would have been the worst available outcome, and the check cost
+one stash.
+
+#### What was observed
+
+| Step | Result |
+|---|---|
+| Batch Entry → **Calculate All** | results populated (Send All enabled) |
+| Change `batchProfile.interest` via the **PT · Int** control (`60` → `30`, so 1.0% → 0.5%) | `cbb_batchprofile` confirms `interest` changed |
+| Re-check | **results still present.** The profile-level invalidation did not run |
+
+Repeated at `HEAD` with the D-8e change stashed out: **identical.** Pre-existing.
+
+#### Mechanism, as far as it was traced — and NO FURTHER
+
+`useBatchInvalidation.js` holds **two** effects. The second is the profile-level one:
+
+```js
+useEffect(()=>{invalidateAllBatchResults();},[
+  batchProfile.margin, batchProfile.marginPP,
+  batchProfile.waste,  batchProfile.convRate,
+  batchProfile.wastePP,batchProfile.convRatePP,
+  batchProfile.sector, batchProfile.interest,
+  batchProfile.freightOverride, batchProfile.plant, batchProfile.delivery,
+]);
+```
+
+`batchProfile.interest` **is** in that array, and it **did** change. The effect did not invalidate.
+
+> ### 🛑 WHY IT DOES NOT FIRE WAS NOT INVESTIGATED, BY INSTRUCTION
+>
+> Ruled by the product owner: **record and stop.** No hypothesis is offered here, deliberately —
+> D-14, D-16 and D-22 all entered the register with a confident mechanism that turned out to
+> describe the wrong code (**Mode B**). An entry with an honest gap is worth more than one with a
+> plausible guess.
+
+#### Why this outranks D-8e
+
+**D-8e is about a wipe that happens silently. D-31 is about a wipe that does not happen at all.**
+
+> A wipe at least removes the wrong answer. **This leaves the Maker looking at rates that no longer
+> match the inputs, with nothing on screen saying so.** They can then Send to Quote Items and export
+> a quote computed from superseded margin, waste, conv, sector, interest, freight, plant or
+> delivery.
+
+**Severity HIGH is the product owner's call and the implementer does not argue for higher.** The
+case for BETA BLOCKER would be that it silently exports wrong prices — but it requires the Maker to
+change a profile field *after* calculating and not re-run Calculate All, and the grid does mark rows
+stale by another route, so there is a visible signal even though the results are not cleared.
+**That second signal is the reason to stay at High rather than raise it.**
+
+#### It is the PROFILE effect. D-8e is the MASTERS effect. They are different defects
+
+| | Effect | Deps | Status |
+|---|---|---|---|
+| **D-8e** | first | `[rates, freight, constructionLib]` | **fires correctly — confirmed 2026-08-29** |
+| **D-31** | second | `[batchProfile.*]` — eleven fields | **does not fire** |
+
+**Do not fold these together.** One effect works and needed a warning; the other does not work at
+all. A fix aimed at "invalidation" as a single subject would likely touch the working one.
+
+> ## ⚖️ READ WITH **D-32**. THEY ARE OPPOSITE FAILURES OF ONE SUBJECT
+>
+> | | |
+> |---|---|
+> | **D-31** *(this entry)* | invalidation does **NOT** fire when it should — a profile change leaves stale results on screen |
+> | **D-32** | invalidation fires when it **NEED NOT** — an unrelated master edit, or an edit producing an identical-valued array, wipes every calculated row |
+>
+> **⚠️ FIXING EITHER ONE NAIVELY WORSENS THE OTHER.** The obvious repair for D-31 is to make
+> invalidation fire more readily; that directly increases D-32's wasted recalculation. The obvious
+> repair for D-32 is to narrow it to rows that reference the changed master; done carelessly that
+> widens the window where D-31 leaves stale numbers on screen.
+>
+> **One subject, two directions. Hold both, or fix neither.**
+
 ### D-29, D-30 — layout observations, 2026-08-29. RECORDED ONLY, both pre-existing, both under the freeze
 
 **D-29** — pinned add-on columns increase the header row height.

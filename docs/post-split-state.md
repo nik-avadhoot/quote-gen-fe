@@ -490,6 +490,42 @@ the moves were clean.
    > Batch Profile bar, or deleting rows with the grid's × button, updates React state directly and
    > keeps the Costing spec alive — a reload loses the spec *and* risks the session.
 
+   > **3 · ADDING ANY HOOK BLANK-SCREENS THE RUNNING APP UNTIL A HARD RELOAD.** A hazard, not a
+   > defect — and it looks exactly like a real crash, which is why it belongs here.
+   >
+   > Every slice hook feeds one `AppStateProvider`, so its hooks are one long ordered list. Adding a
+   > `useRef` to a hook composed mid-chain shifts the index of everything after it. HMR then patches
+   > the module against an already-mounted tree and React throws:
+   >
+   > ```
+   > React has detected a change in the order of Hooks called by AppStateProvider
+   >   …
+   >   66. useEffect                 useRef
+   > Error: Rendered more hooks than during the previous render.
+   > ```
+   >
+   > **The screen goes white.** Observed on D-8e, where adding one `useRef` to
+   > `useBatchInvalidation` did it.
+   >
+   > **A hard reload recovers completely, and the code is fine** — hook order is stable within any
+   > single mount. Nothing needs fixing. **But it will hit the product owner too**, mid-session, on a
+   > change that is perfectly correct, and it is indistinguishable from a genuine blank-screen crash
+   > of the kind CLAUDE.md warns about (hooks inside `.map()`).
+   >
+   > **Whoever adds a hook should say so when handing over**, so a white screen is read as "reload"
+   > rather than "reverted".
+
+   > ### 📋 THREE THINGS ABOUT TESTING THIS APP THAT COST REAL TIME AND ARE NOT IN THE CODE
+   >
+   > All three are recorded above and are gathered here because each was learned by losing an hour
+   > to it, and none is discoverable from reading the source:
+   >
+   > | | |
+   > |---|---|
+   > | **Snapshot via a `localStorage` KEY, never tool output** | reading the store back through the tool's return value **truncates**, and a lossy backup of live data is worse than none |
+   > | **A reload can log the session out** | and the implementer cannot recover alone — prefer UI routes over reloads when setting up state |
+   > | **Adding a hook blank-screens until a hard reload** | inherent to HMR, not a defect, and it looks exactly like a real crash |
+
    > **Anything failing any one of the three still needs the user's run.** The scope must also be
    > stated honestly in the commit — *what* was verified and *what* was not — as `73a0948` does.
    > **"You verified it last time" is not a reason.** The exception is about the class of change,
