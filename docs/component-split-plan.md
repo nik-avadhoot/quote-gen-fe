@@ -967,6 +967,29 @@ behaviour changes never share a commit. If a guard breaks, it must be unambiguou
 > **Remedy: treat a stated site count as a FLOOR and re-derive the set before proposing.** Minutes to
 > do; the cost of skipping it has been a doubled scope and a refinement.
 >
+> ### 🆕 SIXTH INSTANCE, AND IT IS ON A DIFFERENT AXIS — undercounted CASES, not SITES
+>
+> **D-28, 2026-08-29.** The first five instances are undercounts of **sites**: a mechanism was right
+> and the set of places it applied was low. This one is an undercount of **cases in a verification**.
+>
+> The D-28 marker was built to flag *"does this row's group diverge"* when the rule was *"is this row
+> the odd one out"*. It was verified against the live batch — **two PP rows, at 2% and 5%** — and
+> passed. **That is the one shape where the two rules cannot be told apart**: with two rows, "every
+> row in the diverging group" and "the rows that differ from the baseline" are the same set. The
+> product owner found it immediately on a batch with more rows.
+>
+> **Same shape, different axis: an INSTANCE was tested where the EXTENT was needed.**
+>
+> > **Why it needs naming separately.** *"Re-derive the full set of sites"* does not prompt anyone to
+> > ask *"does my test data distinguish the rules I am choosing between?"* They are different
+> > questions. A verification can exercise every site and still prove nothing, if the fixture cannot
+> > separate the implemented rule from the intended one.
+> >
+> > **Remedy: before accepting a green check, name the rule you did NOT implement and confirm the
+> > fixture would have failed under it.** If it would also have passed, the check is decoration.
+
+
+>
 > > ### ⚠️ "Floor" understates it — the set moves SIDEWAYS, not just up
 > >
 > > The Stage 4 survey of D-9 + D-16 was expected to find five sites and found four. **One recorded
@@ -1526,6 +1549,17 @@ half closes only the case where the PP rows agree with each other.
 > position is about what the template can express; D-27 was about the exporter failing to fill what
 > it can.**
 
+### D-29, D-30 — layout observations, 2026-08-29. RECORDED ONLY, both pre-existing, both under the freeze
+
+**D-29** — pinned add-on columns increase the header row height.
+
+**D-30** — the Glass SKU Type tag increases row height for non-180ml SKUs.
+
+> **D-30 is NOT D-22, and was checked against it before filing.** D-22 concerns that badge's
+> **content** — whether it has a parent fallback, and which render path produces it. D-30 is its
+> **layout cost**. Same control, different concern; cross-referenced rather than folded in, because
+> merging them would put a resolved data question and an open layout question under one status.
+
 ### D-28 — the grid offers per-row overrides the export cannot carry (FOUR parameters)
 
 **Recorded 2026-08-29 under the scope freeze. Not worked.** The inverse of how D-18 framed it: the
@@ -1581,11 +1615,43 @@ variants, because the granularity genuinely differs and one vague string would b
 > decode it. The proposed wording names the concrete unit the Maker can see (*"all PP rows"*, *"the
 > whole quote"*) and states the exact condition under which their value survives.
 
-**Proposed refinement, worth deciding alongside the above:** the field already turns amber when
-overridden, where amber currently means *"you have set something"*. It could instead — or
-additionally — mark **divergence**: this row disagrees with others of its type, so the value will be
-lost on export. **That is the state that actually costs money**, and it is distinguishable using a
-comparison already available in the grid's own data.
+#### ✅ BUILT 2026-08-29. The marker rule, and the one thing it deliberately does NOT tell you
+
+> ## THE RULE
+>
+> **A row is flagged iff its group DIVERGES *and* its value differs from that group's BASELINE.**
+> Both halves are required and each rejects a real case:
+>
+> | Half dropped | What breaks |
+> |---|---|
+> | group-diverges alone | marks every row in the group, including untouched rows sitting on the default. Five PP rows where two changed would light up all five |
+> | differs-from-baseline alone | marks rows when **nothing is wrong** — three PP rows all overridden to 4% AGREE, export correctly as 4%, and lose nothing, yet all three differ from a default of 5% |
+>
+> Within a group every untouched row inherits the **same** baseline, so a diverging group always
+> contains at least one row that differs from it. **There is no case where a group diverges and
+> nothing is marked.**
+
+> ### ⚠️ THE MARKED ROW IS NOT NECESSARILY THE ROW THAT LOSES — someone will ask
+>
+> The export reads the **first** row of each group. If the odd row happens to be first, **it is the
+> one that survives and the conforming rows are dropped.** So a Maker can see a red marker on the
+> row whose value did reach the quote.
+>
+> Which row loses depends on item order and — per **limitation 3**, where `items[0]` may not even be
+> a Box row — is **not reliably knowable**. The marker therefore names **the row the Maker changed**,
+> which is deterministic and explicable, rather than the row that will be dropped, which is not.
+>
+> **This lines up with the warning text rather than needing reconciling:** the wording never claims
+> which value survives, only that the others will not reach the quote. Two decisions taken
+> separately, consistent by construction.
+
+**Amber is untouched and still means "this row overrides the profile".** Divergence gets its own
+marker — red border plus a warning line in the tooltip. Repurposing amber would have deleted working
+information to make room for new information.
+
+**One rule, two consumers, one module.** `lib/overrideDivergence.js` holds the comparison;
+`BatchGrid` adapts `batchRows` + profile defaults, `QuoteItemsTab` adapts the resolved item specs.
+Two implementations of one comparison is how D-7 and D-27 happened.
 
 
 **Freight is the sharper of the two.** `BK3` is written only when `f0.freightOverride` is set, so a

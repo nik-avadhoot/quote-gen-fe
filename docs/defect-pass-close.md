@@ -185,6 +185,25 @@ workbook, not the code that fills it.
 **Cause:** a set described from memory instead of derived. **Remedy:** treat any stated count as a
 **floor** and re-derive the set before proposing.
 
+> ### 🆕 THE SIXTH INSTANCE IS ON A DIFFERENT AXIS — undercounted CASES, not SITES
+>
+> **D-28.** The five above undercount **sites**. This one undercounts **cases in a verification**.
+>
+> The divergence marker was built to test *"does this row's group diverge"* when the rule was *"is
+> this row the odd one out"*. It was verified against a batch with **two PP rows, at 2% and 5%** —
+> and passed. **That is the one shape where the two rules cannot be told apart:** with two rows,
+> "every row in the diverging group" and "the rows differing from the baseline" are the same set.
+>
+> **An instance was tested where the extent was needed.**
+>
+> **Why it needs naming separately:** *"re-derive the full set of sites"* does not prompt anyone to
+> ask *"does my test data distinguish the rules I am choosing between?"* A verification can exercise
+> every site and still prove nothing if the fixture cannot separate the implemented rule from the
+> intended one.
+>
+> **Remedy: before accepting a green check, name the rule you did NOT implement and confirm the
+> fixture would have FAILED under it.** If it would also have passed, the check is decoration.
+
 > **"Floor" understates it — the set moves SIDEWAYS.** A survey expected to find five sites found
 > four: one *recorded* site turned out correct, and one *unrecorded* site turned out broken.
 > **Counting is not the check; tracing each site is.**
@@ -238,8 +257,10 @@ Four sites, one design failure. D-9 fills the blank on **sector selection**; D-1
 
 ### Verification that proves nothing
 
-Twice in this pass a check "passed" while testing nothing: an injection that never landed, and a
-change-detection test whose stale element ref put focus on a different row.
+**Three times** in this pass a check "passed" while testing nothing: an injection that never landed;
+a change-detection test whose stale element ref put focus on a different row; and a divergence check
+whose `red_count: 0` was measured on a **DOM with no grid in it** — the tab had not switched, so
+there were zero inputs to be red.
 
 > **A test whose pass condition is "nothing happened" is worthless without a paired demonstration
 > that something *could* have happened.** Assert the precondition, then run a positive control on
