@@ -47,9 +47,10 @@
 // changes this tab's list and nothing downstream; editing a SPEC changes both.
 // Expect this before filing it as a bug.
 // ═══════════════════════════════════════════════════════════════════════════
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { BOX_TYPES } from "../data/defaults.js";
 import { constrAutoName } from "../lib/constructionName.js";
+import { findDuplicate, hasIdentity, sameConstruction } from "../lib/constructionIdentity.js";
 import { useAppState } from "../state/AppStateContext.js";
 import { C, mono } from "../theme.js";
 
@@ -60,6 +61,30 @@ export default function ConstructionLibTab(){
     clTabQuery, setClTabQuery, clTabFilter, setClTabFilter,
   } = useAppState();
   const[clTabExpandedConstr,setClTabExpandedConstr]=useState(null);
+
+  // ── D-11 PATH 3: the DERIVED duplicate warning ─────────────────────────────
+  // "+ New Construction" has NO commit point. The row is appended already
+  // status:"active", every field is edited inline, and there is no save button,
+  // no blur handler and no collapse-with-changes anywhere in this tab — every
+  // keystroke persists immediately. So there is no instant at which to BLOCK.
+  //
+  // ⚠️ THIS PATH WARNS WHERE THE OTHER THREE BLOCK. The asymmetry is structural,
+  // not an oversight — see D-11 in the register, and PM-1, which carries the
+  // draft/Save-Cancel model that a real block here would need.
+  //
+  // Derived state, same shape as D-28: recomputed from the library itself, so it
+  // needs no trigger. It appears the moment a row identity matches another and
+  // disappears if the Maker edits it apart. Blank drafts are excluded via
+  // hasIdentity, or every fresh row would flag against every other fresh row.
+  const _dupOf=useMemo(()=>{
+    const m={};
+    (constructionLib||[]).forEach((c,i)=>{
+      if(!hasIdentity(c))return;
+      const twin=(constructionLib||[]).find((o,j)=>j<i&&hasIdentity(o)&&sameConstruction(o,c));
+      if(twin)m[c.code]=twin.code;
+    });
+    return m;
+  },[constructionLib]);
 
     // Filter logic for the full tab
     const applyClTabFilter=c=>{
@@ -211,21 +236,40 @@ export default function ConstructionLibTab(){
             // spec_ect, spec_cobb AND sector, it is the same construction regardless
             // of client. Prompt user to add client to the existing entry instead.
             const incomingSector=spec.sector||batchProfile.sector||"";
-            const toStr=v=>(v===undefined||v===null||v===""?"":String(v).trim());
-            const duplicate=constructionLib.find(c=>
-              toStr(c.board_gsm)===toStr(spec.board_gsm)&&
-              toStr(c.spec_bs)===toStr(spec.spec_bs)&&
-              toStr(c.spec_bct)===toStr(spec.spec_bct)&&
-              toStr(c.spec_ect)===toStr(spec.spec_ect)&&
-              toStr(c.spec_cobb)===toStr(spec.spec_cobb)&&
-              toStr(c.sector)===toStr(incomingSector)
-            );
+            // D-11: was 4 board specs + spec_cobb + SECTOR. Now the shared 9-field
+            // predicate — drops sector AND spec_cobb, gains ply/flutes/boxType/layers.
+            // The client-merge branch below is KEPT and will now fire more often,
+            // including ACROSS SECTORS. That is the ruling working: a construction
+            // used by two clients in different sectors is one construction with two
+            // client tags.
+            const duplicate=findDuplicate(constructionLib,spec);
             if(duplicate){
               const incomingClient=spec.client||batchProfile.client||"";
               const existingClient=duplicate.client||"";
               const msg=incomingClient&&incomingClient!==existingClient
-                ?`A construction with identical STDs (GSM: ${duplicate.board_gsm||"—"}, BS: ${duplicate.spec_bs||"—"}, BCT: ${duplicate.spec_bct||"—"}, ECT: ${duplicate.spec_ect||"—"}, Cobb: ${duplicate.spec_cobb||"—"}) and sector "${duplicate.sector||"—"}" already exists as [${duplicate.code}].\n\nClient identity is not a reason to create a duplicate construction.\n\nClick OK to add "${incomingClient}" to existing [${duplicate.code}]'s client field instead.`
-                :`A construction with identical STDs and sector already exists as [${duplicate.code}].\n\nNo duplicate will be created.`;
+                // D-11: the old text named SECTOR as a matched field and listed Cobb —
+                // both wrong now, and wrong in the exact case this branch fires most.
+                // A Maker reading it learned the wrong model of what makes two
+                // constructions the same. It now names the fields that ACTUALLY matched.
+                //
+                // D-35: it also states the sector asymmetry PLAINLY rather than
+                // explaining it away. Client tags accumulate; sector tags do not. Saying
+                // so is more useful than implying sector does not matter — the Maker can
+                // then decide what to do about it.
+                ?`[${duplicate.code}] is the same construction — same board specs `+
+                 `(GSM ${duplicate.board_gsm||"—"}, BS ${duplicate.spec_bs||"—"}), `+
+                 `ply ${duplicate.ply||"—"}, flutes ${duplicate.flute_F1||"—"}/${duplicate.flute_F2||"—"}, `+
+                 `box type ${duplicate.boxType||"—"} and paper layers.\n\n`+
+                 `Sector and client are tags, not identity. `+
+                 `[${duplicate.code}] stays tagged ${duplicate.sector||"—"} — this import's `+
+                 `${incomingSector||"—"} tag is not added.\n\n`+
+                 `OK = add "${incomingClient}" to [${duplicate.code}]'s client tags\n`+
+                 `Cancel = leave [${duplicate.code}] unchanged`
+                :`[${duplicate.code}] is the same construction — same board specs `+
+                 `(GSM ${duplicate.board_gsm||"—"}, BS ${duplicate.spec_bs||"—"}), `+
+                 `ply ${duplicate.ply||"—"}, flutes ${duplicate.flute_F1||"—"}/${duplicate.flute_F2||"—"}, `+
+                 `box type ${duplicate.boxType||"—"} and paper layers.\n\n`+
+                 `Sector and client are tags, not identity.\n\nNo duplicate will be created.`;
               if(incomingClient&&incomingClient!==existingClient){
                 if(window.confirm(msg)){
                   // Add incoming client to existing construction's client field
@@ -329,6 +373,17 @@ export default function ConstructionLibTab(){
                     {c.board_gsm&&<span style={{fontSize:9,background:C.cream,color:C.slateM,borderRadius:3,padding:"1px 5px"}}>{c.board_gsm}gsm</span>}
                     {batchUses.length>0&&<span style={{fontSize:9,background:"#EEF4FB",color:"#2E6094",borderRadius:3,padding:"1px 5px"}}>
                       ↳ {batchUses.length} batch row{batchUses.length>1?"s":""}</span>}
+                    {/* D-11 path 3: the badge says SAVED on purpose. This path cannot
+                        refuse — there is no save step to refuse at — so the entry exists
+                        whether or not the Maker acts. Stating that is the limitation
+                        disclosed where it is met, rather than only in the register. The
+                        tooltip's second paragraph exists so "SAVED" reads as a known
+                        limit and not as a bug. */}
+                    {_dupOf[c.code]&&<span
+                      title={`[${_dupOf[c.code]}] is the same construction — same board specs, ply, flutes, box type and paper layers. Sector and client are tags, not identity.\n\nThis entry was saved. The library has no save step, so a duplicate here cannot be refused — only flagged.\n\nEdit it into something distinct, or delete it and use [${_dupOf[c.code]}].`}
+                      style={{fontSize:9,background:"#FFF1F0",color:C.red,border:`1px solid ${C.red}55`,
+                        borderRadius:3,padding:"1px 5px",fontWeight:700}}>
+                      ⚠ SAVED as a duplicate of [{_dupOf[c.code]}] — edit or delete</span>}
                   </div>
                 </div>
                 {/* Actions */}

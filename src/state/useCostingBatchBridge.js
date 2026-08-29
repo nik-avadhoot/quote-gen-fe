@@ -24,6 +24,7 @@
 import { INIT_SPEC } from "../data/defaults.js";
 import { buildSpecFromRow } from "../engine/costing.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
+import { findDuplicate } from "../lib/constructionIdentity.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useCostingBatchBridge(st){
@@ -449,18 +450,11 @@ export function useCostingBatchBridge(st){
     // C1: match on STDs + ply + both flutes + boxType + layers (all seven fields).
     // Without layers in the match, two constructions that share geometry but differ
     // in paper grade (e.g. 22BF vs 26HRCT top) silently collapse to the first one found.
-    const specLayersStr=JSON.stringify(spec.layers||{});
-    const existingFull=constructionLib.find(c=>
-      toStr(c.board_gsm)===toStr(spec.board_gsm)&&
-      toStr(c.spec_bs)===toStr(spec.spec_bs)&&
-      toStr(c.spec_bct)===toStr(spec.spec_bct)&&
-      toStr(c.spec_ect)===toStr(spec.spec_ect)&&
-      +c.ply===(+spec.ply||5)&&
-      toStr(c.flute_F1)===toStr(spec.flute_F1)&&
-      toStr(c.flute_F2)===toStr(spec.flute_F2)&&
-      toStr(c.boxType)===toStr(spec.boxType||"RSC")&&
-      JSON.stringify(c.layers||{})===specLayersStr
-    );
+    // D-11: this predicate was the correct one and is now THE shared one.
+    // `existingSTD` below is deliberately NOT routed through it — that is the
+    // board-specs-match-but-layers-differ case, and its Cancel branch is a
+    // SANCTIONED duplication route ruled by the product owner.
+    const existingFull=findDuplicate(constructionLib,spec);
 
     if(existingFull){
       // Exact match including layers — reuse silently

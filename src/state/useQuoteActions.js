@@ -15,6 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { buildSpecFromRow, calcCosting, checkSpecCompliance } from "../engine/costing.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
+import { findDuplicate } from "../lib/constructionIdentity.js";
 import { parseImportedExcel } from "../export/importExcel.js";
 import { toB64 } from "../export/toB64.js";
 import { C } from "../theme.js";
@@ -415,17 +416,21 @@ export function useQuoteActions(st){
     const usedCodes=new Set(constructionLib.map(c=>c.code));
     const nextCode=LETTERS.split("").find(l=>!usedCodes.has(l))||`C${constructionLib.length}`;
     // Fix 14: duplicate check (was missing from this path; the Construction Library tab has it, this didn't)
-    const incomingSector=spec.sector||batchProfile.sector||"";
-    const toStr=v=>(v===undefined||v===null||v===""?"":String(v).trim());
-    const duplicate=constructionLib.find(c=>
-      toStr(c.board_gsm)===toStr(spec.board_gsm)&&
-      toStr(c.spec_bs)===toStr(spec.spec_bs)&&
-      toStr(c.spec_bct)===toStr(spec.spec_bct)&&
-      toStr(c.spec_ect)===toStr(spec.spec_ect)&&
-      toStr(c.sector)===toStr(incomingSector)
-    );
+    // D-11: was 4 board specs + SECTOR, with its own local toStr. Now the shared
+    // 9-field predicate. Drops sector (metadata, ruled 2026-08-29) and gains
+    // ply/flutes/boxType/layers, so it is stricter about the board and blind to
+    // the tag — which is the model.
+    const duplicate=findDuplicate(constructionLib,spec);
     if(duplicate){
-      window.alert(`A construction with identical STDs already exists as [${duplicate.code}]. No duplicate created.`);
+      // D-11: "identical STDs" understated what is compared and said nothing about
+      // sector. The predicate is nine fields and IGNORES sector and client, so an
+      // import from a different sector lands here now — the message has to say why.
+      window.alert(
+        `[${duplicate.code}] is the same construction — same board specs `+
+        `(GSM ${duplicate.board_gsm||"—"}, BS ${duplicate.spec_bs||"—"}), `+
+        `ply ${duplicate.ply||"—"}, flutes ${duplicate.flute_F1||"—"}/${duplicate.flute_F2||"—"}, `+
+        `box type ${duplicate.boxType||"—"} and paper layers.\n\n`+
+        `Sector and client are tags, not identity.\n\nNo duplicate created.`);
       setTab("constrlib");
       return;
     }
