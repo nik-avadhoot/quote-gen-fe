@@ -1463,7 +1463,139 @@ half closes only the case where the PP rows agree with each other.
 > **It is not a divergence** — both sides do the same thing — so a one-sided fix would *create* the
 > drift that D-27 is about.
 
-#### ✅ ACCEPTED BY THE PRODUCT OWNER, 2026-08-29 — **INTEREST ONLY**. Read the scope before citing this
+#### ✅ PRODUCT POSITION, ruled 2026-08-29 — **INTEREST AND FREIGHT ARE HEADER-LEVEL BY DESIGN**
+
+> ## THIS IS NOT AN ACCEPTED DEFECT. IT IS A STATEMENT THAT THE TEMPLATE IS RIGHT
+>
+> **Interest and freight are client-level, not per-SKU, because the business works that way.**
+> Payment behaviour is a property of the customer; plant location is a property of the delivery.
+> Neither varies by the SKU inside one quote. **The workbook models them at header level because
+> that is what they are.**
+>
+> **The template is not deficient here.** Per-SKU interest and freight are capabilities **the app
+> offers that the workbook deliberately does not** — and the workbook is the one that matches the
+> domain.
+>
+> Product owner, ruling: *"Interest and freight are header/client-level by design. The template
+> models them that way because the business works that way. Accepting the limitation, not
+> complicating it."*
+
+> ### ⚠️ SO THE DEFECT INVERTS — and the entry is not the one that was written
+>
+> The register framed this as *the export drops a row-level override*. Under this ruling that is
+> backwards. **The export is correct.** What is wrong, if anything, is that **the grid exposes
+> per-row Interest and Freight overrides that have no meaning at header level and that the export
+> cannot carry.**
+>
+> The Maker sets one, `calcBatchRow` applies it, the app's own costing moves — and the exported
+> quote does not. **The app and the document it produces disagree, and the app is the one that is
+> wrong.** Recorded as **D-28** below so it stays trackable; renumber freely.
+>
+> **The fix direction is therefore the opposite of what the earlier framing implied.** Do NOT plumb
+> these through to the export. The candidates are: remove the two controls, disable them, or warn
+> at the point of entry that the value will not reach the quote. **Ruling that out was the point.**
+
+> ## ⚠️ SCOPE WIDENED 2026-08-29 — IT **DOES** EXTEND TO WASTE AND CONV. The earlier scoping is SUPERSEDED
+>
+> **This block previously read: "SCOPED TO INTEREST AND FREIGHT. IT DOES NOT EXTEND TO WASTE OR
+> CONV." That was ruled first and is now WRONG.** It is recorded here rather than deleted, because
+> the reasoning that produced it was sound and someone will reproduce it.
+>
+> **Why the narrow scope was ruled first:** interest and freight are client-level facts, whereas
+> waste and conv are properties of the piece being made and legitimately differ between a Box and a
+> Partition in one set. That distinction is real — **but it was paired with an assumption that the
+> export supported per-row waste. It does not.**
+>
+> **What changed the ruling: the product owner ran the export.** Profile-level `wastePP` of 4%
+> populated the BOARD slot correctly and independently of RS4's 5% — **the two slots work.** A
+> row-level override on a single PP row produced **5% in both slots** — limitation 1, structurally
+> unrepresentable. **The fix does what the template can express and no more.**
+>
+> > **Product owner, revising:** *"Same shape as interest and freight, one level down. The app
+> > offers per-row overrides; the export carries per-Box/PP-pair values. Four parameters, one
+> > product position. I ruled the narrower scope first — that was based on expecting per-row
+> > support that doesn't exist."*
+>
+> **The granularity differs; the mismatch is identical.** Interest and freight are **header-level**;
+> waste and conv are **Box/PP-pair level**. In both cases **the Maker sees one rate and the document
+> shows another.** One product position covers all four.
+>
+> **D-27 remains a real and separate defect and is NOT dissolved by this.** D-27 was `server.py`
+> reading a field that never carries an override, so the PP slot held the profile default
+> *unconditionally*. Fixing it is what made the Box/PP pair work independently at all. **The product
+> position is about what the template can express; D-27 was about the exporter failing to fill what
+> it can.**
+
+### D-28 — the grid offers per-row overrides the export cannot carry (FOUR parameters)
+
+**Recorded 2026-08-29 under the scope freeze. Not worked.** The inverse of how D-18 framed it: the
+export is right and the input surface is wrong.
+
+| Parameter | Grid offers | Workbook carries | Where entered |
+|---|---|---|---|
+| **Interest%** | per row | **one, header-level** | expanded row, `ROW OVERRIDES` panel |
+| **Freight Rs/kg** | per row | **one, header-level** | expanded row, `ROW OVERRIDES` panel |
+| **Waste%** | per row | **one per Box / one per PP** | main grid column, between `Vol/mo` and `Conv Rs/kg` |
+| **Conv Rs/kg** | per row | **one per Box / one per PP** | main grid column, beside `Waste%` |
+
+| | |
+|---|---|
+| **WHAT HAPPENS** | All four are honoured by `calcBatchRow` and by Deep Dive, so the app's costing visibly moves. None survives export intact when rows of the same type disagree |
+| **CONSEQUENCE** | **The rate the Maker sees and the rate on the document they send do not match.** Silent, and it fails in the wrong direction: the Maker trusts the screen |
+| **THE DANGEROUS STATE** | Not "an override exists". It is **rows of the same type DISAGREEING**. If every PP row shares 4%, the export is correct. The loss occurs only on divergence |
+
+**Freight is the sharpest of the four.** `BK3` is written only when `f0.freightOverride` is set, so
+a later row's override is **not written AND the template's VLOOKUP silently computes something else
+in its place** — a wrong number with no trace, rather than a missing one.
+
+#### FIX DIRECTION RULED 2026-08-29 — WARN, DO NOT PLUMB. Keep the app design
+
+> **The app's per-row overrides stay.** They are correct for on-screen costing and Makers use them.
+> **Nothing is removed or disabled.** What is added is a warning, because the defect is an
+> expectation mismatch, not a wrong number.
+
+**PROPOSED WORDING AND PLACEMENT — proposed only, NOT built, NOT yet approved.**
+
+**Placement: both, doing different jobs. The field is primary.**
+
+| | Why |
+|---|---|
+| **On the field** (primary) | **That is where the expectation forms.** Unconditional, cheap, and it reaches the Maker at the moment they type a value they believe will appear on the quote |
+| **On export** (secondary, conditional) | Catches what the field warning cannot: an override set by someone else, set before the warning existed, or simply forgotten. **Must be conditional on actual divergence and must name the affected rows.** A generic warning on every export will be dismissed within a week |
+
+**Proposed field wording** — appended to the existing `title` only when the row is overridden. Two
+variants, because the granularity genuinely differs and one vague string would be worse than none:
+
+*Waste% / Conv Rs/kg — Box-PP pair level:*
+
+    On-screen only. The workbook holds ONE PP Waste% for all PP rows -
+    this value reaches the quote only if every PP row shares it.
+
+*Interest% / Freight Rs/kg — header level:*
+
+    On-screen only. The workbook holds ONE Interest% for the whole quote -
+    this value reaches the quote only if every row shares it.
+
+> **Why not "batch level SKU type".** It is accurate and it is **not obvious from the UI** — nothing
+> on screen is labelled "SKU type", and a Maker would need to already understand the export model to
+> decode it. The proposed wording names the concrete unit the Maker can see (*"all PP rows"*, *"the
+> whole quote"*) and states the exact condition under which their value survives.
+
+**Proposed refinement, worth deciding alongside the above:** the field already turns amber when
+overridden, where amber currently means *"you have set something"*. It could instead — or
+additionally — mark **divergence**: this row disagrees with others of its type, so the value will be
+lost on export. **That is the state that actually costs money**, and it is distinguishable using a
+comparison already available in the grid's own data.
+
+
+**Freight is the sharper of the two.** `BK3` is written only when `f0.freightOverride` is set, so a
+later row's override is **not written AND the template's VLOOKUP silently computes something else
+in its place** — a wrong number with no trace, rather than a missing one. That property is
+unchanged by this ruling; what changes is that the answer is to stop offering the control, not to
+carry it.
+
+#### The original interest acceptance, superseded but kept for the reasoning
+
 
 > **What was accepted:** that **per-SKU interest** — a Box row and a PP row carrying *different*
 > interest rates within one batch — is not worth supporting. The product owner's words: *"interest
