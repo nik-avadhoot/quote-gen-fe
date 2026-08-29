@@ -1,4 +1,12 @@
-# Defect pass — CLOSED 2026-08-29
+# Defect pass — CLOSED 2026-08-29, REOPENED and CLOSED AGAIN
+
+> **⚠️ THIS DOCUMENT WAS WRITTEN AT A FIRST CLOSE AND THEN OVERTAKEN.** After it was
+> written the product owner reopened the pass to finish the remaining entries. **D-28,
+> D-17, D-8e, D-11, D-20 and D-8b all shipped afterwards**, and eight new entries
+> (D-29…D-36) were found while shipping them. The tables below are current as of the
+> second close. Where the register and this file disagree, **`component-split-plan.md`
+> is authoritative.**
+
 
 **Read this before `component-split-plan.md`.** That file is the working record; this is the state
 it left behind. **The register is the deliverable of this pass, not the fixes.** More was learned
@@ -30,6 +38,23 @@ found *during* the pass, and only two (D-26, D-27) were built, each by explicit 
 | **D-26** | Typing a SET Code skipped the Glass SKU Nos/Set auto-fill | `ce800ca` |
 | **D-1** (return leg) | `buildSpecFromRow` blanked the Glass SKU on every Deep Dive | `8b317a5` |
 | **D-27** | `server.py` filled the PP waste/conv slots from the **Box** row, so **every** PP row-level waste/conv override was dropped whenever the backend served the export | `cc5ada1` (be) |
+| **D-28** | The grid offered per-row overrides the export cannot carry, with nothing saying so. Now warns on **divergence** — rows sharing one export slot that disagree | `591f30b`, rule corrected in `938c07c` |
+| **D-17** | The add-on pin control was a bare ⊕ reading as "add" | `e0987c9` |
+| **D-8e** | A master edit wiped every calculated row in silence | `146eeff` |
+| **D-11** (prevention) | Four creation paths carried **three** predicates and one absence. One shared predicate now; **three block, one warns** — see the limitation below | `0d30b93` |
+| **D-20** | `+ New Construction` gave no feedback and appended off-screen — which made D-11's path-3 warning invisible | `47c196e` |
+| **D-8b** | Blanket rate operations rewrote every grade on one click with no confirmation | `30daa31` |
+
+> ### ⛔ D-11 IS NOT FULLY CLOSED, AND THE ENTRY SAYS SO
+>
+> **`+ New Construction` warns; it does not block.** The library has no save step — the row is
+> appended already active and every field persists as typed — so there is no moment at which to
+> refuse. **A block there needs a commit step, which is PM-1.** D-11's completeness is gated on
+> PM-1, and PM-1 carries D-11's remaining quarter.
+>
+> **Measuring D-11 later means counting *unsanctioned* duplicates only.** Three sanctioned routes
+> survive: path 1's Cancel (ruled), the warn-only path 3, and **restore (D-33)**. `createdVia` is
+> what makes the distinction countable.
 
 ### Closed as NOT defects
 
@@ -55,12 +80,14 @@ implementer's own commit** — see §4.
 
 | | Why still open |
 |---|---|
-| **D-28** | **Recorded, not worked. Fix direction ruled: WARN, DO NOT PLUMB — the app design stays.** The grid offers per-row overrides for **four** parameters the export cannot carry per row: Interest and Freight (header-level in the workbook), Waste% and Conv (one per Box, one per PP). The rate the Maker sees and the rate on the document disagree. **Proposed wording and placement are recorded and NOT approved.** The dangerous state is not "an override exists" — it is **rows of the same type disagreeing** |
-| **D-8e** | Warn when a master edit invalidates already-calculated rows. Smallest fix available, zero design input |
-| **D-8b** | Confirmation on blanket rate operations, which write across every grade in one click |
 | **D-8c** | The plausible-range values survive any migration; **where** validation runs is deferred |
 | **D-23** | `+ New Batch` guards on batch state to protect spec state. **Ruled: confirm when the spec is dirty, and rewrite the message to name the spec** |
-| **D-17** | The add-on pin control is a bare ⊕ with no label. Cosmetic |
+| **D-31** 🚨 | A costing-relevant **profile** change leaves stale results on screen — the invalidation effect does not fire. **Why is deliberately untraced.** Read with D-32 |
+| **D-32** | Master edits invalidate **every** row, including rows that cannot be affected — and, because the deps compare by reference, on edits that change nothing at all. Read with D-31: **opposite failures of one subject** |
+| **D-34** 🚨 | The client-merge writes a comma-joined value **six of seven consumers cannot use**. Live, shipped, and independent of D-11 |
+| **D-35** | Sector is a tag that does not accumulate. `DefaultsTab` uses it as a **join key**, which is why multi-value is not a one-liner. Paired with D-34 |
+| **D-36** | A batch row can be costed against a construction with **no paper layers** — ₹0, and it reaches the export. **`checkMissingInfo` already returns the right blocker; it is simply not consulted for batch rows** |
+| **D-29, D-30** | Layout only — pinned add-on columns and the Glass SKU tag change row height |
 
 ### Blocked on a decision — see §3
 
@@ -78,7 +105,7 @@ implementer's own commit** — see §4.
 |---|---|
 | **D-8a** → PM-1 | The master-data write model. A draft/Save-Cancel model over `localStorage` and one over a server are different artefacts; building it twice is the largest waste available |
 | **D-8d** → PM-2 | Change history / undo. Discarded entirely by a migration that will have its own audit trail |
-| **D-11** | Four construction-creation paths, four different checks, **one absent**. The unguarded path (`+ New Construction`) appends a blank row, so no check is possible at creation and none happens later. ⚠️ **The obvious fix — unify the two `importConstrFromSpec` copies — fixes nothing observable.** Cleanup of existing duplicates deferred to PM-3 |
+| **D-11 cleanup** → PM-3 | **Prevention shipped** (see Fixed). Only the existing-duplicate consolidation is deferred — and **PM-3 now needs a one-way step**, because a restore can silently undo it (D-33) |
 | **PM-5** | Post-model. (PM-4 was re-filed into the register as D-26 and fixed) |
 
 ---
