@@ -13,6 +13,7 @@
 // point of that guard, not a smell.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState } from "react";
+import { buildBlanketConfirm, gyAffected } from "../lib/blanketConfirm.js";
 import { CREDIT_PCT } from "../data/defaults.js";
 import { useAppState } from "../state/AppStateContext.js";
 import { C, mono, sans } from "../theme.js";
@@ -44,13 +45,20 @@ export default function RateMasterTab(){
                 style={{width:46,padding:"3px 4px",border:`1px solid ${C.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:mono}}/>
             </div>))}
           {role==="admin"&&<button onClick={()=>{
-            let _n=0;setRates(prev=>prev.map(gr=>{
-              if(!gr.code.endsWith("GY"))return gr;
-              const bf=parseInt(gr.code)||0;
-              const nat=prev.find(x=>x.code===gr.code.replace("GY",""));
-              if(!nat)return gr;_n++;
-              return{...gr,price:+(nat.price+(bf<=24?gyPremLow:gyPremHigh)).toFixed(2)};
-            }));touchRateDate();showToast(`GY applied — ${_n} grades`,"info");
+            // D-8b: the affected set is computed BEFORE the write, by the same helper
+            // the updater uses. It used to be counted inside setRates, so the number
+            // existed only afterwards — too late for a confirm, and a second count
+            // could have drifted from the first.
+            const _hits=gyAffected(rates,gyPremLow,gyPremHigh);
+            const _c=buildBlanketConfirm({kind:"recalc",label:"GY prices",
+              affected:_hits.length,total:rates.length,
+              affectedCodes:_hits.map(h=>h.code),
+              detail:`Each GY grade's price is overwritten with its natural grade's price plus the band premium — ₹${gyPremLow} for 16–24BF, ₹${gyPremHigh} for 28–35BF.`});
+            if(!_c.actionable){showToast(_c.text,"info",5000);return;}
+            if(!window.confirm(_c.text))return;
+            const _by=new Map(_hits.map(h=>[h.code,h.to]));
+            setRates(prev=>prev.map(gr=>_by.has(gr.code)?{...gr,price:_by.get(gr.code)}:gr));
+            touchRateDate();showToast(`GY applied — ${_hits.length} grades`,"info");
           }} style={{padding:"3px 8px",borderRadius:5,border:"none",background:"#2E6094",
             color:C.white,fontSize:9,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>Apply GY</button>}
 
@@ -84,6 +92,13 @@ export default function RateMasterTab(){
             onChange={e=>setBlanketDisc(+e.target.value)}
             style={{width:44,padding:"3px 4px",border:`1px solid ${C.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:mono}}/>
           {role==="admin"&&<button onClick={()=>{
+            // D-8b: one click rewrote every grade with no confirmation.
+            const _c=buildBlanketConfirm({kind:"set",label:"Discount",
+              valueText:`₹${(+blanketDisc).toFixed(2)}/kg`,
+              affected:rates.length,total:rates.length,
+              currentValues:rates.map(r=>({text:`${r.desc||r.code} ₹${(+r.disc||0).toFixed(2)}`,value:+r.disc||0}))});
+            if(!_c.actionable){showToast(_c.text,'info',5000);return;}
+            if(!window.confirm(_c.text))return;
             setRates(prev=>prev.map(r=>({...r,disc:blanketDisc})));
             touchRateDate();showToast(`Disc ₹${blanketDisc}/kg → all`,'info');
           }} style={{padding:"2px 7px",borderRadius:4,border:`1px solid ${C.border}`,
@@ -97,6 +112,13 @@ export default function RateMasterTab(){
             onChange={e=>setBlanketInterest(+e.target.value)}
             style={{width:44,padding:"3px 4px",border:`1px solid ${C.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:mono}}/>
           {role==="admin"&&<button onClick={()=>{
+            // D-8b: as above — every grade, one click, no confirmation.
+            const _c=buildBlanketConfirm({kind:"set",label:"Credit%",
+              valueText:`${(+blanketInterest).toFixed(2)}%`,
+              affected:rates.length,total:rates.length,
+              currentValues:rates.map(r=>({text:`${r.desc||r.code} ${(+r.interest||0).toFixed(2)}%`,value:+r.interest||0}))});
+            if(!_c.actionable){showToast(_c.text,'info',5000);return;}
+            if(!window.confirm(_c.text))return;
             setRates(prev=>prev.map(r=>({...r,interest:blanketInterest})));
             touchRateDate();showToast(`Credit ${blanketInterest}% → all grades`,'info');
           }} style={{padding:"2px 7px",borderRadius:4,border:`1px solid ${C.border}`,
