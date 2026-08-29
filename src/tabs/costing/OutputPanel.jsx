@@ -2,103 +2,26 @@
 // src/tabs/costing/OutputPanel.jsx — the Costing tab's right panel.
 //
 // Extracted from QuotationApp.jsx (Phase 7a). Blockers/warnings, the key-number
-// tiles, the margin slider, cost build-up and the Send-to-Batch controls.
+// tiles, the margin slider, the cost build-up and the layer detail.
 //
-// ⚠️ This file renders the OUTPUT side of every negative case: the Send button
-// the SET Code gate disables, the two-context badge, and the "Costing + New
-// Batch" control. Extraction is STRUCTURAL ONLY — no behaviour changed.
+// ⚠️ C1 moved this panel's header bar OUT — its underlined "Costing" tab
+// label, the two-context badge, ✕ Unlink, → Send to Batch Entry, Start new SKU
+// and + New Batch now live in the START/REVIEW strip in CostingTab.jsx. The
+// controls were relocated verbatim; nothing about them changed here. What is
+// left is the scrolling output body alone.
 // ═══════════════════════════════════════════════════════════════════════════
-import { INIT_SPEC } from "../../data/defaults.js";
-import { Btn, KN } from "../../ui/primitives.jsx";
+import { KN } from "../../ui/primitives.jsx";
 import { useAppState } from "../../state/AppStateContext.js";
-import { C, mono, sans } from "../../theme.js";
+import { C, mono } from "../../theme.js";
 
 export default function OutputPanel(){
   const {
-    spec, s, setSpec, setSetAutoFill, setSpecCommitted,
-    costingContext, setCostingContext, activeBatchRowId, setActiveBatchRowId,
-    batchRows, card,
-    r, missing, compliance, marginSugg, osSaving, _sendReady,
-    sendCostingToBatch, specFromProfile, specForNewBatch,
+    spec, s, card,
+    r, missing, compliance, marginSugg, osSaving,
   } = useAppState();
 
   return(
     <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
-      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.cream,flexShrink:0}}>
-        <div style={{padding:"9px 14px",fontFamily:sans,fontSize:12,fontWeight:600,
-          color:C.amber,borderBottom:`2px solid ${C.amber}`}}>Costing</div>
-        <div style={{marginLeft:"auto",padding:"4px 8px",display:"flex",gap:6,alignItems:"center"}}>
-          {/* Unlink — shown only in REVIEW mode (activeBatchRowId set). Moved from left panel bottom. */}
-          {activeBatchRowId&&<Btn ch="✕ Unlink" v="ghost" sm onClick={()=>{
-            if(!window.confirm(
-              "Unlink will exit this review.\n\n"+
-              "Client/Sector/Mat Code/SKU will be cleared. Construction and output specs will be carried forward as starting defaults for the next SKU.\n\n"+
-              "Any unsaved Costing changes will be lost. Continue?"
-            ))return;
-            setSpec(specFromProfile());
-            setActiveBatchRowId(null);
-            setSpecCommitted(false);
-            setCostingContext("same-batch"); // returning from REVIEW to same-batch workspace
-          }}/>}
-          {/* C12: Context badge — visible when BatchEntry has rows, distinguishes same-batch vs new-batch */}
-          {batchRows.length>0&&(
-            <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:3,
-              background:costingContext==="new-batch"?"#EEF4FB":"#FFF8ED",
-              color:costingContext==="new-batch"?"#2E6094":C.amberD,
-              border:`1px solid ${costingContext==="new-batch"?"#6A9FD4":C.amber}44`,
-              whiteSpace:"nowrap"}}>
-              {costingContext==="new-batch"
-                ?`✦ Scratchpad · ${batchRows.length} row${batchRows.length!==1?"s":""} parked in Batch Entry`
-                :`🔗 Batch active · ${batchRows.length} row${batchRows.length!==1?"s":""}`}
-            </span>)}
-          {/* C13: Send button — disabled when new-batch context would hard-block */}
-          {(()=>{
-            const _newBatchBlocked=costingContext==="new-batch"&&batchRows.length>0;
-            const _disabled=!!activeBatchRowId||!_sendReady||_newBatchBlocked;
-            return(
-            <button onClick={activeBatchRowId?undefined:sendCostingToBatch}
-              disabled={_disabled}
-              title={activeBatchRowId?"Unavailable while reviewing an existing Batch row. Unlink the review first."
-                :_newBatchBlocked?"Scratchpad context — go to Batch Entry → + New Batch to clear the old batch first"
-                :_sendReady?"Send this spec to Batch Entry as a new row"
-                :"Complete dimensions and paper layers first — see panel"}
-              style={{padding:"6px 14px",borderRadius:6,border:"none",fontFamily:sans,
-                fontSize:12,fontWeight:700,
-                cursor:_disabled?"not-allowed":"pointer",
-                background:_disabled?"#C0C0C0":C.amber,
-                color:"white",letterSpacing:"0.01em",
-                opacity:_disabled?0.55:1,transition:"all 0.15s"}}>
-              → Send to Batch Entry
-            </button>);
-          })()}
-          <Btn ch="Start new SKU" v="ghost" sm
-            disabled={!!activeBatchRowId}
-            title={activeBatchRowId?"Unavailable while reviewing an existing Batch row. Unlink the review first to start a new SKU."
-              :costingContext==="new-batch"?"Start a fresh scratchpad SKU — retains construction, reads nothing from the parked BatchEntry batch"
-              :"Start a fresh Costing spec seeded from the current Batch Profile"}
-            onClick={activeBatchRowId?undefined:()=>{
-              // costingContext is intentionally NOT changed — Start New SKU preserves current context
-              setSpec(costingContext==="new-batch"?specForNewBatch():specFromProfile());
-              setSpecCommitted(false);setSetAutoFill(true);}}/>
-          {/* Costing + New Batch: non-destructive independent scratchpad context. Does NOT clear BatchEntry. */}
-          <Btn ch="+ New Batch" v="ghost" sm
-            disabled={!!activeBatchRowId}
-            title={activeBatchRowId?"Unavailable while reviewing an existing Batch row."
-              :"Start an independent scratchpad context. BatchEntry rows remain completely untouched."}
-            onClick={activeBatchRowId?undefined:()=>{
-              if(batchRows.length>0&&!window.confirm(
-                "Start a new scratchpad batch context in Costing?\n\n"+
-                `Your existing Batch Entry batch (${batchRows.length} row${batchRows.length!==1?"s":""}) remains completely untouched.\n\n`+
-                "To import this new work into Batch Entry, go to Batch Entry → + New Batch first.\n\n"+
-                "OK = Start scratchpad / Cancel = Stay"
-              ))return;
-              setSpec({...INIT_SPEC,plant:"",delivery:""});
-              setCostingContext("new-batch");
-              setSpecCommitted(false);
-              setSetAutoFill(true);
-            }}/>
-        </div>
-      </div>
       <div style={{flex:1,overflowY:"auto",padding:12}}>
         {/* Diagnostics — Blockers (left) + Warnings (right) always side-by-side for equal height.
              Plant warning injected locally (plant/delivery not in costing.js checkMissingInfo). */}
