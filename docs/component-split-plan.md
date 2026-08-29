@@ -1549,6 +1549,74 @@ half closes only the case where the PP rows agree with each other.
 > position is about what the template can express; D-27 was about the exporter failing to fill what
 > it can.**
 
+### D-36 — a batch row can be costed against a construction with NO PAPER LAYERS
+
+**A Maker can attach a batch row to a blank construction, selected from the batch-side picker, and
+nothing prevents or flags it. The row calculates to ₹0 and passes Send All.**
+
+**Severity proposed: MEDIUM.** The costing path is the serious half — but see the severity note; the
+failure is **loud, not silent**, and that is what keeps it off the blocker list.
+
+**Found 2026-08-29 while scoping D-20.** Filed separately on the product owner's ruling: *"it's a
+costing-input defect, not a feedback one, and folding it into D-20 would bury it inside a UX fix."*
+
+#### How a blank construction becomes selectable
+
+| | |
+|---|---|
+| `ConstructionOverlay.jsx:33-34` | the batch-side picker filters on **`status==='active'` plus numeric ranges only** |
+| `ConstructionLibTab.jsx:213-218` | `+ New Construction` creates entries **already `status:"active"`** — so they qualify by default |
+| `useQuoteActions` `calcBatchRow` | guards only on `!constEntry` — a construction that **exists but is empty** passes |
+| `useQuoteActions` `getBatchRowStatus` | checks L/W/H and that a construction code resolves. **It never checks that the construction has layers**, so the row shows as normal, not `incomplete` |
+
+#### ✅ FIX DIRECTION — READ THIS FIRST. The check already exists; it is wired to ONE of two paths
+
+`engine/costing.js:109` — `checkMissingInfo` already returns exactly the right blocker:
+
+```
+"Paper construction not specified — enter at least one layer"
+```
+
+**It is applied to the Costing tab's spec** (`useQuoteActions:155` gates `addItem` on
+`missing.blockers.length>0`) **and never to a batch row.** `sendAllToQuoteItems` gates on unconfirmed
+SET Codes and on rows having a result; it does not run `checkMissingInfo` per row.
+
+> **This is not a rule to design. It is an existing rule wired to one of two paths.**
+> `checkMissingInfo` already knows the condition and already words it correctly. The Costing tab
+> consults it; the batch grid does not. **The fix is to consult it — everything below this point is
+> symptom, not cause.**
+
+#### Severity — measured, not asserted
+
+Running the real engine on a spec built from a blank construction
+(`calcCosting` + `checkMissingInfo`, in Node, outside the browser):
+
+```
+finalRate: 0
+blockers: ["Paper construction not specified — enter at least one layer"]
+```
+
+**₹0, not NaN and not a plausible-but-understated number.** That matters for severity: an
+understated rate would be silently wrong and a beta blocker. **A zero rate is conspicuous** — a
+Maker is unlikely to send it unnoticed — but it does flow through `Send All` into Quote Items and the
+export as a ₹0 line, because `Send All` only skips rows with **no** result.
+
+> **The implementer's first framing of this was wrong and is corrected here.** It implied a silently
+> understated price. It is a loud one. **MEDIUM, not HIGH.**
+
+#### The cheap symptoms — same defect, kept in one entry
+
+Blank drafts are **not fully blank**: they carry `boxType:"RSC"`, `ply:5`, `flute_F1:"B"`,
+`flute_F2:"A"`, `status:"active"`, **and `sector`/`client` inherited from the batch profile**.
+
+* they **inflate** the sidebar count, the Total/Active tallies (`:125`) and the `filtered/total`
+  display (`:199`)
+* their inherited sector and client **keep a value alive in both dropdowns** after every real entry
+  using it has been archived or deleted
+* **D-11's duplicate warning cannot see them, by design** — `hasIdentity` excludes blank entries so
+  that fresh drafts do not all flag against each other. Correct for D-11, and it means **nothing at
+  all notices accumulation**
+
 ### D-34 — 🚨 the client-merge writes a value SIX OF SEVEN consumers cannot use
 
 **Severity: HIGH — it destroys the exact retrieval property the tagging exists for.**

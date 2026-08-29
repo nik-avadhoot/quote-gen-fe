@@ -565,7 +565,30 @@ the moves were clean.
    >
    > **Every one had the same shape: a state that was SET was reported as a state that WAS.**
 
-   > ### 📋 FIVE THINGS ABOUT TESTING THIS APP THAT COST REAL TIME AND ARE NOT IN THE CODE
+   > **✅ IT HAS SINCE CAUGHT ONE.** Debugging D-20's scroll, the implementer measured "the effect
+   > did not fire" without first checking that the row had actually expanded. Applying this rule
+   > showed it *had* expanded — which eliminated the effect and the ref lookup, and narrowed the
+   > cause to `behavior:"smooth"` (item 6). **The rule found the answer by removing a wrong
+   > assumption, not by adding a check.**
+
+   > ### 6 · `scrollIntoView({behavior:"smooth"})` SILENTLY DOES NOTHING in this app's scroll containers
+   >
+   > Measured on D-20, in the Construction Library's list container:
+   >
+   > | Call | Result |
+   > |---|---|
+   > | `scrollIntoView({block:"nearest",behavior:"smooth"})` | `scrollTop` stayed **0** — no scroll at all |
+   > | `scrollIntoView({block:"nearest"})` | `scrollTop` **0 → 1264** |
+   >
+   > **It fails silently and looks exactly like the effect never firing** — no error, no warning, and
+   > every other explanation (stale ref, wrong key, effect not running, hook order) is more
+   > plausible on the face of it. That cost a full debugging cycle.
+   >
+   > **Use `scrollIntoView({block:"nearest"})` with no `behavior` in this codebase.** `block:"nearest"`
+   > is also the guard against jarring the user: it scrolls the minimum distance and does nothing when
+   > the element is already fully visible.
+
+   > ### 📋 SIX THINGS ABOUT TESTING THIS APP THAT COST REAL TIME AND ARE NOT IN THE CODE
    >
    > All three are recorded above and are gathered here because each was learned by losing an hour
    > to it, and none is discoverable from reading the source:
@@ -577,6 +600,7 @@ the moves were clean.
    > | **Adding a hook blank-screens until a hard reload** | inherent to HMR, not a defect, and it looks exactly like a real crash |
    > | **A programmatic setter bypasses `disabled`** | a gated control reports success and looks reachable when a real user cannot touch it |
    > | **🚨 Never assert a precondition you SET — read it back** | a silent setter failure makes a test pass for the wrong reason, and a passing test is never investigated |
+   > | **`scrollIntoView` + `behavior:"smooth"` is a no-op here** | fails silently and is indistinguishable from the effect not firing |
 
    > **Anything failing any one of the three still needs the user's run.** The scope must also be
    > stated honestly in the commit — *what* was verified and *what* was not — as `73a0948` does.
