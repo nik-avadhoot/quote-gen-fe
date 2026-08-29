@@ -23,7 +23,7 @@ import { Fragment, useMemo, useRef } from "react";
 import { BOX_TYPES } from "../../data/defaults.js";
 import { buildSpecFromRow, checkSpecCompliance } from "../../engine/costing.js";
 import { isPPType, sameSetCode } from "../../engine/rowType.js";
-import { findDivergence, hasDivergence } from "../../lib/overrideDivergence.js";
+import { findDivergence, isDiverged } from "../../lib/overrideDivergence.js";
 import { Btn } from "../../ui/primitives.jsx";
 import { STATUS_DISPLAY, constrAutoName } from "../../lib/constructionName.js";
 import { C, mono, sans } from "../../theme.js";
@@ -57,23 +57,28 @@ export default function BatchGrid(){
   const _divergence=useMemo(()=>{
     const isPP=r=>isPPType(r.itemType);
     const set=(r,k)=>r[k]!==""&&r[k]!=null;
-    const ent=(group,value)=>({group,value});
+    // Every entry carries its group's BASELINE so findDivergence can name the odd
+    // ones out rather than the whole group — a row still on the baseline was not
+    // changed by anyone and must not be marked.
+    const build=(baseOf,valOf)=>findDivergence(batchRows.map((r,i)=>{
+      const base=baseOf(r);
+      return {label:String(i+1),group:isPP(r)?"PP":"Box",baseline:base,value:valOf(r,base)};
+    }));
+    const buildQuote=(base,valOf)=>findDivergence(batchRows.map((r,i)=>
+      ({label:String(i+1),group:"",baseline:base,value:valOf(r)})));
+    const profFreight=batchProfile.freightOverride
+      ||freight?.[batchProfile.plant]?.[batchProfile.delivery]||0;
     return {
       // Box/PP-pair level — the effective value is the override, else the profile default
-      waste:findDivergence(batchRows.map((r,i)=>({label:String(i+1),
-        ...ent(isPP(r)?"PP":"Box",
-          set(r,"wasteConv_waste")?r.wasteConv_waste
-            :(isPP(r)?(batchProfile.wastePP??5):(batchProfile.waste??5)))}))),
-      conv:findDivergence(batchRows.map((r,i)=>({label:String(i+1),
-        ...ent(isPP(r)?"PP":"Box",
-          set(r,"wasteConv_conv")?r.wasteConv_conv
-            :(isPP(r)?(batchProfile.convRatePP??12.5):(batchProfile.convRate??7)))}))),
+      waste:build(r=>isPP(r)?(batchProfile.wastePP??5):(batchProfile.waste??5),
+                  (r,b)=>set(r,"wasteConv_waste")?r.wasteConv_waste:b),
+      conv: build(r=>isPP(r)?(batchProfile.convRatePP??12.5):(batchProfile.convRate??7),
+                  (r,b)=>set(r,"wasteConv_conv")?r.wasteConv_conv:b),
       // Quote level — one slot for every row, so the group is constant
-      interest:findDivergence(batchRows.map((r,i)=>({label:String(i+1),
-        ...ent("",set(r,"interestOverride")?r.interestOverride:(batchProfile.interest??0.5))}))),
-      freight:findDivergence(batchRows.map((r,i)=>({label:String(i+1),
-        ...ent("",set(r,"freightRowOverride")?r.freightRowOverride
-          :(batchProfile.freightOverride||freight?.[batchProfile.plant]?.[batchProfile.delivery]||0))}))),
+      interest:buildQuote(batchProfile.interest??0.5,
+                  r=>set(r,"interestOverride")?r.interestOverride:(batchProfile.interest??0.5)),
+      freight: buildQuote(profFreight,
+                  r=>set(r,"freightRowOverride")?r.freightRowOverride:profFreight),
     };
   },[batchRows,batchProfile,freight]);
   // Shared marker: red border + a ⚠ line in the tooltip. Amber (override) is untouched.
@@ -514,7 +519,8 @@ export default function BatchGrid(){
                             style={{width:44,padding:"2px 4px",border:`1px solid ${isOvr?C.amber:C.border}`,
                               borderRadius:3,fontSize:10,textAlign:"center",fontFamily:mono,
                               background:isOvr?"#FFF8ED":C.white,
-                              ..._divStyle(hasDivergence(_divergence.waste,isPP?"PP":"Box"))}}/>;
+                              ..._divStyle(isDiverged(_divergence.waste,isPP?"PP":"Box",
+                                isOvr?row.wasteConv_waste:profVal,profVal))}}/>;
                         })()}
                       </td>
                       {/* Conv Rs/kg override */}
@@ -531,7 +537,8 @@ export default function BatchGrid(){
                             style={{width:50,padding:"2px 4px",border:`1px solid ${isOvr?C.amber:C.border}`,
                               borderRadius:3,fontSize:10,textAlign:"center",fontFamily:mono,
                               background:isOvr?"#FFF8ED":C.white,
-                              ..._divStyle(hasDivergence(_divergence.conv,isPP?"PP":"Box"))}}/>;
+                              ..._divStyle(isDiverged(_divergence.conv,isPP?"PP":"Box",
+                                isOvr?row.wasteConv_conv:profVal,profVal))}}/>;
                         })()}
                       </td>
                       {/* Margin% */}
@@ -725,7 +732,8 @@ export default function BatchGrid(){
                                     style={{width:52,padding:"2px 4px",border:`1px solid ${isIntOvr?C.amber:C.border}`,
                                       borderRadius:3,fontSize:10,textAlign:"center",fontFamily:mono,
                                       background:isIntOvr?"#FFF8ED":C.white,
-                                      ..._divStyle(hasDivergence(_divergence.interest))}}/>
+                                      ..._divStyle(isDiverged(_divergence.interest,"",
+                                        isIntOvr?row.interestOverride:profInt,profInt))}}/>
                                   {isIntOvr&&<button onClick={()=>updC("interestOverride","")}
                                     style={{background:"none",border:"none",color:C.slateL,cursor:"pointer",fontSize:10}}>✕</button>}
                                 </div>
@@ -739,7 +747,8 @@ export default function BatchGrid(){
                                     style={{width:52,padding:"2px 4px",border:`1px solid ${isFrOvr?C.amber:C.border}`,
                                       borderRadius:3,fontSize:10,textAlign:"center",fontFamily:mono,
                                       background:isFrOvr?"#FFF8ED":C.white,
-                                      ..._divStyle(hasDivergence(_divergence.freight))}}/>
+                                      ..._divStyle(isDiverged(_divergence.freight,"",
+                                        isFrOvr?row.freightRowOverride:profFr,profFr))}}/>
                                   {isFrOvr&&<button onClick={()=>updC("freightRowOverride","")}
                                     style={{background:"none",border:"none",color:C.slateL,cursor:"pointer",fontSize:10}}>✕</button>}
                                 </div>

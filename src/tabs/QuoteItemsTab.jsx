@@ -131,14 +131,23 @@ export default function QuoteItemsTab(){
   // Does NOT block the export. It is a warning, not a gate — the product position
   // is that the app design stays and the workbook is correct.
   const warnDivergence=()=>{
-    const ent=(group,value)=>({group,value});
     const rows=items.map((it,i)=>({it,label:String(i+1),isPP:isPPType(it.spec?.rowType)}));
+    // Baselines are the batch profile's inherited defaults — the same values the
+    // grid compares against, so the toast names the same rows the fields marked.
+    const bp=batchProfile;
+    const mk=(group,value,baseline)=>({group,value,baseline});
     const checks=[
-      ["Waste%",     findDivergence(rows.map(r=>({label:r.label,...ent(r.isPP?"PP":"Box",r.isPP?r.it.spec?.wastePP:r.it.spec?.waste)})))],
-      ["Conv Rs/kg", findDivergence(rows.map(r=>({label:r.label,...ent(r.isPP?"PP":"Box",r.isPP?r.it.spec?.convRatePP:r.it.spec?.convRate)})))],
-      ["Interest%",  findDivergence(rows.map(r=>({label:r.label,...ent("",r.it.spec?.interest)})))],
-      ["Freight Rs/kg",findDivergence(rows.map(r=>({label:r.label,...ent("",r.it.spec?.freightOverride)})))],
-    ].filter(([,d])=>d.length>0);
+      ["Waste%",       findDivergence(rows.map(r=>({label:r.label,
+        ...mk(r.isPP?"PP":"Box",r.isPP?r.it.spec?.wastePP:r.it.spec?.waste,
+              r.isPP?(bp.wastePP??5):(bp.waste??5))})))],
+      ["Conv Rs/kg",   findDivergence(rows.map(r=>({label:r.label,
+        ...mk(r.isPP?"PP":"Box",r.isPP?r.it.spec?.convRatePP:r.it.spec?.convRate,
+              r.isPP?(bp.convRatePP??12.5):(bp.convRate??7))})))],
+      ["Interest%",    findDivergence(rows.map(r=>({label:r.label,
+        ...mk("",r.it.spec?.interest,bp.interest??0.5)})))],
+      ["Freight Rs/kg",findDivergence(rows.map(r=>({label:r.label,
+        ...mk("",r.it.spec?.freightOverride,bp.freightOverride??"")})))],
+    ].filter(([,d])=>d.length>0&&d.some(x=>x.labels.length>0));
     if(!checks.length)return;
     const parts=checks.map(([label,ds])=>ds.map(d=>
       `${label}${d.group?` (${d.group})`:""}: rows ${d.labels.join(", ")} disagree (${d.values.join(", ")})`
