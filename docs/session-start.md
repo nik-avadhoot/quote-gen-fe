@@ -79,6 +79,32 @@ A fifth, added at Stage 3 — SET Code comparison must stay in one place:
 python scripts/audit-setcode.py
 ```
 
+A sixth, added at the second close — the blanket-operation confirmations. Their controls are
+**admin-only**, so an implementer without admin cannot trigger the dialogs at all; this fixture is
+the only way that wording and its count arithmetic get verified:
+
+```bash
+npm run test:blanket
+```
+
+> ### ⚖️ SIX GATES, AND ALL SIX RUN EVERY TIME. Here is the reasoning, so nobody re-litigates it
+>
+> **Total runtime is a few seconds.** The question is not cost, it is whether scoping any of them
+> to "when you touched that area" is safe. **It is not, and this pass is the evidence:**
+>
+> | Gate | Why it must run even when it "cannot" be relevant |
+> |---|---|
+> | `audit-setcode` | Its entire purpose is catching a `===` comparison added **somewhere nobody expected**. Scoping it to "when you touch SET Codes" defeats the gate |
+> | `audit-doc-sections` | It caught a silent deletion in the implementer's **own** commit — the author is the least able to notice what they removed |
+> | `test:costing` | The engine's only regression net, and the one thing standing between a refactor and a wrong price |
+> | `test:blanket` | Verifies text and arithmetic **nobody without admin can see in the UI** |
+> | `build`, `eslint` | Cheap, and the ceiling discipline only works if the number is taken every time |
+>
+> **"I didn't touch that" is exactly the reasoning that lets drift in.** D-27 — two exporters
+> answering the same question differently — was found because a mirror was checked when nobody
+> expected it to matter. **If a gate is ever genuinely too slow, make it faster; do not make it
+> conditional.**
+
 `test:costing` passing does **not** mean the UI works — read §1 of `post-split-state.md` for what
 it does not cover before trusting a green run.
 

@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test:costing": "node scripts/costing-fixtures.mjs",
+    "test:blanket": "node scripts/blanket-confirm-fixtures.mjs",
     "preview": "vite preview",
     "ref:case4": "node scripts/case4-reference.mjs"
   },

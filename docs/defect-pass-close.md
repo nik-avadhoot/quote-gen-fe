@@ -1,11 +1,38 @@
 # Defect pass — CLOSED 2026-08-29, REOPENED and CLOSED AGAIN
 
-> **⚠️ THIS DOCUMENT WAS WRITTEN AT A FIRST CLOSE AND THEN OVERTAKEN.** After it was
-> written the product owner reopened the pass to finish the remaining entries. **D-28,
-> D-17, D-8e, D-11, D-20 and D-8b all shipped afterwards**, and eight new entries
-> (D-29…D-36) were found while shipping them. The tables below are current as of the
-> second close. Where the register and this file disagree, **`component-split-plan.md`
-> is authoritative.**
+> **⚠️ WRITTEN AT A FIRST CLOSE, THEN OVERTAKEN.** The product owner reopened the pass to finish
+> the remaining entries. The tables below are current as of the **second** close. Where the register
+> and this file disagree, **`component-split-plan.md` is authoritative.**
+
+## 📊 THE ARITHMETIC — read this before reading a count as a regression
+
+> ## The second stretch **CLOSED SIX** and **OPENED EIGHT.**
+>
+> | Closed | Opened |
+> |---|---|
+> | D-28, D-17, D-8e, D-11 *(prevention)*, D-20, D-8b | D-29, D-30, D-31, D-32, D-33, D-34, D-35, D-36 |
+>
+> **Every one of the eight was found while shipping the six.** Not one came from a survey, a
+> re-read, or a hunt. They surfaced because working code was exercised:
+>
+> | Found while… | Entries |
+> |---|---|
+> | building D-8e's warning | **D-31** (invalidation does not fire), **D-32** (it fires when it need not) |
+> | verifying D-11's path 4 | **D-34** (the client-merge value is unusable), **D-35** (sector cannot accumulate) |
+> | counting D-11's creation paths | **D-33** (restore is a route no predicate can reach) |
+> | scoping D-20 | **D-36** (a row costed against a construction with no paper layers) |
+> | running D-11's and D-20's own checks | **D-29, D-30** (layout) |
+>
+> ### ⚠️ SO THE REGISTER GROWS WHEN THE APP IS EXERCISED. That is the register working.
+>
+> **A rising count is not regression and must not be read as one.** These defects existed before
+> this pass; what changed is that someone drove the paths and looked. The count measures **attention
+> paid**, not quality lost.
+>
+> The corollary is the uncomfortable half: **the true open count is unknown and is larger than what
+> is written down.** Areas nobody exercised this pass have not been cleared — they have not been
+> looked at. **An empty region of the register means no one has been there.**
+
 
 
 **Read this before `component-split-plan.md`.** That file is the working record; this is the state
