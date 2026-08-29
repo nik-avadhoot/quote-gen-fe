@@ -47,7 +47,7 @@
 // changes this tab's list and nothing downstream; editing a SPEC changes both.
 // Expect this before filing it as a bug.
 // ═══════════════════════════════════════════════════════════════════════════
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { BOX_TYPES } from "../data/defaults.js";
 import { constrAutoName } from "../lib/constructionName.js";
 import { findDuplicate, hasIdentity, sameConstruction } from "../lib/constructionIdentity.js";
@@ -85,6 +85,30 @@ export default function ConstructionLibTab(){
     });
     return m;
   },[constructionLib]);
+
+  // ── D-20: bring the expanded entry into view ───────────────────────────────
+  // "+ New Construction" appends at the BOTTOM of the list. The entry was already
+  // being expanded correctly (setClTabExpandedConstr uses the full-array index,
+  // which matches the ci computed at the row map) — it was simply off-screen, so
+  // the Maker saw nothing happen and could not tell the click had registered.
+  //
+  // Reclassified from UX to load-bearing when D-11 shipped: path 3 can only WARN
+  // about a duplicate, and the warning renders on the very row that cannot be
+  // seen. A warning nobody sees is not a warning.
+  //
+  // block:"nearest" IS the guard. It scrolls the minimum distance and does
+  // NOTHING when the element is already fully in view, so expanding a row the
+  // Maker just clicked on does not jump the page. No extra visibility test needed.
+  const _rowRefs=useRef({});
+  useEffect(()=>{
+    if(clTabExpandedConstr==null)return;              // collapse — nothing to show
+    const el=_rowRefs.current[clTabExpandedConstr];
+    // NO behavior:"smooth" — MEASURED as a no-op in this scroll container. With it,
+    // scrollTop stayed at 0; without it the same call scrolls 0 -> 1264. Instant is
+    // also the correct behaviour here: the Maker clicked something and needs to see
+    // it, not watch it travel.
+    if(el&&el.scrollIntoView)el.scrollIntoView({block:"nearest"});
+  },[clTabExpandedConstr]);
 
     // Filter logic for the full tab
     const applyClTabFilter=c=>{
@@ -224,6 +248,10 @@ export default function ConstructionLibTab(){
               createdVia:"tab-new",createdAt:new Date().toISOString()};
             setConstructionLib(prev=>[...prev,newEntry]);
             setClTabExpandedConstr(String(constructionLib.length));
+            // D-20: this was the only append path that gave NO feedback at all.
+            // tab-import already toasts. Name the code and say what to do next,
+            // matching D-11's badge discipline.
+            showToast(`✅ New construction [${code}] — fill in its specs`,'success',4000);
             setClTabFilter({sector:'',client:'',status:'active'});
             setClTabQuery('');
           }} style={{padding:"5px 14px",borderRadius:6,border:"none",
@@ -348,7 +376,8 @@ export default function ConstructionLibTab(){
             // Traceability: which batch rows use this construction
             const batchUses=batchRows.filter(r=>r.constructionCode===c.code);
             return(
-            <div key={expandKey} style={{marginBottom:8,border:`1px solid ${clTabExpandedConstr===expandKey?C.amber:C.border}`,
+            <div key={expandKey} ref={el=>{_rowRefs.current[expandKey]=el;}}
+              style={{marginBottom:8,border:`1px solid ${clTabExpandedConstr===expandKey?C.amber:C.border}`,
               borderRadius:7,opacity:isArchived?0.65:1,background:C.white}}>
               {/* Header row */}
               <div style={{display:"flex",alignItems:"flex-start",padding:"10px 14px",
