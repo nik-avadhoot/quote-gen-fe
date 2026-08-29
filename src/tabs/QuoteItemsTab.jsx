@@ -26,7 +26,8 @@
 import { exportFromTemplate } from "../export/excel.js";
 import { exportAllPDF } from "../export/pdf.js";
 import { Btn } from "../ui/primitives.jsx";
-import { normSetCode, sameSetCode } from "../engine/rowType.js";
+import { normSetCode, sameSetCode, isPPType } from "../engine/rowType.js";
+import { findDivergence } from "../lib/overrideDivergence.js";
 import { useAppState } from "../state/AppStateContext.js";
 import { C, mono } from "../theme.js";
 
@@ -118,7 +119,37 @@ export default function QuoteItemsTab(){
               ?`❌ Too many Box items: ${offerCount} Box rows exceed the OFFER sheet capacity of ${OFFER_MAX}. Split the quote.`
               :"";
             // B3: SET completeness check — warn if any SET has a Box but no Plate/Partition
-            const checkSETCompleteness=()=>{
+            // ── D-28: warn when rows that share ONE export slot disagree ────────────────
+  // The field warning in BatchGrid catches the Maker who typed the value. This
+  // catches the one who did NOT — someone else's override, or their own from
+  // yesterday. Different people, different moments, and the export is where the
+  // mismatch becomes real.
+  //
+  // Computed on `items`, not batchRows: this is the actual payload, so it is what
+  // the workbook will receive. Same comparison as the grid, via the shared module.
+  //
+  // Does NOT block the export. It is a warning, not a gate — the product position
+  // is that the app design stays and the workbook is correct.
+  const warnDivergence=()=>{
+    const ent=(group,value)=>({group,value});
+    const rows=items.map((it,i)=>({it,label:String(i+1),isPP:isPPType(it.spec?.rowType)}));
+    const checks=[
+      ["Waste%",     findDivergence(rows.map(r=>({label:r.label,...ent(r.isPP?"PP":"Box",r.isPP?r.it.spec?.wastePP:r.it.spec?.waste)})))],
+      ["Conv Rs/kg", findDivergence(rows.map(r=>({label:r.label,...ent(r.isPP?"PP":"Box",r.isPP?r.it.spec?.convRatePP:r.it.spec?.convRate)})))],
+      ["Interest%",  findDivergence(rows.map(r=>({label:r.label,...ent("",r.it.spec?.interest)})))],
+      ["Freight Rs/kg",findDivergence(rows.map(r=>({label:r.label,...ent("",r.it.spec?.freightOverride)})))],
+    ].filter(([,d])=>d.length>0);
+    if(!checks.length)return;
+    const parts=checks.map(([label,ds])=>ds.map(d=>
+      `${label}${d.group?` (${d.group})`:""}: rows ${d.labels.join(", ")} disagree (${d.values.join(", ")})`
+    ).join(" · ")).join(" · ");
+    showToast(
+      `\u26A0 ${checks.length} value${checks.length===1?"":"s"} will not export as entered — ${parts}. `
+      +`The workbook holds one value per slot; the others will not reach the quote.`,
+      'error',12000);
+  };
+
+  const checkSETCompleteness=()=>{
               // D-7: normalise. Case-split SET codes made this gate see one SET as two —
               // a Box under "Glass180" and its Part under "GLASS180" reported the Box's
               // SET as incomplete when the Part existed all along. A FALSE WARNING on
@@ -145,7 +176,7 @@ export default function QuoteItemsTab(){
                 <Btn ch={templateLoaded?"↓ Export (Master Format)":"↓ Export All to Excel"}
                   v="success"
                   disabled={!canExport||!capacityOk}
-                  onClick={()=>{if(checkSETCompleteness())exportFromTemplate(items,rates,freight,templateB64,{quoteRef,makerName,quoteDate,effectiveFrom,effectiveTo,marginPP:batchProfile.marginPP??8},msg=>showToast(msg,'error',8000));}}
+                  onClick={()=>{if(checkSETCompleteness()){warnDivergence();exportFromTemplate(items,rates,freight,templateB64,{quoteRef,makerName,quoteDate,effectiveFrom,effectiveTo,marginPP:batchProfile.marginPP??8},msg=>showToast(msg,'error',8000));}}}
                   style={(!canExport||!capacityOk)?{opacity:0.45,cursor:"not-allowed"}:{}}/>
               </div>
               <div title={capacityOk?exportTip:capacityMsg} style={{display:"inline-block"}}>
