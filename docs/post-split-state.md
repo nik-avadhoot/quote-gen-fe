@@ -515,7 +515,57 @@ the moves were clean.
    > **Whoever adds a hook should say so when handing over**, so a white screen is read as "reload"
    > rather than "reverted".
 
-   > ### 📋 THREE THINGS ABOUT TESTING THIS APP THAT COST REAL TIME AND ARE NOT IN THE CODE
+   > **4 · A PROGRAMMATIC SETTER BYPASSES `disabled` AND WILL MAKE A GATED CONTROL LOOK REACHABLE.**
+   >
+   > Driving an input with the React-compatible pattern —
+   > `Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el, v)` followed by
+   > a dispatched `input`/`change` — **works on a `disabled` input.** The DOM value changes, the
+   > events fire, and the call reports success.
+   >
+   > **A real user cannot type in that field at all.**
+   >
+   > Observed on D-8b. The implementer set a Rate Master blanket field this way, saw it "work", and
+   > reported *"you can type but not apply"* — when in fact every one of those inputs carries
+   > `disabled={role!=="admin"}` and the Apply buttons do not render. **The claim was wrong in the
+   > direction that matters: it asserted a capability that does not exist.**
+   >
+   > **Check `el.disabled` before concluding a control is reachable, and check whether the
+   > triggering button RENDERS at all** — role gates in this codebase are written as
+   > `{role==="admin" && <button …>}`, so an absent button is invisible to any query that assumes it
+   > exists.
+   >
+   > This is *capability is demonstrated, not described* (§6 rule 4) turned on the implementer's own
+   > tooling rather than on the app.
+
+   > ### 5 · 🚨 NEVER ASSERT A PRECONDITION FROM THE VALUE YOU DISPATCHED. READ IT BACK.
+   >
+   > **This is a RULE, not an observation, and it is the most costly item in this list.** The others
+   > waste time. This one manufactures false confidence.
+   >
+   > ```
+   > setter.call(el,'PHARMA'); el.dispatchEvent(new Event('change',{bubbles:true}));
+   > return { sector_now: 'PHARMA' };      // ← A LIE. That is what was SENT, not what IS.
+   > ```
+   >
+   > **Read the state back out of the app** — `localStorage`, the rendered DOM, a derived control —
+   > **before running the test that depends on it.**
+   >
+   > **Why it matters more than it looks:** a setter that silently fails produces a test that passes
+   > **for the wrong reason**, and *a passing test is not investigated*. A failing test gets
+   > debugged. A false pass gets written into the register as evidence.
+   >
+   > **Four instances in the 2026-08 pass, two of them reported as passes before being caught:**
+   >
+   > | | What was measured | Why it proved nothing |
+   > |---|---|---|
+   > | D-19 | a negative test | the injection never landed |
+   > | D-26 | change-detection held its value | a stale ref focused a different row; the handler never ran |
+   > | D-28 | `red_count: 0` | measured on a DOM with **no grid in it** — the tab had not switched |
+   > | D-11 | path 2 "blocked across sectors" | the sector change never applied, so it exercised the case the **OLD** predicate already handled |
+   >
+   > **Every one had the same shape: a state that was SET was reported as a state that WAS.**
+
+   > ### 📋 FIVE THINGS ABOUT TESTING THIS APP THAT COST REAL TIME AND ARE NOT IN THE CODE
    >
    > All three are recorded above and are gathered here because each was learned by losing an hour
    > to it, and none is discoverable from reading the source:
@@ -525,6 +575,8 @@ the moves were clean.
    > | **Snapshot via a `localStorage` KEY, never tool output** | reading the store back through the tool's return value **truncates**, and a lossy backup of live data is worse than none |
    > | **A reload can log the session out** | and the implementer cannot recover alone — prefer UI routes over reloads when setting up state |
    > | **Adding a hook blank-screens until a hard reload** | inherent to HMR, not a defect, and it looks exactly like a real crash |
+   > | **A programmatic setter bypasses `disabled`** | a gated control reports success and looks reachable when a real user cannot touch it |
+   > | **🚨 Never assert a precondition you SET — read it back** | a silent setter failure makes a test pass for the wrong reason, and a passing test is never investigated |
 
    > **Anything failing any one of the three still needs the user's run.** The scope must also be
    > stated honestly in the commit — *what* was verified and *what* was not — as `73a0948` does.

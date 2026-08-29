@@ -1549,6 +1549,129 @@ half closes only the case where the PP rows agree with each other.
 > position is about what the template can express; D-27 was about the exporter failing to fill what
 > it can.**
 
+### D-34 — 🚨 the client-merge writes a value SIX OF SEVEN consumers cannot use
+
+**Severity: HIGH — it destroys the exact retrieval property the tagging exists for.**
+**Live defect, shipped, and independent of D-11.**
+
+**Found incidentally while VERIFYING D-11's path 4, not by looking for it.** The merge branch ran,
+`[Z].client` became `"Bombay Pharma Ltd, Nagpur Distillers"`, and checking what consumes that value
+showed almost nothing can.
+
+#### The merge produces a comma-joined string. Every filter compares whole strings
+
+| Consumer | How it compares | Result on `"A, B"` |
+|---|---|---|
+| `ConstructionLibTab:94` | `(c.client||'')!==filter.client` — **exact** | filtering for `A` alone **does not find it** |
+| `ConstructionLibTab:172` | dropdown from **distinct whole strings** | `"A, B"` becomes its own third option, polluting the list |
+| `ConstructionOverlay:35` | exact | not found |
+| `ConstructionOverlay:94` | dropdown from whole strings | polluted |
+| `useBatchState:137` | natural-language query matched against whole strings | only matches the combined literal |
+| `ConstructionLibTab:106` | free-text search, `.includes(q)` | ✅ **the one that works** |
+
+> **A construction used by two clients becomes findable by neither of them individually** — only by
+> free-text search, or by picking the combined string out of a dropdown that should not contain it.
+>
+> **That is precisely the property the client tag exists to provide.** The merge was written to
+> avoid duplicate constructions, and it succeeds at that while silently destroying retrieval.
+
+#### Not caused by D-11, and not fixed by it
+
+The merge branch predates this pass. **D-11 makes it fire MORE OFTEN** — the shared predicate drops
+`sector`, so imports that previously created a duplicate now reach the merge instead. **D-11 does
+not create this defect; it increases exposure to it**, which is why it is filed now rather than
+deferred.
+
+> **The fix is the same shape change as D-35 — see the cross-reference there. Neither is a
+> one-liner, and neither belongs in D-11.**
+
+### D-35 — sector is a TAG that does not accumulate, and the reason it cannot is a join key
+
+**Recorded 2026-08-29, ruled by the product owner as (c): symmetric in principle, wider than D-11.**
+
+**The product owner's model — a construction is client-agnostic and taggable with many clients AND
+sectors so it stays findable — is NOT retracted. It is UNIMPLEMENTED.** Those are different things,
+and the entry records the difference deliberately.
+
+#### The asymmetry, as it stands today
+
+Path 4 merges the **client** tag and leaves **sector** alone. So a construction accumulates every
+client that used it but keeps the sector of whoever created it first: `[O]` stays PHARMA forever
+even after an ALCOBEV import matches it.
+
+#### 🔑 WHY IT IS NOT A ONE-LINE CHANGE — THIS CONSTRAINT IS THE WHOLE ENTRY
+
+**`DefaultsTab.jsx:80` and `:85` use `constructionLib.some(c=>c.sector===row.code)` — sector is a
+JOIN KEY, not just a label.** That is the guard preventing a sector *code* from being renamed or
+deleted while constructions still reference it.
+
+> **Set `c.sector = "ALCOBEV, PHARMA"` and `c.sector === "ALCOBEV"` becomes FALSE.** The guard stops
+> firing, and a sector code can be deleted out from under live constructions.
+>
+> **Making sector multi-valued as a side effect of a duplicate-detection fix would have silently
+> defeated a data-integrity guard.** The product owner's words: *"I'd have approved (a) without
+> it."*
+
+Seven consumers read `constructionLib[].sector` and **all seven assume a single value** —
+`ConstructionLibTab` (filter `:92`, dropdown `:162`, count `:127`), `ConstructionOverlay`
+(filter `:34`, dropdown `:87`, chip `:183`), and the `DefaultsTab` guard above.
+
+> ## 🔗 D-34 AND D-35 ARE ONE PROBLEM IN TWO FIELDS
+>
+> | | |
+> |---|---|
+> | **D-34** | the client half — **already shipped and broken.** It accumulates, and the accumulated value is unusable |
+> | **D-35** | the sector half — **merely absent.** It does not accumulate at all |
+>
+> **Whoever fixes one must fix both.** The fix is a **shape change** on both fields (string →
+> collection), **seven consumers rewritten**, and **a migration** for existing comma-joined client
+> values already in the wild.
+>
+> **That is why it is not D-11.** D-11 changes which constructions are considered the same; this
+> changes what a construction's tags *are*.
+
+### D-33 — RESTORE is a third route by which duplicate constructions enter, and no predicate can reach it
+
+**Derived 2026-08-29 during D-11's Mode A count.** Not an append site — which is exactly why it was
+missed. It does not call `setConstructionLib` at all.
+
+#### Why it is invisible to a creation-time fix
+
+`handleRestoreFile` (`useQuoteActions.js`) writes every `BACKUP_KEYS` entry — `cbb_constrlib`
+included — straight to `localStorage` via `setItem`, then reloads. On the next mount
+`useMastersState.js:85` re-hydrates `constructionLib` from that string.
+
+> **It is a wholesale REPLACE, not a creation.** `setConstructionLib` is never called, so **no
+> duplicate predicate can run** — there is no creation event to guard. D-11's fix cannot touch this
+> path, and no future creation-time check will either.
+
+#### Three consequences, and the third is the one that bites
+
+1. **Duplicates inside a backup file survive a restore untouched.** Whatever the library looked like
+   when the backup was taken is what comes back.
+2. **A restore can REINTRODUCE duplicates a cleanup removed** — silently, with no warning that the
+   incoming library is dirtier than the one it replaced.
+3. **🚨 THAT DIRECTLY UNDERMINES PM-3.** Consolidate the six duplicate constructions, restore a
+   backup taken before the consolidation, and **the cleanup is undone with no trace.** A cleanup
+   that can be reverted by opening a file is not finished work.
+
+> **PM-3 therefore needs a one-way step** — a migration marker, a schema version, or a refusal to
+> restore a pre-cleanup backup. What that step is belongs to PM-3 and the masters migration, not
+> here. **Recorded so PM-3 is not attempted without it.**
+
+#### After D-11's fix, three sanctioned duplicate routes remain
+
+| Route | Why it stays |
+|---|---|
+| **Path 1's Cancel branch** | ruled by the product owner — the Maker deliberately keeps their own paper layers rather than reusing a board-spec match |
+| **Restore** | structurally unreachable, as above |
+| **Whatever the masters migration brings** | unknown until constructions have database identity |
+
+> **⚠️ MEASURING D-11'S EFFECT LATER MEANS COUNTING *UNSANCTIONED* DUPLICATES ONLY.** A raw
+> duplicate count after the fix will not go to zero and was never going to. Comparing raw totals
+> would read as "the fix did not work" when all three routes above are working as designed.
+> **`createdVia` is what makes the distinction measurable** — that is what the D-11 enabler was for.
+
 ### D-32 — master edits invalidate EVERY row, including rows that cannot be affected
 
 **Observed 2026-08-29 by the product owner, while verifying D-8e. Recorded as an observation — no
@@ -2343,6 +2466,66 @@ D-2 at Stage 2.
 > reposition, reserve space, or make the stack swallow clicks — not to remove the warning.
 
 ### D-11 — 🚨 Construction Library duplicates instead of matching (FOUR predicates, one absent)
+
+#### ✅ PREVENTION FIXED at Stage 5 — one predicate, four paths. **THREE BLOCK, ONE WARNS.**
+
+> # ⛔ READ THIS BEFORE CITING D-11 AS CLOSED
+>
+> **D-11 LEAVES DUPLICATES CREATABLE, BY DESIGN, AT ONE OF THE FOUR PATHS.**
+>
+> `+ New Construction` (`ConstructionLibTab`, `createdVia:"tab-new"`) **warns and does not block.**
+> A Maker can fill a new entry to match an existing one, see the warning, and leave it there. The
+> entry is saved either way.
+>
+> **This is not an oversight and not a partial implementation.** It is structural:
+>
+> | | |
+> |---|---|
+> | Paths 1, 2, 4 | **discrete import actions** — a single moment at which a check can refuse |
+> | Path 3 | **inline authoring** — the row is appended already `status:"active"`, every field persists as it is typed, and there is **no save button, no blur handler and no collapse-with-changes anywhere in the tab** |
+>
+> **There is no instant at which the Maker says "done", so there is nothing to block at.** Both
+> candidate triggers were checked from source and both fail: blur fires on every half-populated
+> tab-out, and `status → active` never fires because a new entry is *created* active.
+>
+> ### 🔗 CLOSING THIS REQUIRES **PM-1**
+>
+> A block at path 3 needs a **commit step**, and a commit step is the draft/Save-Cancel model
+> deferred to **PM-1**. **D-11's completeness is gated on PM-1, and PM-1 carries D-11's remaining
+> quarter.** That dependency runs both ways; neither entry named it before 2026-08-29.
+>
+> **Measuring D-11 later:** a raw duplicate count will not reach zero and was never going to. Three
+> sanctioned routes survive — path 1's Cancel (ruled), **restore (D-33)**, and path 3's warn-only.
+> **`createdVia` is what makes unsanctioned duplicates countable.**
+
+**What shipped:** `lib/constructionIdentity.js` holds the one predicate — four board specs + ply +
+both flutes + boxType + layers, lifted from the bridge's `existingFull`, the only site that already
+had it right. `toStr` moved in with it, because three field sets drifted apart precisely because
+each site redeclared its own comparison — the same lesson as D-7 and D-27.
+
+| Path | Was | Now |
+|---|---|---|
+| 1 `bridge-send` | 9 fields (correct) | shared predicate. **`existingSTD` + its Cancel UNTOUCHED — sanctioned route** |
+| 2 `app-import` | 5 fields incl. **sector** | shared predicate — drops sector, gains ply/flutes/boxType/layers |
+| 3 `tab-new` | **nothing** | **derived warning** — see the block above |
+| 4 `tab-import` | 6 fields incl. **sector** + **cobb** | shared predicate — client-merge branch kept, now fires across sectors |
+
+**Three user-facing messages were rewritten with it.** They named `sector` as a matched field and
+listed `Cobb` — both wrong under the new predicate, and wrong in the exact case the merge branch now
+fires most. **A Maker reading them learned the wrong model of what makes two constructions the
+same.** Shipping the predicate without the messages would have left the app explaining itself
+incorrectly.
+
+**Verified against real data:** the register independently derived the duplicate groups `G/U/V/W`
+and `O/T` from the live 24-entry fixture. The new predicate, written from different code, reproduces
+**exactly those groups** — 4 markers across 25 entries. **Two derivations agreeing on real data.**
+All four paths were then exercised individually, including path 2 and path 4 **across sectors**,
+which is the behaviour that changed.
+
+> **See also D-34 and D-35** — the client tag accumulates into a value almost nothing can filter,
+> and the sector tag does not accumulate at all. Both were found while verifying this fix. Neither
+> is caused by it; **D-11 increases exposure to D-34** by routing more imports into the merge branch.
+
 
 **Hypothesis tested and REFUTED.** The proposed cause was that the two `importConstrFromSpec` copies
 disagree — the tab compares `spec_cobb`, the bridge does not — and that `JSON.stringify(c.layers)`

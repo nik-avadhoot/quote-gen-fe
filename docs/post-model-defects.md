@@ -50,6 +50,18 @@ being found late. Each carries the reasoning, so it is not re-litigated.
 
 ### PM-1 — D-8a, the master-data write model
 
+> ## 🔗 PM-1 CARRIES D-11'S REMAINING QUARTER — the dependency runs both ways
+>
+> The draft/Save-Cancel model deferred here is **also the commit step D-11 needs.**
+>
+> D-11 blocks duplicate constructions at three of four creation paths. The fourth,
+> `+ New Construction`, can only **warn** — the row is appended already active, every field persists
+> as typed, and there is no save step to refuse at. **A block there is not a D-11-sized change; it
+> is this entry.**
+>
+> **So PM-1 is not only about master-data safety. Closing it closes D-11.** Anyone scoping PM-1
+> should count that, and anyone reading D-11 as "done" should read this.
+
 > ## ⚠️ THIS DEFERRAL IS CONDITIONAL — it rests on two entries staying in scope
 >
 > **PM-1 fails test 2: unguarded per-keystroke master edits ARE wrong today.** A typo flows into
@@ -98,6 +110,20 @@ consolidation is a different, safer operation.
 
 > **D-11's PREVENTION fix stays in scope** — see the plan. Only the cleanup moves here. Prevention
 > stops the set growing; cleanup is what the migration should absorb.
+
+> ## 🚨 THIS CLEANUP NEEDS A ONE-WAY STEP, OR IT CAN BE SILENTLY UNDONE — see **D-33**
+>
+> **Backup restore replaces `cbb_constrlib` wholesale**, writing it to `localStorage` and reloading.
+> It never calls `setConstructionLib`, so no creation-time predicate can see it.
+>
+> **Consolidate the six duplicates, then restore a backup taken beforehand, and the consolidation is
+> gone — with no warning and no trace.** The repointing described above would have to be done again,
+> and nothing tells the user it was lost.
+>
+> **A cleanup that can be reverted by opening a file is not finished work.** Whatever form the fix
+> takes — a schema version on the backup, a migration marker, a refusal to restore a pre-cleanup
+> file — **the one-way step is part of PM-3, not an optional extra.** Attempting the consolidation
+> without it buys a result that any old backup can erase.
 
 ### ~~PM-4~~ — MOVED INTO THE REGISTER as **D-26**, 2026-08-28
 
