@@ -9,7 +9,9 @@
 //   IN : the app's own data - cbb_rates, cbb_freight, cbb_sectors, cbb_boxtrim,
 //        cbb_partitions, cbb_constrlib, cbb_locations, cbb_rate_date,
 //        cbb_batchprofile, cbb_quoteitems, cbb_batch_autosave, cbb_template,
-//        cbb_pinned_addons, qgos_sidebar_collapsed.
+//        cbb_pinned_addons, qgos_sidebar_collapsed, and from C3
+//        cbb_costing_draft plus its cbb_costing_draft_corrupt preserve-once
+//        companion (state/useCostingDraft.js).
 //   OUT: the Supabase auth session. That lives in its own key and is handled
 //        by lib/apiClient.js on purpose - it is not part of the cbb_* data
 //        model and must not be routed through here.

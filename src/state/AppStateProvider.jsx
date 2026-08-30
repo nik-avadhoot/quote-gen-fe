@@ -19,6 +19,7 @@ import { useMastersState } from "./useMastersState.js";
 import { useCostingState } from "./useCostingState.js";
 import { useQuoteItemsState } from "./useQuoteItemsState.js";
 import { useBatchState } from "./useBatchState.js";
+import { useCostingDraft } from "./useCostingDraft.js";
 import { useCostingResult } from "./useCostingResult.js";
 import { useBatchInvalidation } from "./useBatchInvalidation.js";
 import { useCostingBatchBridge } from "./useCostingBatchBridge.js";
@@ -32,7 +33,8 @@ export function AppStateProvider({ children }){
   Object.assign(st, useCostingState());       // no deps
   Object.assign(st, useQuoteItemsState(st));  // needs profile (ui)
   Object.assign(st, useBatchState(st));       // needs sectorCodes + constructionLib (masters), setTab/showToast (ui)
-  Object.assign(st, useCostingResult(st));    // needs spec (costing), masters, batchRows/batchProfile (batch)
+  Object.assign(st, useCostingDraft(st));     // C3: owns spec/s(). AFTER useBatchState (seeds from batchProfile state), BEFORE useCostingResult (consumes spec)
+  Object.assign(st, useCostingResult(st));    // needs spec (draft), masters, batchRows/batchProfile (batch)
   useBatchInvalidation(st);                   // AFTER masters AND batch: reads both, calls invalidateAllBatchResults
   Object.assign(st, useCostingBatchBridge(st)); // AFTER useCostingResult: consumes resolveSpecWasteConv
   Object.assign(st, useQuoteActions(st));     // AFTER everything: reads r/missing (derived) and restoreRef (items)

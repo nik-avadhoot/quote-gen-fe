@@ -67,7 +67,8 @@ npx eslint src
 ```
 
 Lint is a **ceiling that may only go down.** 76/0 was the pre-refactor baseline at `0def418`;
-the defect pass has taken it to **67/0** and that is the number to beat now, not 76. A fourth, for documents rather than code:
+the defect pass took it to 67/0 and C3 of the START/REVIEW series took it to **66/0**, which is the
+number to beat now — not 76, and no longer 67. A fourth, for documents rather than code:
 
 ```bash
 python scripts/audit-doc-sections.py
@@ -87,7 +88,16 @@ the only way that wording and its count arithmetic get verified:
 npm run test:blanket
 ```
 
-> ### ⚖️ SIX GATES, AND ALL SIX RUN EVERY TIME. Here is the reasoning, so nobody re-litigates it
+A seventh, added at C3 of the START/REVIEW series — the Costing draft model. `isDirty` has no
+caller until C4 and the corrupt/validation branches need a hand-written `localStorage` blob to
+reach, so this fixture is the only thing that verifies them. It covers `state/costingDraftModel.js`
+only; **`test:costing` remains the costing-engine gate and is not merged with it**:
+
+```bash
+npm run test:draft
+```
+
+> ### ⚖️ SEVEN GATES, AND ALL SEVEN RUN EVERY TIME. Here is the reasoning, so nobody re-litigates it
 >
 > **Total runtime is a few seconds.** The question is not cost, it is whether scoping any of them
 > to "when you touched that area" is safe. **It is not, and this pass is the evidence:**
@@ -98,6 +108,7 @@ npm run test:blanket
 > | `audit-doc-sections` | It caught a silent deletion in the implementer's **own** commit — the author is the least able to notice what they removed |
 > | `test:costing` | The engine's only regression net, and the one thing standing between a refactor and a wrong price |
 > | `test:blanket` | Verifies text and arithmetic **nobody without admin can see in the UI** |
+> | `test:draft` | Same reason one level down: no UI path reaches the draft comparator or its corrupt branch. Its equality cases each name the rule that was NOT implemented, so a green run is evidence rather than decoration |
 > | `build`, `eslint` | Cheap, and the ceiling discipline only works if the number is taken every time |
 >
 > **"I didn't touch that" is exactly the reasoning that lets drift in.** D-27 — two exporters

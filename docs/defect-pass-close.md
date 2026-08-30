@@ -328,7 +328,8 @@ there were zero inputs to be red.
   code a running backend process holds.** No version string, no SHA, nothing in `/health`, and the
   reloader is off. *"I restarted it"* is an assertion nobody can check, and a verification against
   a stale process looks exactly like one against a fixed process.
-- **The lint ceiling is 67**, not 76 or 73. Predict the post-change count before running the gate,
+- **The lint ceiling is 66**, not 76, 73 or 67 — C3 of the START/REVIEW series took the defect
+  pass's 67 down by one. Predict the post-change count before running the gate,
   and treat any gap between prediction and result as a defect in the change.
 - **Never reflow this repo.** `export/excel.js` has an ASI-dependent statement whose terminator
   sits inside a comment.

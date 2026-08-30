@@ -26,7 +26,7 @@ Companion documents:
 
 ---
 
-## 1. Running it, and the three gates
+## 1. Running it, and the gates
 
 ```bash
 npm run dev
@@ -41,6 +41,12 @@ npm run ref:case4
 ```
 
 `npm run build` and `npm run lint` are the other two. The backend is expected at `localhost:3001`.
+
+> **The standing gate set has since grown to SEVEN, and `docs/session-start.md` §3 is canonical for
+> it** — `test:blanket` was added at the second defect-pass close and `test:draft` at C3 of the
+> START/REVIEW series. The run record below is historical: it is what was measured on `main` at
+> `0def418`, including the 76/0 lint count that has since fallen to 66/0. It is left as it was
+> rather than rewritten.
 
 **Last run on `main` at `0def418`, 2026-08-25 — all three green:**
 
