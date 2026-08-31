@@ -277,6 +277,83 @@ real fix is customer identity, not another guard on a string.**
 > about it becomes tractable when entities arrive. Left in place unless the product owner wants a
 > third list; noting it is enough.
 
+### PM-7 — a Quote Item does not know which Batch row produced it
+
+**Found 2026-09-01, while scoping C4 of the START/REVIEW series. Documentation only — no
+mechanism, no migration and no fix is approved.** C4 was deliberately built around this gap
+rather than over it.
+
+> **The governing rule this protects, and which stays intact:** **Batch Entry is the sole
+> CalcGate** — a calculation change becomes quotable only by passing through a Batch row,
+> Calculate All and Send All. **Quote Items is the SendGate / export staging surface only.** C4
+> removed the last writable path from Quote Items back into Costing (`loadItem`) precisely so that
+> nothing can shortcut it. Everything below is about what the *link* cannot currently express; none
+> of it licenses a second authority over a number.
+
+#### (a) There is no stable Quote Item → Batch row identity
+
+A Quote Item is `{ id, spec, result, status, note, timestamp }`. **No field names the row it came
+from, under any name, in any creation path.**
+
+`sendAllToQuoteItems` — the only live creation path — reads `row.id` at `useQuoteActions.js:313`
+solely to fetch `batchResults[row.id]`, then discards it and stamps a **fresh**
+`id: Date.now()+Math.random()` (`:348`). The row's identity is never carried.
+
+#### (b) Re-send matching is ambiguous
+
+Re-sending onto an existing item matches on
+`(i.spec.material_code||"")===row.matCode && (i.spec.rowType||"Box")===(row.itemType||"Box")`
+(`useQuoteActions.js:344–345`). With `matCode` blank on both sides, `""===""` matches the **first**
+blank-coded item of the same row type. Two uncoded rows of one type collide, and the wrong item is
+overwritten silently.
+
+> **Do not "fix" this by inferring linkage from Material Code, Product, SET Code, row type,
+> array position, construction code or any fuzzy match.** The existing match *is* such a guess, and
+> it is the thing to replace, not the pattern to extend.
+
+#### (c) Batch row IDs can collide
+
+Row ids are `Date.now()` — `useQuoteActions.js:379` (`addBatchRow`) and the `newId` used at
+`useCostingBatchBridge.js:550` (Send from Costing). Two rows created inside one millisecond share
+an id. **This matters even though nothing consumes row ids across surfaces today:** it is the
+identifier any future linkage would be built on, and it is the same millisecond-collision shape as
+the deferred toast-ID defect.
+
+#### (d) A stale Quote Item stays exportable after its Batch row changes
+
+Push writes the row and calls `invalidateBatchRow` (`useCostingBatchBridge.js:251–256`); it touches
+no item. `sendAllToQuoteItems` blocks on any stale row (`useQuoteActions.js:294–300`), which
+protects the **row → item** direction. Nothing protects the other side: an item already sent keeps
+its old `spec` and `result` and **remains exportable** through both export buttons
+(`QuoteItemsTab.jsx:188`, `:194`).
+
+**Verified in the browser on 2026-09-01** (throwaway data, restored byte-identically): pushing a
+row-owned change flipped that row's grid badge to 🔄 and Send All refused with
+`🔄 Stale results — run Calculate All first. Affected: Row 3 [ZZTEST-A]`, while the previously-sent
+Quote Item was byte-identical throughout. Calculate All cleared the block and only then did the item
+update. **The gate works in the direction it covers; the exported item can still be older than its
+source, and with no row reference on the item nothing can currently detect that.**
+
+#### What a later phase needs — recorded, not designed
+
+1. **Stable linkage** — a durable, unique originating Batch-row identity carried on the item, and an
+   id generator that cannot collide.
+2. **Divergence detection** — being able to answer "has this item's source row changed since it was
+   sent?", which (a) and (c) make impossible today.
+3. **Export blocking** — whether a diverged item may be exported at all, and what the Maker is told.
+4. **Database-backed quote history** — what a "sent" quote *is* once quotes outlive one browser, and
+   how re-sends version rather than overwrite.
+
+These are one cluster: none of them is reachable without (1). Sequencing, storage and UI are all
+open, and the product owner rules them.
+
+#### Why this is here and not in the register
+
+Found after the freeze, in code the pass is not touching, and it is squarely post-model: every part
+of it becomes tractable when quotes and rows are entities with real keys, and none of it is
+tractable while both live as `localStorage` blobs. It is **not** a C5/C6/C7 concern and must not be
+folded into the START/REVIEW series.
+
 ---
 
 ## Migration requirements
