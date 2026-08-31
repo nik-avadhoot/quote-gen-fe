@@ -13,18 +13,23 @@
 //    state, no new persistence.
 //  · REVIEW renders only while a row is open, and is the active subtab
 //    exactly then, so the two are never both inactive.
-//  · The subtabs are NOT interactive. Entering REVIEW is still Deep Dive (the
-//    grid's 🔍), and leaving it is still ✕ Unlink below. Wiring a click on a
-//    subtab would be an exit/enter transition — behaviour, and later commits.
+//  · C4 made START interactive while reviewing. Clicking START and clicking
+//    ✕ Unlink are the SAME action — both call requestExitReview(), so they
+//    share one confirm rule and one restoration path and cannot drift apart.
+//    REVIEW stays non-interactive: it is the active tab whenever it renders.
+//  · Entering REVIEW is still Deep Dive from the Batch Entry grid.
 //  · The control group below was RELOCATED VERBATIM out of OutputPanel.jsx,
 //    which used to carry its own underlined "Costing" tab label above this
 //    same set of buttons. Handlers, conditions, disabled states, titles,
 //    confirm wording and order are unchanged; only the container's vertical
 //    padding was trimmed (4px → 3px) to offset the strip.
 //
-// ⚠️ THIS MAKES NO REVIEW-SAFETY CLAIM. Deep Dive still overwrites the one
-// shared spec (useCostingBatchBridge.js:56), so opening a row still destroys
-// unsent START work. That is C4's job, not this strip's.
+// C4 landed the review-copy split, so exiting REVIEW no longer rebuilds START:
+// the draft was never touched and is simply revealed again. The old Unlink
+// confirm promised the opposite — that Client/Sector/Mat Code would be cleared
+// and construction carried forward — because it called setSpec(specFromProfile()),
+// which reads the REVIEWED row's construction. That call and that wording are
+// gone; do not reintroduce either.
 // ═══════════════════════════════════════════════════════════════════════════
 import SpecForm from "./SpecForm.jsx";
 import OutputPanel from "./OutputPanel.jsx";
@@ -35,37 +40,47 @@ import { C, sans } from "../../theme.js";
 
 // One subtab. Same visual language as the panel-header tab label this strip
 // replaces: amber text over a 2px amber underline when active.
-const Subtab=({label,active})=>(
-  <div style={{padding:"7px 14px",fontFamily:sans,fontSize:12,fontWeight:600,
+const Subtab=({label,active,onClick,title})=>(
+  <div onClick={onClick} title={title}
+    style={{padding:"7px 14px",fontFamily:sans,fontSize:12,fontWeight:600,
     color:active?C.amber:C.slateL,
+    cursor:onClick?"pointer":"default",
     borderBottom:`2px solid ${active?C.amber:"transparent"}`}}>{label}</div>);
 
 export default function CostingTab(){
   const {
     setSpec, setSetAutoFill, setSpecCommitted,
-    costingContext, setCostingContext, activeBatchRowId, setActiveBatchRowId,
-    batchRows, _sendReady,
+    costingContext, setCostingContext, activeBatchRowId,
+    batchRows, exitReview, reviewDirty, _sendReady,
     sendCostingToBatch, specFromProfile, specForNewBatch,
   } = useAppState();
   const inReview=!!activeBatchRowId;
+
+  // C4 - X1. The ONE exit path, shared by the Unlink button and the START
+  // subtab. Confirms only when the review copy has unpushed changes; the
+  // persisted START draft is never consulted, because exiting cannot harm it.
+  // exitReview() also restores the workspace flags Deep Dive overwrote.
+  const requestExitReview=()=>{
+    if(reviewDirty){
+      const _n=batchRows.findIndex(r=>r.id===activeBatchRowId)+1;
+      if(!window.confirm(
+        `Discard unpushed changes to Batch Row ${_n}?\n\n`+
+        "Your Costing draft is untouched and will reappear as you left it.\n\n"+
+        "OK = discard review changes  |  Cancel = stay in REVIEW"
+      ))return;
+    }
+    exitReview();
+  };
   return(
     <div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.cream,flexShrink:0}}>
-        <Subtab label="START" active={!inReview}/>
+        <Subtab label="START" active={!inReview}
+          onClick={inReview?requestExitReview:undefined}
+          title={inReview?"Leave this review and return to your Costing draft":undefined}/>
         {inReview&&<Subtab label="REVIEW" active/>}
         <div style={{marginLeft:"auto",padding:"3px 8px",display:"flex",gap:6,alignItems:"center"}}>
           {/* Unlink — shown only in REVIEW mode (activeBatchRowId set). Moved from left panel bottom. */}
-          {activeBatchRowId&&<Btn ch="✕ Unlink" v="ghost" sm onClick={()=>{
-            if(!window.confirm(
-              "Unlink will exit this review.\n\n"+
-              "Client/Sector/Mat Code/SKU will be cleared. Construction and output specs will be carried forward as starting defaults for the next SKU.\n\n"+
-              "Any unsaved Costing changes will be lost. Continue?"
-            ))return;
-            setSpec(specFromProfile());
-            setActiveBatchRowId(null);
-            setSpecCommitted(false);
-            setCostingContext("same-batch"); // returning from REVIEW to same-batch workspace
-          }}/>}
+          {activeBatchRowId&&<Btn ch="✕ Unlink" v="ghost" sm onClick={requestExitReview}/>}
           {/* C12: Context badge — visible when BatchEntry has rows, distinguishes same-batch vs new-batch */}
           {batchRows.length>0&&(
             <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:3,

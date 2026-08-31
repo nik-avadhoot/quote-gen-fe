@@ -22,7 +22,7 @@ import { C } from "../theme.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useQuoteActions(st){
-  const { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchProfile, batchResults, batchRows, boxTrim, constructionLib, freight, items, locations, missing, partitionsMaster, r, rates, restoreRef, sectors, setActiveBatchRowId, setAiNotes, setAutoCodeSeq, setBatchResults, setBatchRows, setConstructionLib, setItems, setSavedQuotes, setSetAutoFill, setSpec, setSpecCommitted, setTab, setTemplateB64, setTemplateLoaded, showToast, spec } = st;
+  const { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchProfile, batchResults, batchRows, boxTrim, constructionLib, freight, items, locations, missing, partitionsMaster, r, rates, restoreRef, sectors, setAiNotes, setAutoCodeSeq, setBatchResults, setBatchRows, setConstructionLib, setItems, setSavedQuotes, setTab, setTemplateB64, setTemplateLoaded, showToast, spec } = st;
 
 
   // ── BACKUP & RESTORE ──────────────────────────────────────────────────────
@@ -183,9 +183,21 @@ export function useQuoteActions(st){
     setAiNotes(`✅ "${spec.product||"Item"}" added. ${items.length+1} item(s) in quote.`);
   };
   const removeItem=id=>setItems(prev=>prev.filter(i=>i.id!==id));
-  // A4: clear activeBatchRowId so reviewing a Quote Item cannot hijack the push target.
-  // Without this, a green "Push to Batch Row" button would silently overwrite an unrelated batch row.
-  const loadItem=item=>{setSpec({...item.spec});setSetAutoFill(true);setActiveBatchRowId(null);setSpecCommitted(false);setTab("costing");};
+  // C4 REMOVED loadItem. Clicking a Quote Item used to load its stored spec into
+  // Costing, which after C3 means overwriting a PERSISTED draft from one click on
+  // a list row, and after C4 would mean writing whichever surface happened to be
+  // active. It is gone, and nothing replaced it in Costing.
+  //
+  // Batch Entry is the sole CalcGate: a calculation change becomes quotable only
+  // by going through a Batch row, Calculate All and Send All. A writable path
+  // from Quote Items back into Costing would be a second authority over the same
+  // number. QuoteItemsTab now routes the click to Batch Entry and writes nothing.
+  //
+  // It cannot resolve WHICH row, and deliberately does not guess: a Quote Item
+  // carries no batch-row identity (sendAllToQuoteItems stamps a fresh
+  // Date.now()+Math.random() id, never row.id), and inferring one from Material
+  // Code, Product, SET Code, row type or position is exactly the fuzzy match this
+  // app must not grow. Recorded for the Quote Items / data-model phase.
 
 
   // ── BATCH ENTRY HELPERS ─────────────────────────────────────────────────
@@ -486,5 +498,5 @@ export function useQuoteActions(st){
 
   // ── SIDEBAR (left nav) ────────────────────────────────────────────────────
 
-  return { BACKUP_KEYS, addBatchRow, addItem, calcBatchRow, calculateAll, card, generateCode, generateMissingCodes, getBatchRowStatus, handleBackup, handleImport, handleRestore, handleRestoreFile, handleTemplateLoad, importConstrFromSpec, loadItem, removeItem, sendAllToQuoteItems };
+  return { BACKUP_KEYS, addBatchRow, addItem, calcBatchRow, calculateAll, card, generateCode, generateMissingCodes, getBatchRowStatus, handleBackup, handleImport, handleRestore, handleRestoreFile, handleTemplateLoad, importConstrFromSpec, removeItem, sendAllToQuoteItems };
 }

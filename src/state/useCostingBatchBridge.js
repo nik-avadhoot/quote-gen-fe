@@ -28,7 +28,7 @@ import { findDuplicate } from "../lib/constructionIdentity.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useCostingBatchBridge(st){
-  const { activeBatchRowId, autoCalcPPDims, batchProfile, batchRows, constructionLib, costingContext, freight, invalidateBatchRow, resolveSpecWasteConv, sectors, setActiveBatchRowId, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setCostingContext, setSetAutoFill, setSpec, setSpecCommitted, setTab, showToast, spec } = st;
+  const { activeBatchRowId, autoCalcPPDims, batchProfile, batchRows, constructionLib, costingContext, exitReview, freight, invalidateBatchRow, markReviewPushed, openReview, resolveSpecWasteConv, reviewDirty, sectors, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setCostingContext, setSetAutoFill, setSpecCommitted, setTab, showToast, spec } = st;
 
   const loadBatchRowIntoCosting=(row)=>{
     // Gate: block Deep Dive if this row has an unconfirmed SET Code
@@ -52,10 +52,26 @@ export function useCostingBatchBridge(st){
     if(row.interestOverride!==""&&row.interestOverride!=null)sp.interest=+row.interestOverride;
     if(row.freightRowOverride!==""&&row.freightRowOverride!=null)sp.freightOverride=row.freightRowOverride;
     applyAddOns(sp,row); // R-1: single injection point
-    setSpec(sp);
+    // C4 · E4: replacing a review copy that has unpushed changes is the one
+    // Deep Dive that can lose work. Opening a review from START cannot — the
+    // draft is not read, written or discarded — so there is deliberately NO
+    // prompt about START being dirty.
+    if(reviewDirty&&activeBatchRowId!==row.id){
+      const _cur=batchRows.findIndex(r=>r.id===activeBatchRowId);
+      if(!window.confirm(
+        `Discard unpushed changes to Batch Row ${_cur+1}?\n\n`+
+        "Your Costing draft is untouched either way.\n\n"+
+        "OK = discard and open this row  |  Cancel = stay in the current review"
+      ))return;
+    }
+    // C4: builds the SESSION-ONLY review copy. The persisted START draft is not
+    // touched. openReview captures START's workspace flags BEFORE the two
+    // setters below overwrite them.
+    openReview(row.id,sp);
     setSetAutoFill(row.setAutoFill??true); // restore stored setting; default true for legacy rows
-    setActiveBatchRowId(row.id);
-    setSpecCommitted(false); // REVIEW mode uses activeBatchRowId, not specCommitted
+    // C4: setSpecCommitted(false) was here. It is gone — the flag is masked by
+    // activeBatchRowId in every reader, so clearing it changed nothing during
+    // REVIEW and silently released START's identity freeze on the way out.
     setCostingContext("same-batch"); // REVIEW of an existing row always re-establishes same-batch context
     setTab("costing");
   };
@@ -248,6 +264,58 @@ export function useCostingBatchBridge(st){
         return (specFr!==""&&specFr!=null&&Math.abs(+specFr-profFr)>0.001)?specFr:"";
       })(),
     };
+    // ── C4 · WHICH SPEC FIELDS THE ROW NOW ACTUALLY CARRIES ─────────────────
+    // Derived from the rowPatch just built, NOT from a parallel field list that
+    // could drift away from it. The test is uniform for every fallback-style
+    // write: the persisted value IS the spec value unless a fallback fired.
+    // A field missing from this list keeps its old baseline, so an edit that
+    // did not reach Batch Entry stays dirty and exiting still warns.
+    const _pushed=[];
+    const _mark=(k,ok)=>{ if(ok)_pushed.push(k); };
+    // spec.X||fallback - equal iff the fallback did NOT fire. Covers clearing
+    // qtyPerSet (row.nosPerSet is retained), clearing skuType (glassSKUType is
+    // retained), H=0 coerced to "", ups="" coerced to 1, and the blank-to-""
+    // writes that are faithful.
+    _mark("H",rowPatch.H===spec.H);
+    _mark("ups",rowPatch.ups===spec.ups);
+    _mark("product",rowPatch.product===spec.product);
+    _mark("qtyPerSet",rowPatch.nosPerSet===spec.qtyPerSet);
+    _mark("skuType",rowPatch.glassSKUType===spec.skuType);
+    ["board_gsm","spec_bs","spec_bct","spec_ect","reqBoxWt","salesMOQ","volume"]
+      .forEach(k=>_mark(k,rowPatch[k]===spec[k]));
+    // L/W follow _dimBack: a typed value is always carried, and a BLANK dim is
+    // formalised only when nothing derives into it - otherwise the row goes on
+    // showing the inherited number and the clear did not take.
+    const _dimTook=k=>{
+      const cur=spec[k];
+      if(cur!==""&&cur!=null)return true;
+      const d=_derivedDims[k];
+      return d===""||d==null;
+    };
+    _mark("L",_dimTook("L"));_mark("W",_dimTook("W"));
+    // Add-ons are written as +(spec.X||0): blank becomes a real 0 charge, which
+    // is the same commercial statement. Only a non-numeric would fail to carry.
+    ["printing","stitching","coating","handling","moqCharge","packing","other","unloading"]
+      .forEach(k=>_mark(k,Number.isFinite(+(spec[k]||0))));
+    // Delta-style writes: the row stores an override only when it differs from
+    // the profile, so the EFFECTIVE value is the override or the profile figure.
+    const _effMargin=rowPatch.marginOverride!==""?+rowPatch.marginOverride:+profileMarginForRow;
+    _mark("margin",+spec.margin===_effMargin);
+    const _profIntNow=batchProfile.interest??0.5;
+    const _effInt=rowPatch.interestOverride!==""?+rowPatch.interestOverride:+_profIntNow;
+    _mark("interest",+spec.interest===_effInt);
+    const _profFrNow=batchProfile.freightOverride||freight?.[batchProfile.plant]?.[batchProfile.delivery]||0;
+    const _effFr=rowPatch.freightRowOverride!==""?+rowPatch.freightRowOverride:+_profFrNow;
+    _mark("freightOverride",(spec.freightOverride===""||spec.freightOverride==null)
+      ?true:+spec.freightOverride===_effFr);
+    // Waste/conv: ONE pair per row type. The other pair is never written, so an
+    // edit to it can never be formalised from this row.
+    const _effWaste=rowPatch.wasteConv_waste!==""?+rowPatch.wasteConv_waste:libWaste;
+    const _effConv=rowPatch.wasteConv_conv!==""?+rowPatch.wasteConv_conv:libConv;
+    _mark(isPPRowType?"wastePP":"waste",Math.abs(specWaste-_effWaste)<0.001);
+    _mark(isPPRowType?"convRatePP":"convRate",Math.abs(specConv-_effConv)<0.001);
+    // boxType is deliberately absent: it is Construction-gated below.
+
     setBatchRows(prev=>prev.map(r=>r.id===activeBatchRowId?{...r,...rowPatch}:r));
     // Invalidate the cached result for this row — costing inputs have changed.
     // The grid's updC already does this for inline edits; Push must do the same.
@@ -260,6 +328,9 @@ export function useCostingBatchBridge(st){
     const constructionChanged=constEntry&&(
       constEntry.boxType!==spec.boxType||+constEntry.ply!==+spec.ply||
       constEntry.flute_F1!==spec.flute_F1||constEntry.flute_F2!==spec.flute_F2||layersChanged);
+    // C4: what the REVIEW baseline advances to depends on THIS outcome. Nothing
+    // to accept counts as formalised; a declined Construction update does not.
+    let constructionFormalised=true;
     if(constructionChanged){
       const otherUsers=batchRows.filter(r=>r.constructionCode===row.constructionCode&&r.id!==row.id).length;
       const warn=otherUsers>0
@@ -273,11 +344,18 @@ export function useCostingBatchBridge(st){
         }:c));
         showToast(`✅ Pushed to row + updated Construction [${constEntry.code}] — run Calculate All to update the rate`,'success',5000);
       } else {
+        // Declined. The row-owned changes are written; the shared-Construction
+        // differences are NOT, so they stay dirty against the baseline below and
+        // exiting still warns about them.
+        constructionFormalised=false;
         showToast("✅ Row updated (Construction left unchanged) — run Calculate All to update the rate",'success',5000);
       }
     } else {
       showToast("✅ Pushed to batch row — run Calculate All to update the rate",'success',5000);
     }
+    // C4 · P1: stay in REVIEW and advance the baseline to what was actually
+    // formalised through Batch Entry — never to whatever is on screen.
+    markReviewPushed(_pushed,constructionFormalised);
   };
 
   // ── SEND COSTING TO BATCH ENTRY ──────────────────────────────────────────────
@@ -772,7 +850,7 @@ export function useCostingBatchBridge(st){
             setBatchRows([]);
             setBatchResults({});
             setExpandedRows(new Set());
-            setActiveBatchRowId(null);
+            exitReview(); // C4: leaves REVIEW and restores START's workspace flags
             setSpecCommitted(false); // Costing identity fields become editable again
             setItems([]); // Fix 5: clear Quote Items so new customer starts clean
             // Batch Entry cleared → Costing re-attaches to the now-empty batch (same-batch context)

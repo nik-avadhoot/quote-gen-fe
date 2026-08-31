@@ -20,6 +20,14 @@
 // would be unused bindings. Re-enabling the block means pulling both from
 // useAppState() again; they still exist in the store.
 //
+// ⚠️ C4: A QUOTE ITEM ROW NO LONGER LOADS INTO COSTING. Batch Entry is the sole
+// CalcGate — a calculation change becomes quotable only through a Batch row,
+// Calculate All and Send All — so Quote Items is a staging surface, never an
+// editing one. The row click now says so and navigates; it writes nothing, and
+// it does NOT try to identify the originating Batch row, because no Quote Item
+// carries one and every available match (Material Code, Product, SET Code, row
+// type, position) is a guess. Do not add one here.
+//
 // Export wiring crosses two Phase 3 modules: exportFromTemplate from
 // export/excel.js and exportAllPDF from export/pdf.js.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -31,13 +39,15 @@ import { findDivergence } from "../lib/overrideDivergence.js";
 import { useAppState } from "../state/AppStateContext.js";
 import { C, mono } from "../theme.js";
 
+const QI_READONLY_MSG="Quote Items are read-only. Review or revise the calculation in Batch Entry using Deep Dive.";
+
 export default function QuoteItemsTab(){
   const {
     showToast, items, setItems, savedQuotes, setSavedQuotes,
     quoteRef, setQuoteRef, quoteDate, setQuoteDate,
     effectiveFrom, setEffectiveFrom, effectiveTo, setEffectiveTo,
     makerName, templateLoaded, templateB64, templateRef, handleTemplateLoad,
-    rates, freight, batchProfile, loadItem, removeItem, setTab,
+    rates, freight, batchProfile, removeItem, setTab,
   } = useAppState();
 
   return(
@@ -228,7 +238,9 @@ export default function QuoteItemsTab(){
           if(sc){if(!setMap[sc])setMap[sc]=[];setMap[sc].push(item);}else standalone.push(item);
         });
         const IRw=({item,bg})=>{const{spec:is,result:ir}=item;return(
-          <tr key={item.id} style={{background:bg,cursor:"pointer"}} onClick={()=>loadItem(item)}>
+          <tr key={item.id} style={{background:bg,cursor:"pointer"}}
+            title={QI_READONLY_MSG}
+            onClick={()=>{showToast(QI_READONLY_MSG,'info',5000);setTab("batch");}}>
             <td style={{padding:"5px 10px"}}>
               {is.setCode&&<span style={{fontSize:9,background:C.amber,color:C.white,padding:"1px 5px",borderRadius:3,marginRight:4}}>{is.setCode}</span>}
               {is.rowType!=="Box"&&<span style={{fontSize:9,color:C.slateL,marginRight:3}}>({is.rowType})</span>}
@@ -282,7 +294,7 @@ export default function QuoteItemsTab(){
       })()}
         <div style={{marginTop:10,fontSize:11,color:C.slateL,padding:"8px 12px",
           background:C.cream,borderRadius:6}}>
-          Click any row to load it into the Costing tab for deep-dive analysis.
+          Quote Items are read-only. Review or revise the calculation in Batch Entry using Deep Dive — clicking a row takes you there.
           To revise a rate, go to Batch Entry → adjust → Calculate All → Send All to Quote Items again.
           Re-import: export to Excel, make manual revisions, then use "Re-import Excel" to bring back revised items.
         </div>

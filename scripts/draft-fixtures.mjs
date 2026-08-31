@@ -9,12 +9,17 @@
 // It covers costingDraftModel.js ONLY. test:costing remains the costing-engine
 // gate and this does not touch it.
 //
+// C4 added the review copy and the OUTCOME-AWARE push baseline. Those cases are
+// the only automated evidence that declining a shared-Construction update
+// leaves REVIEW dirty - no UI path can be reached from here.
+//
 // Every equality case below names the rule that was NOT implemented and would
 // have produced a different answer, so a green run means something: a coercing
 // comparator passes the identical-values cases and FAILS the first block.
 // ═══════════════════════════════════════════════════════════════════════════
-import { deepEqual, freshEnvelope, isDirty, isPlainObject, isValidEnvelope,
-  mergeSpec } from "../src/state/costingDraftModel.js";
+import { deepEqual, freshEnvelope, freshReviewCopy, isDirty, isPlainObject,
+  isValidEnvelope, mergeSpec, nextReviewBaseline,
+  PUSH_CONSTRUCTION_FIELDS } from "../src/state/costingDraftModel.js";
 
 let fails = 0;
 const ok = (name, cond, extra = "") => {
@@ -166,6 +171,176 @@ console.log("\n── freshEnvelope: baseline initialised from the seeded spec �
   ok('baseline equals the seeded spec',    !isDirty(env.spec,env.baseline));
   ok('a fresh draft is therefore clean',   !isDirty(env.spec,env.baseline));
 }
+
+
+
+// ==========================================================================
+// C4 - THE REVIEW COPY AND THE OUTCOME-AWARE PUSHED BASELINE
+// ==========================================================================
+// nextReviewBaseline takes pushedFields FROM THE BRIDGE, which derives it from
+// the rowPatch it just built. These cases pin the contract: a field named as
+// pushed advances; a field absent from the list keeps its old baseline and
+// stays dirty. The per-field fallback rules the bridge evaluates are pinned
+// separately below, against the same expressions pushCostingToBatchRow uses.
+const RSPEC={L:100,W:80,H:60,ups:2,product:"Carton",qtyPerSet:4,skuType:"GLASS-A",
+  margin:8,interest:0.5,freightOverride:"",printing:"25",
+  waste:5,convRate:7,wastePP:5,convRatePP:12.5,
+  ply:5,boxType:"RSC",flute_F1:"B",flute_F2:"A",flutingBCF:0.10,
+  layers:{TOP:{code:"KL",gsm:120},F1:{code:"SF",gsm:100},L1:{code:"KL",gsm:120}}};
+const PREV={setAutoFill:true,costingContext:"same-batch"};
+const ALL_ROW=["L","W","H","ups","product","qtyPerSet","skuType","board_gsm",
+  "spec_bs","spec_bct","spec_ect","reqBoxWt","salesMOQ","volume","margin",
+  "interest","freightOverride","waste","convRate","printing","stitching",
+  "coating","handling","moqCharge","packing","other","unloading"];
+
+console.log("");
+console.log("-- freshReviewCopy: a new copy is clean, and is not a draft --");
+{
+  const rc=freshReviewCopy(42,RSPEC,PREV);
+  ok("rowId carried",        rc.rowId===42);
+  ok("baseline equals spec", !isDirty(rc.spec,rc.baseline));
+  ok("prev captured",        rc.prev.setAutoFill===true&&rc.prev.costingContext==="same-batch");
+  ok("prev is a copy of the caller object",
+     (()=>{const p={setAutoFill:false,costingContext:"new-batch"};
+           const c=freshReviewCopy(1,RSPEC,p);p.setAutoFill=true;
+           return c.prev.setAutoFill===false;})());
+  ok("new-batch context round-trips",
+     freshReviewCopy(1,RSPEC,{setAutoFill:false,costingContext:"new-batch"}).prev.costingContext==="new-batch");
+  ok("setAutoFill false round-trips",
+     freshReviewCopy(1,RSPEC,{setAutoFill:false,costingContext:"same-batch"}).prev.setAutoFill===false);
+  ok("a review copy cannot hydrate as a draft", !isValidEnvelope(rc));
+  ok("an edited copy is dirty", isDirty({...rc.spec,L:120},rc.baseline));
+}
+
+console.log("");
+console.log("-- PUSH with Construction ACCEPTED: REVIEW becomes clean --");
+{
+  const rc=freshReviewCopy(7,RSPEC,PREV);
+  const edited={...rc.spec,L:150,ply:3,layers:{...rc.spec.layers,TOP:{code:"KL",gsm:150}}};
+  ok("dirty before push", isDirty(edited,rc.baseline));
+  const base=nextReviewBaseline(rc.baseline,edited,ALL_ROW,true);
+  ok("CLEAN after an accepted push", !isDirty(edited,base));
+  ok("row field advanced",           base.L===150);
+  ok("construction field advanced",  base.ply===3);
+  ok("layers advanced by value",     base.layers.TOP.gsm===150);
+  ok("layers deep-copied, not aliased",
+     (()=>{const b=nextReviewBaseline(rc.baseline,edited,ALL_ROW,true);
+           edited.layers.TOP.gsm=999;const kept=b.layers.TOP.gsm===150;
+           edited.layers.TOP.gsm=150;return kept;})());
+}
+
+console.log("");
+console.log("-- PUSH with Construction DECLINED: row written, REVIEW stays dirty --");
+{
+  const rc=freshReviewCopy(7,RSPEC,PREV);
+  const edited={...rc.spec,L:150,ply:3,layers:{...rc.spec.layers,TOP:{code:"KL",gsm:150}}};
+  const base=nextReviewBaseline(rc.baseline,edited,ALL_ROW,false);
+  ok("row-owned change IS formalised",  base.L===150);
+  ok("ply held at the old baseline",    base.ply===5);
+  ok("layers held at the old baseline", base.layers.TOP.gsm===120);
+  ok("REVIEW REMAINS DIRTY, so exit still warns", isDirty(edited,base));
+  ok("an unconditional baseline:=spec WOULD have failed this", !isDirty(edited,{...edited}));
+  console.log("   -- and a SECOND push accepting Construction makes it clean --");
+  const base2=nextReviewBaseline(base,edited,ALL_ROW,true);
+  ok("second push advances construction", base2.ply===3&&base2.layers.TOP.gsm===150);
+  ok("REVIEW IS NOW CLEAN",               !isDirty(edited,base2));
+}
+
+console.log("");
+console.log("-- a field NOT in pushedFields keeps its baseline and stays dirty --");
+{
+  const rc=freshReviewCopy(7,RSPEC,PREV);
+  const edited={...rc.spec,volume:5000,flutingBCF:0.25};
+  const base=nextReviewBaseline(rc.baseline,edited,["volume"],true);
+  ok("the pushed field advanced",           base.volume===5000);
+  ok("flutingBCF held at the old baseline", base.flutingBCF===0.10);
+  ok("still dirty - that edit never reached Batch Entry", isDirty(edited,base));
+  ok("no key lost from the baseline", Object.keys(rc.baseline).every(k=>k in base));
+  ok("an empty pushedFields advances nothing",
+     nextReviewBaseline(rc.baseline,edited,[],false).volume===undefined);
+  ok("a missing pushedFields is treated as empty",
+     !nextReviewBaseline(rc.baseline,edited,undefined,false).volume);
+}
+
+console.log("");
+console.log("-- rowPatch fallbacks: an edit the row did not take is NOT pushed --");
+{
+  // The bridge marks a fallback-style field pushed iff the persisted value IS
+  // the spec value. These reproduce each rowPatch expression exactly.
+  const took=(persisted,specVal)=>persisted===specVal;
+  ok("clearing qtyPerSet is NOT formalised (row.nosPerSet retained)",
+     !took(("" || 4),""));
+  ok("setting qtyPerSet IS formalised",  took((6||4),6));
+  ok("clearing skuType is NOT formalised (glassSKUType retained)",
+     !took((""||"GLASS-A"),""));
+  ok("setting skuType IS formalised",    took(("GLASS-B"||"GLASS-A"),"GLASS-B"));
+  ok("H=0 is NOT formalised (coerced to blank)",     !took((0||""),0));
+  ok("H cleared IS formalised (blank stays blank)",  took((""||""),""));
+  ok("H=60 IS formalised",                           took((60||""),60));
+  ok("ups cleared is NOT formalised (falls back to 1)", !took((""||1),""));
+  ok("ups=0 is NOT formalised (falls back to 1)",       !took((0||1),0));
+  ok("ups=2 IS formalised",                             took((2||1),2));
+  ok("clearing boxType is NOT formalised",  !took((""||"RSC"||"RSC"),""));
+  ok("product cleared IS formalised",       took((""||""),""));
+}
+
+console.log("");
+console.log("-- L/W follow _dimBack: a blank dim with a parent keeps inheriting --");
+{
+  const dimTook=(cur,derived)=>{
+    if(cur!==""&&cur!=null)return true;
+    return derived===""||derived==null;
+  };
+  ok("a typed L is formalised",                 dimTook(120,80));
+  ok("a blank L with a parent is NOT formalised",!dimTook("",80));
+  ok("a blank L with no parent IS formalised",   dimTook("",""));
+}
+
+console.log("");
+console.log("-- add-ons: written as +(spec.X||0), so a blank is a real 0 charge --");
+{
+  const addOnTook=v=>Number.isFinite(+(v||0));
+  ok("a string 25 carries as the number 25", addOnTook("25")&&+("25"||0)===25);
+  ok("a blank carries as 0",                 addOnTook("")&&+(""||0)===0);
+  ok("a 0 carries",                          addOnTook(0));
+  ok("a non-numeric does NOT carry",         !addOnTook("abc"));
+}
+
+console.log("");
+console.log("-- Box vs PP: only the applicable waste/conv pair is written --");
+{
+  const boxPushed=["waste","convRate"];
+  const ppPushed=["wastePP","convRatePP"];
+  const rc=freshReviewCopy(7,RSPEC,PREV);
+  const editedBoth={...rc.spec,waste:9,wastePP:11};
+  const boxBase=nextReviewBaseline(rc.baseline,editedBoth,boxPushed,true);
+  ok("Box row formalises waste",                 boxBase.waste===9);
+  ok("Box row does NOT formalise wastePP",       boxBase.wastePP===5);
+  ok("editing wastePP on a Box row stays dirty", isDirty(editedBoth,boxBase));
+  const ppBase=nextReviewBaseline(rc.baseline,editedBoth,ppPushed,true);
+  ok("PP row formalises wastePP",                ppBase.wastePP===11);
+  ok("PP row does NOT formalise waste",          ppBase.waste===5);
+  ok("editing waste on a PP row stays dirty",    isDirty(editedBoth,ppBase));
+}
+
+console.log("");
+console.log("-- delta writes: the EFFECTIVE row value decides, not the override --");
+{
+  const eff=(ovr,prof)=>ovr!==""?+ovr:+prof;
+  ok("margin equal to the profile is formalised via inheritance", 8===eff("",8));
+  ok("a typed string 8 against a numeric profile 8 is formalised", +"8"===eff("",8));
+  ok("margin 10 against profile 8 is formalised as an override",  10===eff(10,8));
+  ok("a CLEARED margin is NOT formalised",                        +""!==eff("",8));
+  ok("interest equal to the profile is formalised",               0.5===eff("",0.5));
+  ok("interest 1.0 against profile 0.5 is formalised",            1===eff(1,0.5));
+}
+
+console.log("");
+console.log("-- PUSH_CONSTRUCTION_FIELDS is the gated set, and holds no row field --");
+ok("the five Construction fields",
+   PUSH_CONSTRUCTION_FIELDS.join()==="boxType,ply,flute_F1,flute_F2,layers");
+ok("no dimension or commercial field is Construction-gated",
+   !PUSH_CONSTRUCTION_FIELDS.some(k=>["L","W","H","margin","volume"].includes(k)));
 
 console.log(fails === 0 ? "\nall checks pass" : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

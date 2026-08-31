@@ -19,21 +19,31 @@
 // useBatchState ({constructionLib, sectorCodes} only) contain no reference to
 // either.
 //
-// ⚠️ THERE IS STILL EXACTLY ONE SPEC. Deep Dive overwrites it
-// (useCostingBatchBridge.js:56), so opening a Batch row still destroys unsent
-// START work — and now that the spec is persisted, the row-derived state
-// SURVIVES A RELOAD instead of being washed out by one. Nothing new is lost
-// and nothing became recoverable; the accidental cleanup stopped. Splitting
-// reviewCopy from the draft is C4, and REVIEW is not safe until it lands.
+// C4 SPLIT THE REVIEW COPY OUT. Deep Dive no longer touches the draft: it
+// calls openReview(), which builds a SESSION-ONLY reviewCopy from the batch
+// row. The draft is not read, written or discarded by any REVIEW action, so
+// entering REVIEW needs no prompt about START dirt — there is nothing to lose.
+//
+// spec/setSpec/s() route to the ACTIVE SURFACE: the review copy while
+// reviewing, the draft otherwise. That is why no component changed.
+//
+// ⚠️ ROUTING IS PER-RENDER. setSpec reads the reviewCopy of the CURRENT
+// render, so a handler must never change mode and call setSpec in the same
+// action — the write would land on the surface being left. Mode changes go
+// through openReview/exitReview alone, and nothing else writes a spec.
+//
+// activeBatchRowId is DERIVED from reviewCopy.rowId. It is not stored twice,
+// so the two cannot disagree.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useState } from "react";
 import { INIT_SPEC } from "../data/defaults.js";
 import { getItem, setItem } from "../lib/persist.js";
 import { DRAFT_CORRUPT_KEY, DRAFT_KEY, DRAFT_VERSION, freshEnvelope,
-  isValidEnvelope, mergeSpec } from "./costingDraftModel.js";
+  freshReviewCopy, isDirty, isValidEnvelope, mergeSpec,
+  nextReviewBaseline } from "./costingDraftModel.js";
 
 export function useCostingDraft(st){
-  const { batchProfile } = st;
+  const { batchProfile, costingContext, setAutoFill, setCostingContext, setSetAutoFill } = st;
 
   const[draft,setDraft]=useState(()=>{
     const raw=getItem(DRAFT_KEY);
@@ -76,11 +86,29 @@ export function useCostingDraft(st){
     catch{ /* storage unavailable - the draft simply does not survive this reload */ }
   },[draft]);
 
-  const spec=draft.spec;
+  // ── C4 · THE REVIEW COPY ───────────────────────────────────────
+  // Session only. No storage key, and deliberately outside the write-through
+  // effect above: a reload lands in START with the draft intact, and unpushed
+  // REVIEW changes are lost by design.
+  const[reviewCopy,setReviewCopy]=useState(null);
+  const inReview=reviewCopy!==null;
+
+  // The row under review IS the pointer. Nothing stores it a second time.
+  const activeBatchRowId=inReview?reviewCopy.rowId:null;
+  // Unpushed REVIEW changes exist. Gates the exit confirm and the replace
+  // confirm; the draft's own baseline is never consulted here.
+  const reviewDirty=inReview&&isDirty(reviewCopy.spec,reviewCopy.baseline);
+
+  const spec=inReview?reviewCopy.spec:draft.spec;
   // Accepts a value or an updater, because both forms are in use: setSpec(sp)
   // at useCostingBatchBridge.js:55 and setSpec(p=>({...p,...})) in SpecForm.
-  const setSpec=next=>setDraft(d=>({...d,
-    spec:typeof next==='function'?next(d.spec):next}));
+  // Routes to the active surface - see the per-render warning in the header.
+  const setSpec=next=>{
+    if(inReview)setReviewCopy(rc=>rc===null?rc:({...rc,
+      spec:typeof next==='function'?next(rc.spec):next}));
+    else setDraft(d=>({...d,
+      spec:typeof next==='function'?next(d.spec):next}));
+  };
   // Dotted-path setter, moved verbatim from useCostingState.js. Two path
   // shapes only — a top-level key, or layers.<K>.<field>; anything else
   // returns the spec unchanged. costingDraftModel.mergeSpec depends on that
@@ -92,5 +120,30 @@ export function useCostingDraft(st){
     return p;
   });
 
-  return { s, setSpec, spec };
+  // Deep Dive. Captures START's workspace flags BEFORE the caller overwrites
+  // them, which is why prev is read here and not passed in.
+  const openReview=(rowId,rowSpec)=>
+    setReviewCopy(freshReviewCopy(rowId,rowSpec,{setAutoFill,costingContext}));
+
+  // Discard the copy and restore what START was working with. Read from the
+  // current render rather than inside the updater: a state updater must stay
+  // pure, and StrictMode invokes it twice.
+  const exitReview=()=>{
+    if(reviewCopy){
+      setSetAutoFill(reviewCopy.prev.setAutoFill);
+      setCostingContext(reviewCopy.prev.costingContext);
+    }
+    setReviewCopy(null);
+  };
+
+  // After a successful Push. NOT baseline := spec: the baseline tracks what was
+  // formalised THROUGH BATCH ENTRY. Declining the shared-Construction update
+  // leaves those fields dirty, so exiting still warns and a later accepting
+  // Push is what makes REVIEW clean. See nextReviewBaseline.
+  const markReviewPushed=(pushedFields,constructionFormalised)=>
+    setReviewCopy(rc=>rc===null?rc:({...rc,
+      baseline:nextReviewBaseline(rc.baseline,rc.spec,pushedFields,constructionFormalised)}));
+
+  return { activeBatchRowId, exitReview, markReviewPushed, openReview,
+    reviewDirty, s, setSpec, spec };
 }

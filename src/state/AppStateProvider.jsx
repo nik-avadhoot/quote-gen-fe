@@ -33,7 +33,7 @@ export function AppStateProvider({ children }){
   Object.assign(st, useCostingState());       // no deps
   Object.assign(st, useQuoteItemsState(st));  // needs profile (ui)
   Object.assign(st, useBatchState(st));       // needs sectorCodes + constructionLib (masters), setTab/showToast (ui)
-  Object.assign(st, useCostingDraft(st));     // C3: owns spec/s(). AFTER useBatchState (seeds from batchProfile state), BEFORE useCostingResult (consumes spec)
+  Object.assign(st, useCostingDraft(st));     // C3: owns spec/s(); C4: owns reviewCopy + derived activeBatchRowId. AFTER useBatchState (seeds from batchProfile state), BEFORE useCostingResult (consumes spec)
   Object.assign(st, useCostingResult(st));    // needs spec (draft), masters, batchRows/batchProfile (batch)
   useBatchInvalidation(st);                   // AFTER masters AND batch: reads both, calls invalidateAllBatchResults
   Object.assign(st, useCostingBatchBridge(st)); // AFTER useCostingResult: consumes resolveSpecWasteConv

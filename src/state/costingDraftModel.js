@@ -116,3 +116,61 @@ export function deepEqual(a,b){
 export function isDirty(current,baseline){
   return !deepEqual(current,baseline);
 }
+
+// ── C4 · THE SESSION-ONLY REVIEW COPY ─────────────────────────────────────
+// Shape: { rowId, spec, baseline, prev:{ setAutoFill, costingContext } }
+//
+// Never persisted and never valid as a draft envelope - isValidEnvelope
+// rejects it. That proves such a blob could not HYDRATE as a draft; it is not
+// a guarantee that no code could ever write one. Only the absence of a write
+// path gives that, and useCostingDraft has none.
+//
+// `prev` carries START's workspace flags across the review, because Deep Dive
+// overwrites both (useCostingBatchBridge.js:56 and :58) and nothing restored
+// them before C4. specCommitted is deliberately absent: Deep Dive stops
+// clearing it, and every reader masks it behind activeBatchRowId
+// (SpecForm.jsx:57, :68, :80, :82), so it needs no snapshot.
+export function freshReviewCopy(rowId,spec,prev){
+  return {rowId,spec,baseline:spec,prev:{...prev}};
+}
+
+// ── WHAT PUSH FORMALISES ──────────────────────────────────────────────────
+// Shared-Construction fields. These reach the library ONLY when the Maker
+// accepts the confirm at useCostingBatchBridge.js:263-286.
+//
+// boxType is written to the row as well, so it is formalised in one sense
+// either way - but the ruling names box type among the shared-Construction
+// differences that must stay dirty when the update is declined, and the library
+// is where a box type actually lives. It is gated here.
+export const PUSH_CONSTRUCTION_FIELDS=['boxType','ply','flute_F1','flute_F2','layers'];
+
+// ── THE PUSHED BASELINE ───────────────────────────────────────────────────
+// The baseline must represent the state actually FORMALISED THROUGH BATCH
+// ENTRY, never merely what is on screen.
+//
+// THERE IS DELIBERATELY NO ROW-FIELD LIST HERE. A second list of "fields push
+// writes" would be an approximation of pushCostingToBatchRow's rowPatch and
+// would drift away from it the first time that patch changes. Instead the
+// bridge derives `pushedFields` FROM THE ROWPATCH IT JUST BUILT - comparing
+// each persisted value against the spec value it came from - and passes the
+// result in. This function only applies it.
+//
+// A field is advanced only if the row now actually carries the Maker's value.
+// An edit that was rejected, replaced by a fallback (spec.qtyPerSet||row.
+// nosPerSet), coerced away (spec.H||"" turning 0 into blank), or not written
+// for this row type (the Box pair on a PP row) is NOT in pushedFields, so its
+// baseline stays put and REVIEW stays dirty. Declining the Construction update
+// leaves those five fields dirty the same way, and a later accepting Push is
+// what makes REVIEW clean.
+export function nextReviewBaseline(prevBaseline,spec,pushedFields,constructionFormalised){
+  const next={...prevBaseline};
+  (pushedFields||[]).forEach(k=>{
+    next[k]=k==='layers'?JSON.parse(JSON.stringify(spec.layers||{})):spec[k];
+  });
+  if(constructionFormalised){
+    PUSH_CONSTRUCTION_FIELDS.forEach(k=>{
+      next[k]=k==='layers'?JSON.parse(JSON.stringify(spec.layers||{})):spec[k];
+    });
+  }
+  return next;
+}
