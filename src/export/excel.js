@@ -8,14 +8,22 @@
 // backend, then falls back to a client-side xlsx-js-style clone of the
 // master template.
 //
-// ⚠️ BUG (pre-existing, carried over unchanged by deliberate decision):
-// exportExcelFull references two identifiers that are not defined anywhere -
-// `qty` (twice, in the item row map) and `locations` (in the freight matrix).
-// It therefore throws ReferenceError on EVERY call, and it is reachable: it is
-// the fallback when no template is stored, or when the stored template has no
-// CBB+PP sheet. This means the client-side Excel fallback that covers Vercel's
-// 10s function cap does not currently work. Fix separately - not part of the
-// component split.
+// D-19 (FIXED — this comment used to say the bug was still live). exportExcelFull
+// once referenced two identifiers that were defined nowhere: `qty`, twice in the
+// item row map, and `locations`, in the freight matrix. It threw ReferenceError
+// on EVERY call, and it is reachable — it is the fallback when no template is
+// stored, or when the stored template has no CBB+PP sheet — so the client-side
+// export that covers Vercel's 10s function cap did not work at all.
+//
+// Both are resolved below. `qty` was a column pair for an order quantity the
+// data model never had, so the row map was cut to match the 10-column header
+// rather than inventing the field (see the note at that site). `locations`
+// became `_locations`, read from cbb_locations with a fallback to the LOCATIONS
+// constant, so a customised locations master is not silently discarded.
+//
+// Verified 2026-09-01: with no stored template and the backend leg failing, this
+// path runs to completion and produces a workbook. Do not reintroduce a
+// bare `qty` here — the field still does not exist.
 //
 // ⚠️ Do NOT run Prettier or `eslint --fix` reflow over this file. One line in
 // exportFromTemplate ends its statement INSIDE a trailing comment and relies
