@@ -164,6 +164,23 @@ whoever does it should read this first and deliberately choose not to fix it, ra
 
 ### PM-6 — a stale Costing spec silently seeds a legitimately EMPTY batch profile
 
+> ## ✅ DISSOLVED AT C5 (`7e9bade`) — verified 2026-09-01
+>
+> **The mechanism no longer exists.** PM-6 depended on first Send seeding the batch profile from a
+> `spec` that survived `+ New Batch` still carrying the previous batch's client and sector. Since
+> C5 a new batch's context lives in `profileDraft`, which the Maker edits explicitly in the Batch
+> Context bar, and first Send writes `setBatchProfile(p=>({...p,...profileDraft.values}))`
+> (`useCostingBatchBridge.js:742`). The profile is seeded from the draft profile, never from a
+> stale spec.
+>
+> Two supports landed with it: the resolved `spec` takes its context fields FROM the authority, so
+> it cannot carry a contradicting client; and D-24's fix (`:484`) makes the G1 guards ask the
+> profile rather than the row count, so a populated profile with an empty grid is still guarded.
+>
+> **Nothing was repaired for PM-6 specifically.** The entry below is kept as the record of a real
+> hazard and of why the C5 design removes it. Do not re-open it without first showing a path that
+> seeds the profile from `spec`.
+
 **Severity proposed: HIGH.** Silent wrong-customer attribution, no guard, and **no ruled fix covers
 it.** Found at Stage 4 while ruling D-2. **Recorded here rather than as D-26 because of the scope
 freeze** — it does not block D-2, which ships with mitigation. If you would rather it sat in the
@@ -375,3 +392,37 @@ weakens to *"a backup round-trips what is still local"*, with nothing in the UI 
 **The migration must state what backup means afterwards**: whether the JSON file is still offered,
 what it covers, and whether restoring one onto a different server state is coherent. **A partial
 backup that presents as complete is the D-3 failure mode again, one layer up.**
+
+---
+
+## Migration-normalization inputs — recorded, NOT defects
+
+Behaviour that is correct today but that a schema migration must decide how to read. Nothing here
+is a bug, and nothing here is scheduled as a fix.
+
+### MN-1 — Push materialises five row keys that were absent
+
+`pushCostingToBatchRow` writes `spec_ect`, `reqBoxWt`, `wasteConv_waste`, `wasteConv_conv` and
+`addOns` unconditionally (`useCostingBatchBridge.js:292-307`). A Push therefore CREATES those five
+keys on a row that never had them - observed as a row going from 25 to 30 keys during the C7a
+acceptance smoke.
+
+**It is inert at every current reader, which is why it is not a defect.** Proven field by field:
+
+| Field | Reader | Test | Absent ≡ blank |
+|---|---|---|---|
+| `wasteConv_waste` / `_conv` | `useQuoteActions.js:225-226,341-344`, `useCostingBatchBridge.js:46-51`, `BatchGrid.jsx:59` | `!==""&&!=null` | yes - `undefined!=null` is false |
+| `spec_ect` | `engine/costing.js:199` | `row.spec_ect\|\|constEntry.spec_ect\|\|""` | yes |
+| `reqBoxWt` | `engine/costing.js:222` | `row.reqBoxWt\|\|""` | yes |
+| `addOns` | `engine/rowType.js:39` `applyAddOns` | `row.addOns\|\|{}` then `+(ao.x\|\|0)` | yes - absent object costs as all-zero |
+
+**RULED 2026-09-01: leave it unchanged.** The migration decides whether an imported `""` means
+"the Maker cleared this" or "Push touched the row" - it cannot mean the former, because no reader
+distinguishes them today.
+
+> ⚠️ **Not to be confused with the waste/conversion provenance defect**, which is real and separate:
+> Push writes `""` over an EXPLICIT row override whenever the review copy's value equals the
+> profile (`useCostingBatchBridge.js:673-675`), silently converting a set value into an inherited
+> one and dropping the grid's override marker. That has its own proposal and is not covered by this
+> ruling.
+
