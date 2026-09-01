@@ -19,7 +19,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { deepEqual, freshEnvelope, freshReviewCopy, isDirty, isPlainObject,
   isValidEnvelope, mergeSpec, nextReviewBaseline,
-  PUSH_CONSTRUCTION_FIELDS } from "../src/state/costingDraftModel.js";
+  PUSH_CONSTRUCTION_FIELDS, isValidProfileDraft, isDraftDirty, freshProfileDraft,
+  shouldAdvanceSkuValue, CONTEXT_ONLY_FIELDS, SKU_EXCEPTION_FIELDS,
+  PROFILE_DRAFT_FIELDS, DRAFT_VERSION } from "../src/state/costingDraftModel.js";
 
 let fails = 0;
 const ok = (name, cond, extra = "") => {
@@ -341,6 +343,91 @@ ok("the five Construction fields",
    PUSH_CONSTRUCTION_FIELDS.join()==="boxType,ply,flute_F1,flute_F2,layers");
 ok("no dimension or commercial field is Construction-gated",
    !PUSH_CONSTRUCTION_FIELDS.some(k=>["L","W","H","margin","volume"].includes(k)));
+
+
+// ==========================================================================
+// C5 - profileDraft, the widened validator, and the advance-if-still-default rule
+// ==========================================================================
+console.log("");
+console.log("-- isValidProfileDraft: exactly { values, baseline }, both plain objects --");
+ok("null is valid (no new-batch draft)",       isValidProfileDraft(null));
+ok("{values,baseline} is valid",               isValidProfileDraft({values:{},baseline:{}}));
+ok("missing baseline rejected",                !isValidProfileDraft({values:{}}));
+ok("missing values rejected",                  !isValidProfileDraft({baseline:{}}));
+ok("values as array rejected",                 !isValidProfileDraft({values:[],baseline:{}}));
+ok("baseline as array rejected",               !isValidProfileDraft({values:{},baseline:[]}));
+ok("values null rejected",                     !isValidProfileDraft({values:null,baseline:{}}));
+ok("a bare object rejected",                   !isValidProfileDraft({client:"ACME"}));
+ok("an array rejected",                        !isValidProfileDraft([]));
+ok("a string rejected",                        !isValidProfileDraft("x"));
+ok("a number rejected",                        !isValidProfileDraft(0));
+
+console.log("");
+console.log("-- the envelope widened, so C3/C4 drafts stay valid under v:1 --");
+{
+  const c3='{"v":1,"spec":{"client":"ACME"},"profileDraft":null,"baseline":{"client":"ACME"}}';
+  ok("a C3/C4 blob (profileDraft:null) still hydrates", isValidEnvelope(JSON.parse(c3)));
+  ok("a C5 blob with a populated profileDraft is valid",
+     isValidEnvelope({v:1,spec:{},profileDraft:{values:{},baseline:{}},baseline:{}}));
+  ok("a malformed profileDraft still routes to corrupt",
+     !isValidEnvelope({v:1,spec:{},profileDraft:{values:{}},baseline:{}}));
+  ok("the version is NOT bumped", DRAFT_VERSION===1);
+}
+
+console.log("");
+console.log("-- combined dirty spans BOTH stores --");
+{
+  const sp={L:100}, base={L:100};
+  ok("clean spec + no profile draft is clean",   !isDraftDirty(sp,base,null));
+  ok("dirty spec alone is dirty",                isDraftDirty({L:120},base,null));
+  ok("clean spec + clean profile draft is clean",
+     !isDraftDirty(sp,base,{values:{waste:5},baseline:{waste:5}}));
+  ok("clean spec + DIRTY profile draft is dirty",
+     isDraftDirty(sp,base,{values:{waste:6},baseline:{waste:5}}));
+  ok("profile-draft dirt is not coerced: '' vs 0",
+     isDraftDirty(sp,base,{values:{waste:""},baseline:{waste:0}}));
+}
+
+console.log("");
+console.log("-- shouldAdvanceSkuValue: follow the default only while still tracking it --");
+ok("a blank SKU value follows the default",        shouldAdvanceSkuValue("",5));
+ok("null follows",                                 shouldAdvanceSkuValue(null,5));
+ok("undefined follows",                            shouldAdvanceSkuValue(undefined,5));
+ok("a value EQUAL to the old default follows",     shouldAdvanceSkuValue(5,5));
+ok("a numeric string equal to it follows",         shouldAdvanceSkuValue("5",5));
+ok("a DIVERGED value is preserved",                !shouldAdvanceSkuValue(4,5));
+ok("a diverged 0 is preserved, not treated blank", !shouldAdvanceSkuValue(0,5));
+ok("a diverged string is preserved",               !shouldAdvanceSkuValue("4",5));
+ok("no previous default: nothing to track, preserve", !shouldAdvanceSkuValue(4,""));
+ok("NaN never silently follows",                   !shouldAdvanceSkuValue("abc",5));
+// The differential: a rule that always advanced would overwrite the exception.
+ok("an always-advance rule WOULD have failed this", shouldAdvanceSkuValue(4,5)===false);
+
+console.log("");
+console.log("-- the field lists the resolver and the seeds are built from --");
+ok("context-only fields are exactly the seven relocated ones",
+   CONTEXT_ONLY_FIELDS.join()==="client,sector,customerType,priceContext,plant,delivery,paymentDisc");
+ok("no SKU-exception field is context-only",
+   !CONTEXT_ONLY_FIELDS.some(k=>SKU_EXCEPTION_FIELDS.includes(k)));
+ok("margin is a SKU exception",          SKU_EXCEPTION_FIELDS.includes("margin"));
+ok("interest and freight are too (until C7)",
+   SKU_EXCEPTION_FIELDS.includes("interest")&&SKU_EXCEPTION_FIELDS.includes("freightOverride"));
+ok("both Box and PP waste/conv are SKU exceptions",
+   ["waste","convRate","wastePP","convRatePP"].every(k=>SKU_EXCEPTION_FIELDS.includes(k)));
+ok("the profile draft carries every batch-level field",
+   ["client","sector","plant","delivery","paymentDisc","interest","freightOverride",
+    "waste","convRate","wastePP","convRatePP","margin","marginPP"]
+     .every(k=>PROFILE_DRAFT_FIELDS.includes(k)));
+
+console.log("");
+console.log("-- freshProfileDraft: a new draft profile is clean --");
+{
+  const v={client:"ACME",waste:5};
+  const pd=freshProfileDraft(v);
+  ok("valid shape",                    isValidProfileDraft(pd));
+  ok("baseline equals values",         !isDirty(pd.values,pd.baseline));
+  ok("so a fresh new-batch draft is clean", !isDraftDirty({L:1},{L:1},pd));
+}
 
 console.log(fails === 0 ? "\nall checks pass" : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

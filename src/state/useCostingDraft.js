@@ -1,49 +1,51 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // src/state/useCostingDraft.js — the persisted Costing START draft.
 //
-// C3. Owns spec, setSpec and s(), which were useState/closures in
-// useCostingState.js until now. The store's surface is unchanged: every
-// consumer reads them through useAppState() and none was touched.
+// C3. Owns spec, setSpec and s(). The store's surface is unchanged: every
+// consumer reads them through useAppState().
 //
 // COMPOSITION POSITION IS LOAD-BEARING. This composes AFTER useBatchState and
 // BEFORE useCostingResult (see AppStateProvider.jsx):
 //
-//  · after useBatchState, so the seed reads batchProfile STATE. That retires
-//    the coupling documented in useCostingState.js, which read cbb_batchprofile
-//    through getItem() directly for one reason only — it composed before the
-//    batch slice existed and had no other way to see the profile.
+//  · after useBatchState, so the seed and the resolver read batchProfile STATE.
 //  · before useCostingResult, which destructures spec on entry.
 //
-// Verified safe to move: nothing composed above this point reads spec or s() —
-// useUiState, useMastersState, useQuoteItemsState ({profile} only) and
-// useBatchState ({constructionLib, sectorCodes} only) contain no reference to
-// either.
+// C4 SPLIT THE REVIEW COPY OUT. Deep Dive calls openReview(), which builds a
+// SESSION-ONLY reviewCopy from the batch row. The draft is not read, written or
+// discarded by any REVIEW action, so entering REVIEW needs no prompt about
+// START dirt — there is nothing to lose.
 //
-// C4 SPLIT THE REVIEW COPY OUT. Deep Dive no longer touches the draft: it
-// calls openReview(), which builds a SESSION-ONLY reviewCopy from the batch
-// row. The draft is not read, written or discarded by any REVIEW action, so
-// entering REVIEW needs no prompt about START dirt — there is nothing to lose.
+// ⚠️ ROUTING IS PER-RENDER. setSpec reads the reviewCopy of the CURRENT render,
+// so a handler must never change mode and call setSpec in the same action — the
+// write would land on the surface being left. Mode changes go through
+// openReview / exitReview / resetDraft alone.
 //
-// spec/setSpec/s() route to the ACTIVE SURFACE: the review copy while
-// reviewing, the draft otherwise. That is why no component changed.
+// C5 ADDED profileDraft AND THE RESOLVER.
 //
-// ⚠️ ROUTING IS PER-RENDER. setSpec reads the reviewCopy of the CURRENT
-// render, so a handler must never change mode and call setSpec in the same
-// action — the write would land on the surface being left. Mode changes go
-// through openReview/exitReview alone, and nothing else writes a spec.
-//
-// activeBatchRowId is DERIVED from reviewCopy.rowId. It is not stored twice,
-// so the two cannot disagree.
+//  · profileDraft holds the batch-level fields while a NEW batch is being
+//    prepared and no Batch Profile exists to hold them yet. null means Costing
+//    is attached to the live batch. Mode derives from it; costingContext is gone.
+//  · CONTEXT-ONLY FIELDS HAVE ONE AUTHORITY AND ARE NEVER MIRRORED. The `spec`
+//    the app sees is RESOLVED — the raw draft spec with the context-only fields
+//    overlaid from whichever store owns them this render. Nothing is copied into
+//    the draft to be read back later, so nothing can drift.
+//  · SKU-EXCEPTION FIELDS STAY IN spec (margin, interest, freight, Box/PP waste
+//    and conversion). A Context edit advances one ONLY while it is still
+//    tracking the old default — see setContextField / applyContextCascade.
+//  · specRaw is the UNRESOLVED draft spec, and exists for one reader: the G1
+//    identity guards, which must still see a client/sector/plant/delivery that
+//    an older persisted draft or a restored backup put there.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useState } from "react";
 import { INIT_SPEC } from "../data/defaults.js";
 import { getItem, setItem } from "../lib/persist.js";
-import { DRAFT_CORRUPT_KEY, DRAFT_KEY, DRAFT_VERSION, freshEnvelope,
-  freshReviewCopy, isDirty, isValidEnvelope, mergeSpec,
-  nextReviewBaseline } from "./costingDraftModel.js";
+import { CONTEXT_ONLY_FIELDS, DRAFT_CORRUPT_KEY, DRAFT_KEY, DRAFT_VERSION,
+  freshEnvelope, freshProfileDraft, freshReviewCopy, isDirty, isDraftDirty,
+  isValidEnvelope, mergeSpec, nextReviewBaseline,
+  shouldAdvanceSkuValue } from "./costingDraftModel.js";
 
 export function useCostingDraft(st){
-  const { batchProfile, costingContext, setAutoFill, setCostingContext, setSetAutoFill } = st;
+  const { batchProfile, batchRows, setAutoFill, setSetAutoFill } = st;
 
   const[draft,setDraft]=useState(()=>{
     const raw=getItem(DRAFT_KEY);
@@ -55,64 +57,70 @@ export function useCostingDraft(st){
         // a key on one side and report a draft as dirty that nobody edited.
         return {v:DRAFT_VERSION,
           spec:mergeSpec(INIT_SPEC,env.spec),
-          profileDraft:null,
+          profileDraft:env.profileDraft,
           baseline:mergeSpec(INIT_SPEC,env.baseline)};
       }
-      // Unparseable, unknown version, or a shape that parses but is not a
-      // draft. Preserve the raw blob before the write-through effect below
-      // replaces it, so it stays recoverable by hand. Same pattern as
-      // useBatchState.js:56-72: writing the same string twice is idempotent,
-      // which matters because StrictMode invokes this initialiser twice. A
-      // later, different corruption overwrites the earlier preserved copy —
-      // exactly as the batch autosave behaves.
+      // Unparseable, unknown version, or a shape that parses but is not a draft.
+      // Preserve the raw blob before the write-through effect below replaces it.
+      // Same idempotent pattern as useBatchState.js:56-72.
       try{ setItem(DRAFT_CORRUPT_KEY,raw); }
       catch{ /* storage unavailable — nothing further to do */ }
     }
-    // No draft: seed as before — INIT_SPEC plus plant/delivery from the live
-    // profile. Deliberately still only those two fields; widening the seed
-    // would be a behaviour change beyond moving the state.
     const seeded={...INIT_SPEC,
       plant:batchProfile?.plant||"",
       delivery:batchProfile?.delivery||""};
     return freshEnvelope(seeded);
   });
 
-  // Write-through on every change, mirroring batchProfile (useBatchState.js:32)
-  // and items (useQuoteItemsState.js:35). No debounce: nothing in this app
-  // debounces a persisted slice, and adding one here would be a mechanism
-  // nobody asked for.
   useEffect(()=>{
     try{ setItem(DRAFT_KEY,JSON.stringify(draft)); }
     catch{ /* storage unavailable - the draft simply does not survive this reload */ }
   },[draft]);
 
-  // ── C4 · THE REVIEW COPY ───────────────────────────────────────
-  // Session only. No storage key, and deliberately outside the write-through
-  // effect above: a reload lands in START with the draft intact, and unpushed
-  // REVIEW changes are lost by design.
   const[reviewCopy,setReviewCopy]=useState(null);
   const inReview=reviewCopy!==null;
+  const profileDraft=draft.profileDraft;
 
-  // The row under review IS the pointer. Nothing stores it a second time.
   const activeBatchRowId=inReview?reviewCopy.rowId:null;
-  // Unpushed REVIEW changes exist. Gates the exit confirm and the replace
-  // confirm; the draft's own baseline is never consulted here.
   const reviewDirty=inReview&&isDirty(reviewCopy.spec,reviewCopy.baseline);
+  const draftDirty=isDraftDirty(draft.spec,draft.baseline,profileDraft);
 
-  const spec=inReview?reviewCopy.spec:draft.spec;
-  // Accepts a value or an updater, because both forms are in use: setSpec(sp)
-  // at useCostingBatchBridge.js:55 and setSpec(p=>({...p,...})) in SpecForm.
-  // Routes to the active surface - see the per-render warning in the header.
+  // ── THE ONE CONTEXT AUTHORITY ───────────────────────────────────────────
+  // Reviewing a real row reads the live profile; preparing a new batch reads the
+  // draft profile; otherwise the live profile. One source per render.
+  const contextValues=inReview?batchProfile
+    :(profileDraft!==null?profileDraft.values:batchProfile);
+
+  // ── THE BATCH DEFAULTS SKU EXCEPTIONS ARE MEASURED AGAINST ──────────────
+  // null means "no committed batch context", and the sector master is then the
+  // only authority — exactly what _hasCommittedBatch meant before C5.
+  const batchDefaults=inReview?batchProfile
+    :(profileDraft!==null?profileDraft.values
+      :(batchRows.length>0?batchProfile:null));
+
+  const specRaw=inReview?reviewCopy.spec:draft.spec;
+  // The resolved spec every consumer sees.
+  const spec=(()=>{
+    const out={...specRaw};
+    CONTEXT_ONLY_FIELDS.forEach(k=>{
+      const v=contextValues?contextValues[k]:undefined;
+      out[k]=(v===undefined||v===null)?(INIT_SPEC[k]??""):v;
+    });
+    // Freight is a SKU exception WITH a batch fallback: an explicit SKU value
+    // wins, a blank inherits the batch figure, and calcCosting falls back to the
+    // matrix when that is blank too.
+    const skuFr=specRaw.freightOverride;
+    if(skuFr===""||skuFr==null)
+      out.freightOverride=(contextValues&&contextValues.freightOverride)||"";
+    return out;
+  })();
+
   const setSpec=next=>{
     if(inReview)setReviewCopy(rc=>rc===null?rc:({...rc,
       spec:typeof next==='function'?next(rc.spec):next}));
     else setDraft(d=>({...d,
       spec:typeof next==='function'?next(d.spec):next}));
   };
-  // Dotted-path setter, moved verbatim from useCostingState.js. Two path
-  // shapes only — a top-level key, or layers.<K>.<field>; anything else
-  // returns the spec unchanged. costingDraftModel.mergeSpec depends on that
-  // being exhaustive.
   const s=(k,v)=>setSpec(p=>{
     const ks=k.split(".");
     if(ks.length===1)return{...p,[k]:v};
@@ -120,30 +128,63 @@ export function useCostingDraft(st){
     return p;
   });
 
-  // Deep Dive. Captures START's workspace flags BEFORE the caller overwrites
-  // them, which is why prev is read here and not passed in.
+  // ── C4 · REVIEW ─────────────────────────────────────────────────────────
+  // prev carries setAutoFill only. profileDraft is NOT snapshotted: REVIEW never
+  // writes it, so there is nothing to restore.
   const openReview=(rowId,rowSpec)=>
-    setReviewCopy(freshReviewCopy(rowId,rowSpec,{setAutoFill,costingContext}));
-
-  // Discard the copy and restore what START was working with. Read from the
-  // current render rather than inside the updater: a state updater must stay
-  // pure, and StrictMode invokes it twice.
+    setReviewCopy(freshReviewCopy(rowId,rowSpec,{setAutoFill}));
   const exitReview=()=>{
-    if(reviewCopy){
-      setSetAutoFill(reviewCopy.prev.setAutoFill);
-      setCostingContext(reviewCopy.prev.costingContext);
-    }
+    if(reviewCopy)setSetAutoFill(reviewCopy.prev.setAutoFill);
     setReviewCopy(null);
   };
-
-  // After a successful Push. NOT baseline := spec: the baseline tracks what was
-  // formalised THROUGH BATCH ENTRY. Declining the shared-Construction update
-  // leaves those fields dirty, so exiting still warns and a later accepting
-  // Push is what makes REVIEW clean. See nextReviewBaseline.
   const markReviewPushed=(pushedFields,constructionFormalised)=>
     setReviewCopy(rc=>rc===null?rc:({...rc,
       baseline:nextReviewBaseline(rc.baseline,rc.spec,pushedFields,constructionFormalised)}));
 
-  return { activeBatchRowId, exitReview, markReviewPushed, openReview,
-    reviewDirty, s, setSpec, spec };
+  // ── C5 · DRAFT LIFECYCLE ────────────────────────────────────────────────
+  // One operation per transition, each landing a CLEAN result in a single state
+  // update: baseline := the spec it just wrote, and the profile draft carrying
+  // its own matching baseline.
+  const resetDraft=(nextSpec,nextProfileValues)=>setDraft(()=>({
+    v:DRAFT_VERSION,
+    spec:nextSpec,
+    profileDraft:nextProfileValues?freshProfileDraft(nextProfileValues):null,
+    baseline:nextSpec}));
+
+  // Send succeeded: the batch row is the durable record, so the draft is clean
+  // against what it just produced. A new-batch draft has been written through to
+  // the profile by the caller and becomes null here.
+  const markDraftSent=()=>setDraft(d=>({...d,profileDraft:null,baseline:d.spec}));
+
+  // A Context-bar edit. ONE action: the batch value always moves; the SKU value
+  // follows only while it was still tracking the old default.
+  const setContextField=(key,value,skuKey)=>setDraft(d=>{
+    if(d.profileDraft===null)return d;            // read-only mode writes nothing
+    const prevDefault=d.profileDraft.values[key];
+    const values={...d.profileDraft.values,[key]:value};
+    const spec2=(skuKey&&shouldAdvanceSkuValue(d.spec[skuKey],prevDefault))
+      ?{...d.spec,[skuKey]:value}:d.spec;
+    return {...d,spec:spec2,profileDraft:{...d.profileDraft,values}};
+  });
+
+  // Cascades reproduced from Batch Entry (sector → waste/conv, plant/delivery →
+  // freight, payment → interest). Each writes several batch values at once and
+  // advances only the SKU values still tracking them.
+  const applyContextCascade=(patch,skuMap)=>setDraft(d=>{
+    if(d.profileDraft===null)return d;
+    const prev=d.profileDraft.values;
+    const values={...prev,...patch};
+    let spec2=d.spec;
+    Object.entries(skuMap||{}).forEach(([batchKey,skuKey])=>{
+      if(!(batchKey in patch))return;
+      if(shouldAdvanceSkuValue(spec2[skuKey],prev[batchKey]))
+        spec2={...spec2,[skuKey]:patch[batchKey]};
+    });
+    return {...d,spec:spec2,profileDraft:{...d.profileDraft,values}};
+  });
+
+  return { activeBatchRowId, applyContextCascade, batchDefaults, contextValues,
+    draftDirty, exitReview, markDraftSent, markReviewPushed, openReview,
+    profileDraft, resetDraft, reviewDirty, s, setContextField, setSpec, spec,
+    specRaw };
 }

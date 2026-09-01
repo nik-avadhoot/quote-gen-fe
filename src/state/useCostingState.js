@@ -11,6 +11,10 @@
 // to be documented here - reading cbb_batchprofile through getItem() because
 // this slice composes before the batch slice - went with them.
 //
+// C5 DELETED costingContext. Which batch context Costing is in is DERIVED from
+// whether a profileDraft exists (useCostingDraft.js), so the flag and the thing
+// it described can no longer disagree.
+//
 // C4 MOVED activeBatchRowId OUT TOO, and it is no longer state anywhere: it is
 // DERIVED from reviewCopy.rowId in useCostingDraft.js. Storing the row pointer
 // beside the review copy that defines it would be two sources of truth for
@@ -26,7 +30,6 @@ import { useState } from "react";
 
 export function useCostingState(){
   const[setAutoFill,setSetAutoFill]=useState(true); // "Part of a SET" switch — ON=apply existing auto-fill, OFF=leave SetCode blank
-  const[costingContext,setCostingContext]=useState("same-batch"); // "same-batch"|"new-batch" — which batch context Costing is currently operating in
   const[aiNotes,setAiNotes]=useState("");
   // specCommitted: true after sendCostingToBatch successfully appends a row,
   // cleared by Start New SKU / New Batch.
@@ -38,5 +41,5 @@ export function useCostingState(){
   // identity freeze after a Deep Dive round trip. loadItem is gone entirely.
   // Session/UI state only — not persisted, not backed up.
   const[specCommitted,setSpecCommitted]=useState(false);
-  return { aiNotes, costingContext, setAiNotes, setAutoFill, setCostingContext, setSetAutoFill, setSpecCommitted, specCommitted };
+  return { aiNotes, setAiNotes, setAutoFill, setSetAutoFill, setSpecCommitted, specCommitted };
 }

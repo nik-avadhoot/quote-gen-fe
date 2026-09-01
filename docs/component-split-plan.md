@@ -2273,6 +2273,11 @@ into a new batch", no "park it", no "save before proceeding".
 > user at it no longer instruct them into destroying their scratchpad. **A user who follows the
 > instructions no longer loses work** — which was D-13 stated at its sharpest.
 >
+> **⚠️ QUALIFIED BY C5 (2026-09-01) — see the note on D-2's own entry below.** A *same-batch* draft
+> is now discarded by `+ New Batch`; only a *new-batch* draft is preserved. The sentence above still
+> holds for the case D-13 is about (scratchpad work for a different batch), and no longer holds
+> unconditionally.
+>
 > **D-13 IS NOT ADDRESSED.** The capability is still missing:
 > * the old batch is **not reachably archived** — `cbb_batch_previous` exists with no reader
 > * the Maker **still cannot hold two batches** concurrently
@@ -3338,6 +3343,27 @@ divergence that preceded it is.
 > **Resolved.** `startNewBatch` no longer calls `setSpec` — **the Costing scratchpad survives.** The
 > confirm was rewritten from four named items out of ten state changes into **three lines grouped by
 > effect**, naming what changes rather than listing setters.
+>
+> ### ⚠️ SUPERSEDED IN PART BY C5, 2026-09-01 — one path only
+>
+> D-2's ruling was that *"the spec has nothing to do with the batch; there is no reason clearing one
+> should clear the other."* **C5 makes that untrue for a same-batch draft.** Once the Batch Context
+> is relocated into Costing, a same-batch draft takes its entire batch context — client, sector,
+> producing plant, delivery, payment terms, Box/PP defaults — from the profile being cleared. It
+> *does* belong to that batch.
+>
+> **So `+ New Batch` now splits by draft type:**
+>
+> | Draft | Behaviour | Why |
+> |---|---|---|
+> | **new-batch** (`profileDraft !== null`) | **Preserved unchanged** | Independent of the batch being cleared, and the intended second step before its first Send |
+> | **same-batch** (`profileDraft === null`) | **Discarded**, and the confirm says so | Its context is the profile being cleared; the Maker is pointed at New Draft to keep working |
+>
+> The confirm's "Keeps your Costing spec" line is replaced by one of two lines chosen on that test.
+> **D-2's mechanism is intact** — `startNewBatch` still does not blanket-destroy the spec, and the
+> warning still names what is lost rather than listing setters. What changed is which case counts as
+> loss. The new same-batch draft is reset from the freshly-built `fresh` profile passed directly into
+> the reset, never by reading `batchProfile` back in the same handler.
 >
 > **`setSetAutoFill(true)` was removed as an EXTENSION of the same ruling**, not a separate change:
 > `setAutoFill` is the "auto-derive SET Code from Mat Code" checkbox in the Costing form — workspace

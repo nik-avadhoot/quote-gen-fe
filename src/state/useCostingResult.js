@@ -27,7 +27,7 @@ import { calcCosting, checkMissingInfo, checkSpecCompliance, estimateOverspecSav
 import { isPPType } from "../engine/rowType.js";
 
 export function useCostingResult(st){
-  const { batchProfile, batchRows, boxTrim, costingContext, freight, rates, sectors, spec } = st;
+  const { batchDefaults, boxTrim, freight, rates, sectors, spec } = st;
 
   // wastePP/convRatePP: "" in spec means "no override — inherit sector default",
   // resolved fresh here (not baked into spec) so it stays live if sector changes.
@@ -37,8 +37,12 @@ export function useCostingResult(st){
   // batchProfile is replaced on every profile-bar keystroke and batchRows on every
   // grid edit; depending on either object would bust the memo constantly. Only
   // these five scalars actually feed the computation.
-  const batchRowCount=batchRows.length;
-  const{waste:bpWaste,convRate:bpConvRate,wastePP:bpWastePP,convRatePP:bpConvRatePP}=batchProfile;
+  // C5: batchDefaults is the ONE resolved source of batch-level defaults -
+  // the live profile when attached to a batch or reviewing a row, the draft
+  // profile while a new batch is being prepared, and null when neither applies
+  // (the sector master is then the only authority, exactly as before C5).
+  const _hasBD=batchDefaults!==null&&batchDefaults!==undefined;
+  const{waste:bdWaste,convRate:bdConvRate,wastePP:bdWastePP,convRatePP:bdConvRatePP}=batchDefaults||{};
 
   const _derived=useMemo(()=>{
     // wastePP/convRatePP: "" in spec means "no override — inherit sector default",
@@ -49,11 +53,11 @@ export function useCostingResult(st){
     // When a batch exists, the Batch Profile is the committed context for waste/conv defaults.
     // When the batch is empty, the sector master is the only authority.
     // This ensures Costing's display and Calculate All use the same effective value.
-    const _hasCommittedBatch=batchRowCount>0&&costingContext==="same-batch"; // false in new-batch context — Costing uses sector master for defaults, not parked batch profile
-    const _wasteDefBox =_hasCommittedBatch?(bpWaste??_sectorForCalc?.wasteCBB??5):(_sectorForCalc?.wasteCBB??5);
-    const _convDefBox  =_hasCommittedBatch?(bpConvRate??_sectorForCalc?.convBox??7):(_sectorForCalc?.convBox??7);
-    const _wasteDefPP  =_hasCommittedBatch?(bpWastePP??_sectorForCalc?.wastePP??5):(_sectorForCalc?.wastePP??5);
-    const _convDefPP   =_hasCommittedBatch?(bpConvRatePP??_sectorForCalc?.convPP??12.5):(_sectorForCalc?.convPP??12.5);
+    const _hasCommittedBatch=_hasBD; // C5: batchDefaults!==null. Same meaning, one source
+    const _wasteDefBox =_hasCommittedBatch?(bdWaste??_sectorForCalc?.wasteCBB??5):(_sectorForCalc?.wasteCBB??5);
+    const _convDefBox  =_hasCommittedBatch?(bdConvRate??_sectorForCalc?.convBox??7):(_sectorForCalc?.convBox??7);
+    const _wasteDefPP  =_hasCommittedBatch?(bdWastePP??_sectorForCalc?.wastePP??5):(_sectorForCalc?.wastePP??5);
+    const _convDefPP   =_hasCommittedBatch?(bdConvRatePP??_sectorForCalc?.convPP??12.5):(_sectorForCalc?.convPP??12.5);
 
     const _calcSpec=(spec.wastePP===""||spec.wastePP==null||spec.convRatePP===""||spec.convRatePP==null
                    ||spec.waste===""||spec.waste==null||spec.convRate===""||spec.convRate==null)
@@ -72,8 +76,8 @@ export function useCostingResult(st){
       ?estimateOverspecSaving(spec,r,rates):null;
     return{_sectorForCalc,_hasCommittedBatch,_wasteDefBox,_convDefBox,_wasteDefPP,_convDefPP,
       _calcSpec,result,r,missing,compliance,marginSugg,osSaving};
-  },[spec,sectors,rates,freight,boxTrim,costingContext,batchRowCount,
-     bpWaste,bpConvRate,bpWastePP,bpConvRatePP]);
+  },[spec,sectors,rates,freight,boxTrim,_hasBD,
+     bdWaste,bdConvRate,bdWastePP,bdConvRatePP]);
 
   const{_sectorForCalc,_hasCommittedBatch,_wasteDefBox,_convDefBox,_wasteDefPP,_convDefPP,
     _calcSpec,result,r,missing,compliance,marginSugg,osSaving}=_derived;

@@ -28,7 +28,7 @@ import { findDuplicate } from "../lib/constructionIdentity.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useCostingBatchBridge(st){
-  const { activeBatchRowId, autoCalcPPDims, batchProfile, batchRows, constructionLib, costingContext, exitReview, freight, invalidateBatchRow, markReviewPushed, openReview, resolveSpecWasteConv, reviewDirty, sectors, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setCostingContext, setSetAutoFill, setSpecCommitted, setTab, showToast, spec } = st;
+  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, freight, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewDirty, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setSetAutoFill, setSpecCommitted, setTab, showToast, spec, specRaw } = st;
 
   const loadBatchRowIntoCosting=(row)=>{
     // Gate: block Deep Dive if this row has an unconfirmed SET Code
@@ -69,10 +69,12 @@ export function useCostingBatchBridge(st){
     // setters below overwrite them.
     openReview(row.id,sp);
     setSetAutoFill(row.setAutoFill??true); // restore stored setting; default true for legacy rows
+    // C5: setCostingContext("same-batch") was here. REVIEW's context is derived
+    // now - contextValues and batchDefaults both read the live profile whenever
+    // a review copy is open, so there is no flag to set and none to restore.
     // C4: setSpecCommitted(false) was here. It is gone — the flag is masked by
     // activeBatchRowId in every reader, so clearing it changed nothing during
     // REVIEW and silently released START's identity freeze on the way out.
-    setCostingContext("same-batch"); // REVIEW of an existing row always re-establishes same-batch context
     setTab("costing");
   };
 
@@ -88,20 +90,26 @@ export function useCostingBatchBridge(st){
   // The reverse direction (Costing → Profile) already exists as the "↓ Profile" button.
   // Without this, Reset yields INIT_SPEC (Nagpur/Nagpur/conv 12.5/margin 8) which
   // contradicts a populated batchProfile — the Maker validates a number they'll never see.
+  // C5: BLANK CONTEXT-ONLY FIELDS. client/sector/plant/delivery/customerType/
+  // priceContext/paymentDisc are resolved from the one Context authority every
+  // render, so seeding copies of them here would be the mirroring the model
+  // forbids - and would hand the G1 guards a value nobody typed.
+  const _blankContext={client:"",sector:"",plant:"",delivery:"",
+    customerType:"",priceContext:"",paymentDisc:""};
+  // SKU exceptions start life TRACKING the batch default, with CONCRETE Box/PP
+  // waste and conversion - never blank. specFromProfile used to leave those four
+  // blank; a blank presented as inherited is D-25's job, not this series'.
+  const _skuFromDefaults=(explicit)=>{
+    const bd=explicit||batchDefaults||{};
+    return {interest:bd.interest??0.5,margin:bd.margin??8,
+      waste:bd.waste??5,convRate:bd.convRate??7,
+      wastePP:bd.wastePP??5,convRatePP:bd.convRatePP??12.5,
+      freightOverride:""};
+  };
   const specFromProfile=()=>({
     ...INIT_SPEC,
-    client:batchProfile.client||"",
-    sector:batchProfile.sector||"",
-    plant:batchProfile.plant||"",
-    delivery:batchProfile.delivery||"",
-    interest:batchProfile.interest??0.5,
-    paymentDisc:batchProfile.paymentDisc||"30",
-    // Leave waste/conv/wastePP/convRatePP blank so _calcSpec resolves from sector default —
-    // matching what calcBatchRow will use after Calculate All (profile values, not INIT_SPEC hardcodes).
-    waste:"",convRate:"",wastePP:"",convRatePP:"",
-    margin:batchProfile.margin??8,
-    customerType:batchProfile.customerType||"existing",
-    priceContext:batchProfile.priceContext||"unknown",
+    ..._blankContext,
+    ..._skuFromDefaults(),
     // Same-batch retention: carry forward construction and output-specs as starting working
     // intelligence for the next SKU in the same batch. These are STARTING DEFAULTS, fully editable.
     // Row-identity fields (client, sector, matCode, product, dims, setCode) are cleared above via
@@ -122,25 +130,13 @@ export function useCostingBatchBridge(st){
   // New-Batch/Scratchpad Start New SKU: retain construction/output-spec working
   // intelligence from current scratchpad spec, but read NOTHING from batchProfile.
   // Identity, dims, commercial terms all reset to blank/INIT_SPEC defaults.
-  const specForNewBatch=()=>({
+  // C5: specForNewBatch is gone. New SKU is ONE seed in both modes, because the
+  // batch context no longer lives in the spec - batchDefaults already points at
+  // the draft profile while a new batch is being prepared.
+  const specForNextSku=()=>({
     ...INIT_SPEC,
-    // Batch/customer context — same carry-forward semantics as specFromProfile(),
-    // but sourced from current spec (not batchProfile, which belongs to the parked Old Batch).
-    client:spec.client||"",
-    sector:spec.sector||"",
-    plant:spec.plant||"",
-    delivery:spec.delivery||"",
-    interest:spec.interest??0.5,
-    paymentDisc:spec.paymentDisc||"30",
-    // waste/conv: carry as-is from spec, preserving blank-as-inherit semantics.
-    // Same intent as specFromProfile() which sets these to "" so _calcSpec resolves
-    // from sector default. If spec has "" (inherit), carry ""; if spec has an explicit
-    // value the Maker typed, carry that value.
-    waste:spec.waste,convRate:spec.convRate,
-    wastePP:spec.wastePP,convRatePP:spec.convRatePP,
-    margin:spec.margin??8,
-    customerType:spec.customerType||"existing",
-    priceContext:spec.priceContext||"unknown",
+    ..._blankContext,
+    ..._skuFromDefaults(),
     // Construction and board specifications — same as specFromProfile():
     ply:spec.ply||5,
     flute_F1:spec.flute_F1||"B",
@@ -155,6 +151,63 @@ export function useCostingBatchBridge(st){
     // NOT carried (same as specFromProfile()): freightOverride, add-ons, isRepeat,
     // skuType, volume, salesMOQ, reqBoxWt, material_code, product, L/W/H, setCode.
   });
+
+  // ── C5 · DRAFT LIFECYCLE OPERATIONS ─────────────────────────────────────
+  // Each confirms only when there is work that has not reached Batch Entry, then
+  // lands a CLEAN result in one state update. The draft is saved continuously,
+  // so the prompts never say "unsaved" - what is at stake is work that has not
+  // been SENT.
+  const _confirmDiscardWork=(msg)=>!draftDirty||window.confirm(msg);
+
+  // A batch-context-only seed: no construction, no board specs, no identity.
+  // specFromProfile() carries construction forward by design; X3 and B2 must not,
+  // so they use this instead.
+  const specContextOnly=(explicitDefaults)=>({
+    ...INIT_SPEC, ..._blankContext, ..._skuFromDefaults(explicitDefaults)});
+
+  // S1 - another SKU in the same batch (or the same new-batch draft).
+  const startNewSku=()=>{
+    if(!_confirmDiscardWork(
+      "Start a new SKU?" + "\n\n" +
+      "This Costing draft has work that has not been sent to Batch Entry. Identity, "+
+      "product and dimensions are reset; construction and board specs carry forward." + "\n\n" +
+      "OK = start the new SKU  |  Cancel = keep working"))return;
+    resetDraft(specForNextSku(),profileDraft?profileDraft.values:null);
+    setSpecCommitted(false);setSetAutoFill(true);
+  };
+
+  // S2 / S3 - New Draft. The draft profile is seeded either from the live profile
+  // (same client) or from the concrete defaults a fresh Batch Profile takes.
+  const _newDraft=(values)=>{
+    if(!_confirmDiscardWork(
+      "Start a new draft?" + "\n\n" +
+      "This Costing draft has work that has not been sent to Batch Entry, and it "+
+      "will be discarded." + "\n\n" +
+      "OK = discard it and start the new draft  |  Cancel = keep working"))return;
+    resetDraft(specContextOnly(values),values);
+    setSpecCommitted(false);setSetAutoFill(true);
+    showToast("✦ New draft started — the parked batch is untouched",'info',5000);
+  };
+  const newDraftKeepClient=()=>_newDraft({...batchProfile});
+  const newDraftNewClient=()=>_newDraft({client:'',sector:'',plant:'',delivery:'',
+    margin:8,marginPP:8,interest:0.5,paymentDisc:'30',freightOverride:'',
+    waste:5,convRate:7,wastePP:5,convRatePP:12.5,
+    customerType:'existing',priceContext:'unknown'});
+
+  // X3 - discard the new-batch draft and return to a clean START on the live
+  // batch. Carries NONE of the abandoned draft: not its identity, dimensions,
+  // construction or board specifications.
+  const discardNewDraft=()=>{
+    if(profileDraft===null)return;
+    if(!_confirmDiscardWork(
+      "Discard this new-batch draft?" + "\n\n" +
+      "Its client, sector, dimensions, construction and board specs are all lost. "+
+      "You return to a clean START on the current batch." + "\n\n" +
+      "OK = discard  |  Cancel = keep the draft"))return;
+    resetDraft(specContextOnly(batchProfile),null);
+    setSpecCommitted(false);setSetAutoFill(true);
+    showToast("↩ Returned to the current batch",'info',4000);
+  };
 
   const pushCostingToBatchRow=()=>{
     if(!activeBatchRowId){showToast("⚠️ No batch row linked — open one via the grid's 🔍 icon first",'info');return;}
@@ -370,7 +423,7 @@ export function useCostingBatchBridge(st){
     // ── Context gate: hard block before ANY validation when new-batch context exists alongside an active batch ──
     // This is a pre-condition, not a field-value check. It fires unconditionally when costingContext==="new-batch"
     // and batchRows is non-empty, regardless of spec field values or G1 identity comparisons.
-    if(costingContext==="new-batch"&&batchRows.length>0){
+    if(profileDraft!==null&&batchRows.length>0){
       showToast(
         "❌ New-Batch/Scratchpad context — cannot send into existing Batch Entry batch.\n\n"+
         "Go to Batch Entry → + New Batch to clear the old batch first, then send.",
@@ -406,8 +459,10 @@ export function useCostingBatchBridge(st){
         missing.push(LAYER_NAMES[k]);
     });
 
-    if(!spec.plant)    missing.push("Avadhoot Plant — select before sending");
-    if(!spec.delivery) missing.push("Client Plant (delivery location) — select before sending");
+    // C5: these read the RESOLVED spec, so a Producing Plant owned by the
+    // Batch Context satisfies them. Wording follows the Context bar.
+    if(!spec.plant)    missing.push("Producing Plant — set it in Batch Context before sending");
+    if(!spec.delivery) missing.push("Delivery — set it in Batch Context before sending");
     if(missing.length>0){
       showToast(
         `⚠️ Complete these before sending:\n• ${missing.join("\n• ")}`,
@@ -435,39 +490,44 @@ export function useCostingBatchBridge(st){
     if(_profileHasIdentity){
       // Normalise: trim + lowercase for reliable comparison (sameClient helper inline)
       const _norm=v=>(v||"").trim().toLowerCase().replace(/\s+/g," ");
-      const _specClient=_norm(spec.client);
+      // C5: these four read specRaw, NOT the resolved spec. The resolved spec
+      // takes its context from the profile by construction, so comparing it
+      // would compare the profile with itself. specRaw is where a value put
+      // there by an older persisted draft, a restored backup or a future
+      // non-UI path still shows up - exactly what D-24 asked these to catch.
+      const _specClient=_norm(specRaw.client);
       const _profClient=_norm(batchProfile.client);
       if(_specClient&&_profClient&&_specClient!==_profClient){
         showToast(
-          `❌ Client mismatch — Costing is for "${spec.client}" but this Batch is for "${batchProfile.client}".\n\nThis is a different quotation. Start a New Batch for this client, or fix the Client field in Costing.`,
+          `❌ Client mismatch — this Costing draft carries "${specRaw.client}" but this Batch is for "${batchProfile.client}".\n\nCosting no longer edits Client. Use New Draft for a different client, Start new SKU to clear this draft, or Edit Batch Profile in Batch Entry.`,
           'error', 9000
         );
         return;
       }
       // Sector, Plant, Delivery — hard block; mismatch must NOT become a row override
-      const _specSector=_norm(spec.sector);
+      const _specSector=_norm(specRaw.sector);
       const _profSector=_norm(batchProfile.sector);
       if(_specSector&&_profSector&&_specSector!==_profSector){
         showToast(
-          `❌ Sector mismatch — Costing is "${spec.sector}" but this Batch Profile is "${batchProfile.sector}".\n\nFix the Batch Profile or start a New Batch.`,
+          `❌ Sector mismatch — this Costing draft carries "${specRaw.sector}" but this Batch Profile is "${batchProfile.sector}".\n\nFix the Batch Profile or start a New Batch.`,
           'error', 9000
         );
         return;
       }
-      const _specPlant=_norm(spec.plant);
+      const _specPlant=_norm(specRaw.plant);
       const _profPlant=_norm(batchProfile.plant);
       if(_specPlant&&_profPlant&&_specPlant!==_profPlant){
         showToast(
-          `❌ Plant mismatch — Costing is "${spec.plant}" but this Batch Profile is "${batchProfile.plant}".\n\nFix the Batch Profile or start a New Batch.`,
+          `❌ Plant mismatch — this Costing draft carries "${specRaw.plant}" but this Batch Profile is "${batchProfile.plant}".\n\nFix the Batch Profile or start a New Batch.`,
           'error', 9000
         );
         return;
       }
-      const _specDelivery=_norm(spec.delivery);
+      const _specDelivery=_norm(specRaw.delivery);
       const _profDelivery=_norm(batchProfile.delivery);
       if(_specDelivery&&_profDelivery&&_specDelivery!==_profDelivery){
         showToast(
-          `❌ Delivery mismatch — Costing is "${spec.delivery}" but this Batch Profile is "${batchProfile.delivery}".\n\nFix the Batch Profile or start a New Batch.`,
+          `❌ Delivery mismatch — this Costing draft carries "${specRaw.delivery}" but this Batch Profile is "${batchProfile.delivery}".\n\nFix the Batch Profile or start a New Batch.`,
           'error', 9000
         );
         return;
@@ -671,37 +731,19 @@ export function useCostingBatchBridge(st){
     // "Nagpur" must not silently win over the Maker's explicit Costing values.
     // On subsequent Sends (batch non-empty), the profile already owns these fields and mismatches
     // are caught above by the identity guards — no further seeding is needed here.
-    if(!_profileHasIdentity){
-      const profilePatch={};
-      if(spec.client)   profilePatch.client=spec.client;
-      if(spec.sector){
-        profilePatch.sector=spec.sector;
-        // ⚠️ SITE 4 of the inheritance-materialisation pattern (D-9 / D-16) lives
-        // in the four lines below, and D-24's fix made it HARMLESS IN CONTEXT —
-        // NOT RESOLVED. Read this before touching either.
-        //
-        // This block now runs only into a profile with NO identity, so writing the
-        // sector's derived waste/conv establishes initial state rather than freezing
-        // an inheritance. That holds ONLY because of D-25: the profile cannot
-        // express blank-means-inherit today — its waste is the literal 5, never a
-        // blank meaning "follow the sector" — so there is no inheritance to freeze.
-        //
-        // 🛑 THE MOMENT D-25 LANDS and a blank profile means "follow the sector",
-        // these writes become materialisation again. REVISIT HERE when D-25 is
-        // fixed. D-25's entry carries the matching precondition; if you are here
-        // because of that pointer, this is the code it meant.
-        // Mirror Batch Profile sector-change handler (lines 3042-3046): when sector is seeded
-        // on first Send, also establish its derived waste/conv values so the profile is internally
-        // consistent. Without this, batchProfile.sector=ICECREAM but waste/conv remain defaults.
-        const _sd=sectors.find(x=>x.code===spec.sector);
-        profilePatch.waste=_sd?_sd.wasteCBB:5;
-        profilePatch.convRate=_sd?_sd.convBox:7;
-        profilePatch.wastePP=_sd?_sd.wastePP:5;
-        profilePatch.convRatePP=_sd?_sd.convPP:12.5;
-      }
-      if(spec.plant)    profilePatch.plant=spec.plant;
-      if(spec.delivery) profilePatch.delivery=spec.delivery;
-      if(Object.keys(profilePatch).length)setBatchProfile(p=>({...p,...profilePatch}));
+    // ── C5 · S5: FIRST SEND ESTABLISHES THE PROFILE FROM THE DRAFT ─────────
+    // What stood here re-derived the sector's waste/conv from the master and
+    // wrote its own literals, so the profile it established could disagree with
+    // the numbers Costing had just displayed and costed. It also carried SITE 4
+    // of the inheritance-materialisation pattern (D-9 / D-16).
+    //
+    // The draft profile IS the authority now: the Context bar wrote it, the
+    // resolver costed from it, and it is written through VERBATIM. One state,
+    // no re-derivation, nothing to disagree with. S6 above is what keeps this
+    // safe - it hard-blocks a new-batch Send while a batch still exists, so this
+    // can only ever establish a profile that has none.
+    if(profileDraft!==null){
+      setBatchProfile(p=>({...p,...profileDraft.values}));
     }
 
     // A2 (ruling): append the row, stay on Costing with spec retained so the Maker
@@ -710,8 +752,11 @@ export function useCostingBatchBridge(st){
     // Do NOT set activeBatchRowId — that is REVIEW mode; START mode stays unlinked.
     setBatchRows(prev=>[...prev,newRow]);
     setSpecCommitted(true); // freeze identity fields until Maker clicks Start New SKU
-    // New-batch: first successful send establishes the batch in BatchEntry → transition to same-batch
-    if(costingContext==="new-batch")setCostingContext("same-batch");
+    // C5: the draft profile has just been written through, so it is retired and
+    // the draft becomes CLEAN against what it produced - the batch row is now
+    // the durable record of this spec. Mode returns to same-batch by derivation,
+    // because profileDraft is null again.
+    markDraftSent();
     const rowNum=batchRows.length+1;
     const constrWasMatched=!!existingFull||(!!constrCode&&!constructionLib.find(c=>c.code===constrCode));
     // Single toast — construction info merged in so the Maker sees one clear signal
@@ -737,7 +782,7 @@ export function useCostingBatchBridge(st){
   // scratchpad (new-batch) context and an old batch still exists.
   const copyCostingToProfile=()=>{
                   // C11: block Profile import when Costing is in scratchpad context and old batch exists
-                  if(costingContext==="new-batch"&&batchRows.length>0){
+                  if(profileDraft!==null&&batchRows.length>0){
                     showToast("❌ Scratchpad context — cannot overwrite the existing Batch Profile.\n\nUse Batch Entry → + New Batch to clear the old batch first.",'error',6000);
                     return;
                   }
@@ -792,11 +837,19 @@ export function useCostingBatchBridge(st){
             // and no guard catches it (D-24's cannot — a blank profile has
             // nothing to mismatch against). Mitigation is visibility at the
             // decision point, not a guard. See PM-6.
-            const _keptId=[spec.client&&`client "${spec.client}"`,
-                           spec.sector&&`sector "${spec.sector}"`].filter(Boolean).join(" and ");
-            const _keepLine=_keptId
-              ?`• Keeps your Costing spec, including ${_keptId} — change these in Costing if this batch is for a different customer.\n`
-              :"• Keeps your Costing spec — you will not have to re-enter it.\n";
+            // ── C5 · B1 / B2 ────────────────────────────────────────────────
+            // B1 - a NEW-BATCH draft is independent of the batch being cleared and
+            // is the intended second step before its first Send, so it is
+            // preserved unchanged and the confirm says so.
+            //
+            // B2 - a SAME-BATCH draft takes its whole Batch Context from the
+            // profile being cleared, so it belongs to that batch. It is
+            // discarded, and the Maker is pointed at New Draft as the way to keep
+            // working. This qualifies D-2's spec-preservation for this one path.
+            const _isNewBatchDraft=profileDraft!==null;
+            const _keepLine=_isNewBatchDraft
+              ?"• Keeps your new-batch draft — it is independent of the batch being cleared.\n"
+              :"• DISCARDS your Costing draft — it belongs to the batch being cleared. Cancel and use New Draft first if you want to keep it.\n";
             if(!window.confirm(
               "Start a new batch?\n\n"+
               "• Clears the current batch — profile, all SKU rows, results and Quote Items.\n"+
@@ -847,21 +900,29 @@ export function useCostingBatchBridge(st){
               waste:5,convRate:7,wastePP:5,convRatePP:12.5,
               customerType:'existing',priceContext:'unknown'};
             setBatchProfile(fresh);
+            // C5 · B2: seed the draft from the `fresh` object we just built, NOT
+            // from batchProfile - that state does not update until the next
+            // render, so reading it here would seed from the batch being cleared.
+            if(!_isNewBatchDraft)resetDraft(specContextOnly(fresh),null);
             setBatchRows([]);
             setBatchResults({});
             setExpandedRows(new Set());
             exitReview(); // C4: leaves REVIEW and restores START's workspace flags
             setSpecCommitted(false); // Costing identity fields become editable again
             setItems([]); // Fix 5: clear Quote Items so new customer starts clean
-            // Batch Entry cleared → Costing re-attaches to the now-empty batch (same-batch context)
-            // Also reset Costing spec so the panel reflects the fresh state immediately
-            setCostingContext("same-batch");
+            // C5: setCostingContext("same-batch") was here. Mode is derived from
+            // profileDraft now, and B2's resetDraft above already cleared it.
             // ── D-2: the Costing scratchpad SURVIVES ─────────────────────────
             // setSpec({...INIT_SPEC,...}) was here and silently discarded it.
-            // The spec is never persisted anywhere, so that was the one
-            // unrecoverable loss in this handler — and the confirm did not
-            // mention it. RULED: the spec has nothing to do with the batch;
-            // there is no reason clearing one should clear the other.
+            // C3 MADE THAT SENTENCE FALSE: the spec IS persisted now, under
+            // cbb_costing_draft. The original note read "the spec is never
+            // persisted anywhere, so that was the one unrecoverable loss".
+            // RULED at the time: the spec has nothing to do with the batch.
+            //
+            // C5 QUALIFIES THAT for one path. A same-batch draft takes its whole
+            // Batch Context from the profile being cleared, so it does belong to
+            // the batch - see B2 below, which discards it and says so. A
+            // new-batch draft is independent and is preserved (B1).
             //
             // setSetAutoFill(true) was here too and is removed as an EXTENSION
             // OF THE SAME RULING, not a separate change: setAutoFill is the
@@ -873,5 +934,5 @@ export function useCostingBatchBridge(st){
             showToast("✅ New batch started — Costing spec kept",'success');
   };
 
-  return { copyCostingToProfile, loadBatchRowIntoCosting, pushCostingToBatchRow, sendCostingToBatch, specForNewBatch, specFromProfile, startNewBatch };
+  return { copyCostingToProfile, discardNewDraft, loadBatchRowIntoCosting, newDraftKeepClient, newDraftNewClient, pushCostingToBatchRow, sendCostingToBatch, specContextOnly, specForNextSku, specFromProfile, startNewBatch, startNewSku };
 }

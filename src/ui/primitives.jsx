@@ -29,8 +29,13 @@ export const Btn=({ch,onClick,v="primary",sm,full,disabled,style:sx={}})=>{
     cursor:disabled?"not-allowed":"pointer",border:"none",width:full?"100%":"auto",
     opacity:disabled?.45:1,...vs[v],...sx}}>{ch}</button>;
 };
+// C5 visual pass: CENTRED. Every call site is a Costing card header
+// (SpecForm.jsx, six of them and nowhere else in the app), and two of those
+// cards - "Part of a SET" and "Add-on Costs" - already centre their hand-rolled
+// headers. Left-aligning the rest made the column read as two different forms.
 export const SH=({title,sub})=>(
-  <div style={{borderBottom:`1px solid ${C.amber}`,paddingBottom:3,marginBottom:8}}>
+  <div style={{borderBottom:`1px solid ${C.amber}`,paddingBottom:3,marginBottom:8,
+    textAlign:"center"}}>
     <div style={{fontSize:9,fontWeight:700,color:C.amber,textTransform:"uppercase",letterSpacing:"0.09em"}}>{title}</div>
     {sub&&<div style={{fontSize:10,color:C.slateL,marginTop:1}}>{sub}</div>}
   </div>);

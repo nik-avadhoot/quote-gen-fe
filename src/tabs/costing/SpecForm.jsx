@@ -13,7 +13,7 @@
 // reads, and the waste/conv override inputs Case 4 depends on. Extraction here
 // is STRUCTURAL ONLY — no behaviour changed.
 // ═══════════════════════════════════════════════════════════════════════════
-import { BOX_TYPES, PLANTS } from "../../data/defaults.js";
+import { BOX_TYPES } from "../../data/defaults.js";
 import { isPPType, sameSetCode } from "../../engine/rowType.js";
 import BoxDieline from "../../components/BoxDieline.jsx";
 import { Btn, Inp, SH, Sel } from "../../ui/primitives.jsx";
@@ -30,10 +30,10 @@ const SubHdr=({title})=>(
 
 export default function SpecForm(){
   const {
-    spec, s, setSpec, setAutoFill, setSetAutoFill, specCommitted, activeBatchRowId,
+    spec, s, setAutoFill, setSetAutoFill, specCommitted, activeBatchRowId,
     aiNotes, setAiNotes, showToast, card,
-    sectors, sectorCodes, gradeCodes, partitionsMaster, locations, freight,
-    constructionLib, batchProfile, batchRows, items,
+    gradeCodes, partitionsMaster, freight,
+    constructionLib, batchDefaults, batchRows, items,
     r, _sendReady, _wasteDefBox, _wasteDefPP, _convDefBox, _convDefPP,
     pushCostingToBatchRow,
   } = useAppState();
@@ -48,7 +48,7 @@ export default function SpecForm(){
           style={{float:"right",background:"none",border:"none",cursor:"pointer",color:"inherit",fontSize:14}}>×</button>
       </div>}
       <div style={card}>
-        <SH title="Client & Product"/>
+        <SH title="Product & SET"/>
         {/* Identity freeze — batch-wide fields (Client, Sector) are locked once a batch row exists.
             G3/G5: MatCode is locked only in REVIEW (activeBatchRowId set) so the Maker can set a new
             MatCode for the next SET component after Send. SKU/Product is always editable and pushable.
@@ -61,41 +61,18 @@ export default function SpecForm(){
             ?`🔒 Reviewing Batch Row ${batchRows.indexOf(batchRows.find(r=>r.id===activeBatchRowId))+1} — Client, Sector and Mat Code locked. SKU/Product editable. Push changes or ✕ Unlink.`
             :`🔒 SKU sent to Batch Entry — Client and Sector locked to this batch. Edit Mat Code and SKU/Product for the next item, or click "Start new SKU" to reset.`}
         </div>}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 8px",marginBottom:5}}>
-          {/* Client — frozen in both REVIEW and START-after-Send */}
-          <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Client *</div>
-            {(activeBatchRowId||specCommitted)
-              ?<div style={{padding:"4px 6px",border:`1px solid ${C.border}`,borderRadius:4,
-                  fontSize:11,color:C.slateM,background:"#F5F5F5",cursor:"not-allowed"}}
-                  title={activeBatchRowId?"Locked — reviewing existing Batch row":"Locked to batch — click Start new SKU to change"}>
-                {spec.client||"—"}
-              </div>
-              :<Inp value={spec.client} onChange={v=>s("client",v)}/>}
-          </div>
-          {/* Sector — frozen in both REVIEW and START-after-Send */}
-          <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Sector
-              {activeBatchRowId&&<span style={{fontSize:8,color:C.amber,marginLeft:4,fontWeight:400}}>(from Profile)</span>}
-              {(!activeBatchRowId&&specCommitted)&&<span style={{fontSize:8,color:C.amber,marginLeft:4,fontWeight:400}}>(locked to batch)</span>}
-            </div>
-            {(activeBatchRowId||specCommitted)
-              ?<div style={{padding:"4px 6px",border:`1px solid ${C.border}`,borderRadius:4,
-                  fontSize:11,color:C.slateM,background:"#F5F5F5",cursor:"not-allowed"}}
-                  title={activeBatchRowId?"Sector is a batch-wide field. Change it in the Batch Profile, not here.":"Locked to batch — click Start new SKU to change"}>
-                {spec.sector||"—"}
-              </div>
-              :<Sel value={spec.sector||""} onChange={v=>{
-                const sd=sectors.find(x=>x.code===v);
-                setSpec(p=>({...p,sector:v,
-                  ...(sd?{waste:sd.wasteCBB,convRate:sd.convBox,
-                           wastePP:sd.wastePP,convRatePP:sd.convPP}:{})}));
-              }} opts={[{v:"",l:"— select —"},...sectorCodes.map(sc=>({v:sc,l:sc}))]}/>}
-          </div>
+        {/* C5 visual pass: the "Part of a SET" card was merged in here. The SET
+            switch is now a field in row 1 beside the two identity fields, and the
+            SET fields follow as row 2 - one card, two rows, instead of two cards
+            with a header each. Every handler below is unchanged. */}
+        <div style={{display:"grid",gridTemplateColumns:"92px 1fr",gap:"4px 7px",marginBottom:5}}>
+          {/* C5: Client and Sector moved to the Batch Context bar. They are batch-level
+              fields with ONE authority now, so the copies that lived here are gone rather
+              than duplicated. Material Code and SKU/Product below are SKU-level and stay. */}
           {/* Material Code — frozen in REVIEW only; editable in START (including after Send) */}
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
-              <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase"}}>Material Code</div>
+              <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",whiteSpace:"nowrap"}}>Mat Code</div>
               {!activeBatchRowId&&<button onClick={()=>{
                 const cli=(spec.client||"SKU").replace(/[^A-Za-z0-9]/g,"").substring(0,4).toUpperCase();
                 const d=new Date();const ym=String(d.getFullYear()).slice(-2)+String(d.getMonth()+1).padStart(2,"0");
@@ -125,29 +102,39 @@ export default function SpecForm(){
             <Inp value={spec.product} onChange={v=>s("product",v)}/>
           </div>
         </div>
-
-      </div>
-      <div style={card}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,borderBottom:`1px solid ${C.amber}`,paddingBottom:3,marginBottom:7}}>
-          <input type="checkbox" id="setAutoFillChk" checked={setAutoFill}
-            onChange={e=>{
-              const on=e.target.checked;
-              setSetAutoFill(on);
-              if(!on){s("setCode","");}
-              else if(!spec.rowType||spec.rowType==="Box")s("setCode",spec.material_code||"");
-            }}
-            style={{accentColor:C.amber,cursor:"pointer",width:11,height:11}}/>
-          <label htmlFor="setAutoFillChk" style={{fontSize:9,fontWeight:700,color:C.amber,textTransform:"uppercase",letterSpacing:"0.09em",cursor:"pointer",margin:0}}>
-            Part of a SET
-          </label>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"90px 1fr 72px",gap:"0 7px",marginBottom:4}}>
+        {/* Row 2 — Part of SET | SET Code | Set Role | Nos/Set. SET Code and
+            Nos/Set are fixed by ruling; Part of SET sits at 52px, which is exactly
+            what its label measures, so Set Role absorbs the difference - ruled at
+            a 36% reduction with the standard 7px gap kept. */}
+        <div style={{display:"grid",gridTemplateColumns:"52px 92px 1fr 50px",gap:"0 7px",marginBottom:4}}>
+          {/* Part of a SET — the switch that used to be this card's header. Same
+              handler, same semantics; only its position changed. */}
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>SET Code</div>
+            <label htmlFor="setAutoFillChk"
+              style={{fontSize:9,color:setAutoFill?C.amber:C.slateL,fontWeight:600,
+                textTransform:"uppercase",marginBottom:2,display:"block",
+                textAlign:"center",cursor:"pointer",whiteSpace:"nowrap"}}>
+              Part of SET
+            </label>
+            <div style={{display:"flex",justifyContent:"center",alignItems:"center",
+              height:26,border:`1px solid ${setAutoFill?C.amber:C.border}`,borderRadius:4,
+              background:setAutoFill?"#FFF8ED":C.white}}>
+              <input type="checkbox" id="setAutoFillChk" checked={setAutoFill}
+                onChange={e=>{
+                  const on=e.target.checked;
+                  setSetAutoFill(on);
+                  if(!on){s("setCode","");}
+                  else if(!spec.rowType||spec.rowType==="Box")s("setCode",spec.material_code||"");
+                }}
+                style={{accentColor:C.amber,cursor:"pointer",width:13,height:13,margin:0}}/>
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>SET Code</div>
             <Inp value={spec.setCode} onChange={v=>s("setCode",v.toUpperCase())} placeholder="e.g. A"/>
           </div>
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Set Role</div>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>Set Role</div>
             <Sel value={spec.rowType} onChange={v=>{
               s("rowType",v);
               if(v==="Plate"||v==="Part-L"||v==="Part-W"){
@@ -164,8 +151,8 @@ export default function SpecForm(){
               opts={[{v:"Box",l:"Main Box"},{v:"Plate",l:"Plate"},{v:"Part-L",l:"Partition-L"},{v:"Part-W",l:"Partition-W"},{v:"Other",l:"Other"}]}/>
           </div>
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>
-              Nos/Set <span style={{fontSize:8,fontWeight:400,color:C.slateL}}>pcs</span>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>
+              Nos/Set
             </div>
             <input value={spec.qtyPerSet??1} type="number" min="1" step="1"
               onChange={e=>s("qtyPerSet",Math.max(1,+e.target.value||1))}
@@ -467,37 +454,9 @@ export default function SpecForm(){
               {r.moqKg.toLocaleString()} kg ÷ {r.wt.toFixed(3)} kg/box</div>}
           </div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6,marginBottom:4}}>
-          <div>
-            <div style={{fontSize:9,fontWeight:600,color:C.slateL,textTransform:"uppercase",marginBottom:2}}>Customer Type</div>
-            <Sel value={spec.customerType} onChange={v=>s("customerType",v)}
-              opts={[{v:"strategic",l:"Strategic / Key Account"},{v:"new",l:"New Customer"},
-                {v:"existing",l:"Existing Customer"},{v:"spot",l:"Spot / One-time"}]}/>
-          </div>
-          <div>
-            <div style={{fontSize:9,fontWeight:600,color:C.slateL,textTransform:"uppercase",marginBottom:2}}>Price Context</div>
-            <Sel value={spec.priceContext} onChange={v=>s("priceContext",v)}
-              opts={[{v:"sensitive",l:"Price sensitive (street price known)"},{v:"unknown",l:"Price unknown"},
-                {v:"premium",l:"Premium / quality buyer"},{v:"tender",l:"Tender / bid"}]}/>
-          </div>
-        </div>
-        <div style={{marginBottom:4}}>
-          <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>
-            Payment Discipline
-          </div>
-          <select value={spec.paymentDisc||"30"}
-            onChange={e=>{
-              s("paymentDisc",e.target.value);
-              const m={"30":0.5,"45":0.75,"60":1.0,"90":1.5};
-              s("interest",m[e.target.value]||1.5);
-            }}
-            style={{...inputSt,color:C.slateM}}>
-            <option value="30">Prompt — ≤ 30 days (Interest: 0.5%)</option>
-            <option value="45">Moderate — ≤ 45 days (Interest: 0.75%)</option>
-            <option value="60">Delayed — ≤ 60 days (Interest: 1.0%)</option>
-            <option value="90">Chronic — ≤ 90 days (Interest: 1.5%)</option>
-          </select>
-        </div>
+        {/* C5: Customer Type, Price Context and Payment Discipline moved to the
+            Batch Context bar. Payment Terms still derives Interest there, by the
+            same map this block used. */}
         <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:11,color:C.slateL}}>
           <input type="checkbox" checked={spec.isRepeat} onChange={e=>s("isRepeat",e.target.checked)}
             style={{width:13,height:13,accentColor:C.amber}}/>
@@ -506,87 +465,124 @@ export default function SpecForm(){
       </div>
       <div style={card}>
         <SH title="Commercial Parameters"/>
-        {/* B2: Plant and Delivery are batch-wide fields — in REVIEW mode (activeBatchRowId set)
-            buildSpecFromRow reads prof.plant/delivery, never spec.*. Show read-only in REVIEW. */}
-        {/* Layout: Row 1 — Plant | Delivery | Freight */}
-        <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.7fr) minmax(0,1.7fr) minmax(0,1fr)",gap:"4px 8px",marginBottom:5}}>
-          <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Avadhoot Plant</div>
-            {activeBatchRowId
-              ?<div style={{padding:"4px 6px",border:`1px solid ${C.border}`,borderRadius:4,
-                  fontSize:11,color:C.slateM,background:"#F5F5F5",cursor:"not-allowed"}}
-                  title="Plant is a batch-wide field. Change it in the Batch Profile.">{spec.plant||"—"}</div>
-              :<Sel value={spec.plant} onChange={v=>s("plant",v)} opts={PLANTS} ph="— select —"/>}
-          </div>
-          <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Client Plant</div>
-            {activeBatchRowId
-              ?<div style={{padding:"4px 6px",border:`1px solid ${C.border}`,borderRadius:4,
-                  fontSize:11,color:C.slateM,background:"#F5F5F5",cursor:"not-allowed"}}
-                  title="Delivery is a batch-wide field. Change it in the Batch Profile.">{spec.delivery||"—"}</div>
-              :<Sel value={spec.delivery} onChange={v=>s("delivery",v)} opts={locations} ph="— select —"/>}
-          </div>
-          <div>
-            {/* Freight: matrix value shown as placeholder. Override field stays blank = inherit.
-                Missing combination shown as "— no rate" so the Maker knows to enter manually. */}
-            {(()=>{
-              const _mxFr=freight?.[spec.plant]?.[spec.delivery];
-              const _hasMx=_mxFr!=null;
-              const _mxVal=_hasMx?+_mxFr:null;
-              const _isOvr=spec.freightOverride!==""&&spec.freightOverride!=null&&+spec.freightOverride>0;
-              return(
-              <div>
-                <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,whiteSpace:"nowrap"}}>
-                  Freight Rs/kg{_isOvr&&<span style={{fontSize:8,color:C.amber,marginLeft:3,fontWeight:700}}>↑</span>}{!_hasMx&&!_isOvr&&<span style={{fontSize:9,color:C.red,marginLeft:3}}>⚠</span>}
-                </div>
-                <input type="number" step="0.25" min="0"
-                  value={spec.freightOverride??""}
-                  onChange={e=>s("freightOverride",e.target.value)}
-                  placeholder={_hasMx?String(_mxVal):"— no rate"}
-                  title={_isOvr?`Override active — matrix: ${_hasMx?_mxVal+" Rs/kg":"no entry"}`
-                    :_hasMx?`Matrix: ${_mxVal} Rs/kg (${spec.plant||"?"} → ${spec.delivery||"?"})`
-                    :`No freight rate for ${spec.plant||"?"}→${spec.delivery||"?"}. Enter a manual override.`}
-                  style={{width:"100%",padding:"4px 5px",border:`1px solid ${_isOvr?C.amber:(!_hasMx&&!_isOvr)?C.red:C.border}`,
-                    borderRadius:4,fontSize:11,textAlign:"center",boxSizing:"border-box",
-                    background:_isOvr?"#FFF8ED":C.white,fontFamily:mono}}/>
-              </div>);
-            })()}
-          </div>
-        </div>
-        {/* Row 2 — Waste | Conv | Margin | Interest. Placeholder shows effective inherited value.
-            Input stays blank = inherit. Explicit entry = override (amber border). */}
+        {/* ── C5 · SKU COMMERCIAL TABLE ────────────────────────────────────
+            Same commercial-table grammar as the Batch Context bar above, one
+            level down: PP on row 1, Box on row 2.
+
+            ROW-TYPE BEHAVIOUR IS SOURCE-TRUTH, NOT PRESENTATION. The engine
+            reads ONE pair per row - costing.js:47-48,
+            effWaste = isPP ? wastePP : waste - and Push formalises only that
+            pair. So:
+
+              · the APPLICABLE row is editable and sourced from the SKU (spec);
+              · the OTHER row is READ-ONLY and shows the corresponding BATCH
+                CONTEXT default, because that is what the other row type would
+                cost with. It is not an override, cannot be typed into, and is
+                never formalised from this SKU.
+
+            The SKU's single Margin is shown on the applicable row only; the
+            inactive row shows the batch Margin default for that type. No value
+            is duplicated across both rows.
+
+            ⚠️ FREIGHT AND INTEREST SIT IN A SEPARATE GROUP, NOT A FOURTH
+            COLUMN OF THIS MATRIX. They are per-SKU exceptions that belong to
+            the whole row, not to PP or to Box: Freight is NOT a PP figure and
+            Interest is NOT a Box figure. Sharing the two lines is a COMPACT
+            LAYOUT DEVICE ONLY, which is why they carry their own heading and
+            their own bordered group, and why that group wraps BELOW the matrix
+            at narrow widths instead of being crushed into it. */}
         {(()=>{
           const isPP=isPPType(spec.rowType||"Box");
-          const _effWaste=isPP?_wasteDefPP:_wasteDefBox;
-          const _effConv=isPP?_convDefPP:_convDefBox;
-          const _wKey=isPP?"wastePP":"waste";
-          const _cKey=isPP?"convRatePP":"convRate";
-          const _isOvW=spec[_wKey]!==""&&spec[_wKey]!=null&&+spec[_wKey]!==+_effWaste;
-          const _isOvC=spec[_cKey]!==""&&spec[_cKey]!=null&&+spec[_cKey]!==+_effConv;
-          const mgnOvr=spec.margin!==""&&spec.margin!=null&&+spec.margin!==(batchProfile.margin??8);
-          const intOvr=spec.interest!==""&&spec.interest!=null&&+spec.interest!==(batchProfile.interest??0.5);
-          const fld=(label,key,placeholder,isOvr)=>(
-            <div>
-              <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,display:"flex",justifyContent:"center",gap:4}}>
-                <span>{label}{isPP&&(key==="wastePP"||key==="convRatePP")?<span style={{fontSize:7,fontWeight:400}}> PP</span>:null}</span>
-                {isOvr&&<span style={{fontSize:8,color:C.amber,fontWeight:400}}>↑</span>}
-              </div>
-              <input value={spec[key]??""} type="number" step="0.25" onChange={e=>s(key,e.target.value)}
-                placeholder={placeholder!=null?String(placeholder):""}
-                title={isOvr?`Override — effective: ${spec[key]}`:`Effective: ${placeholder}`}
-                style={{width:"100%",padding:"4px 5px",border:`1px solid ${isOvr?C.amber:C.border}`,
-                  borderRadius:4,fontSize:11,textAlign:"center",boxSizing:"border-box",
-                  background:isOvr?"#FFF8ED":C.white}}/>
-            </div>
-          );
+          const bd=batchDefaults||{};
+          const effWaste=isPP?_wasteDefPP:_wasteDefBox;
+          const effConv=isPP?_convDefPP:_convDefBox;
+          const wKey=isPP?"wastePP":"waste";
+          const cKey=isPP?"convRatePP":"convRate";
+          const ovW=spec[wKey]!==""&&spec[wKey]!=null&&+spec[wKey]!==+effWaste;
+          const ovC=spec[cKey]!==""&&spec[cKey]!=null&&+spec[cKey]!==+effConv;
+          const mgnOvr=spec.margin!==""&&spec.margin!=null&&+spec.margin!==(bd.margin??8);
+
+          const mxFr=freight?.[spec.plant]?.[spec.delivery];
+          const hasMx=mxFr!=null;
+          const mxVal=hasMx?+mxFr:null;
+          const frOvr=spec.freightOverride!==""&&spec.freightOverride!=null&&+spec.freightOverride>0;
+          const intOvr=spec.interest!==""&&spec.interest!=null&&+spec.interest!==(bd.interest??0.5);
+
+          const hdrCell={fontSize:8,fontWeight:700,color:C.slateL,textAlign:"center",
+            textTransform:"uppercase",letterSpacing:"0.04em"};
+          const rowCell={fontSize:9,fontWeight:700,color:C.slateL,whiteSpace:"nowrap"};
+          const box={width:"100%",padding:"3px 4px",borderRadius:4,fontSize:11,
+            textAlign:"center",boxSizing:"border-box",lineHeight:1.2};
+          const live=(key,ph,isOvr,extra)=>(
+            <input value={spec[key]??""} type="number" step="0.25"
+              onChange={e=>s(key,e.target.value)}
+              placeholder={ph!=null?String(ph):""}
+              title={isOvr?`SKU exception — effective: ${spec[key]}`:`Batch default in effect: ${ph}`}
+              style={{...box,border:`1px solid ${isOvr?C.amber:C.border}`,
+                background:isOvr?"#FFF8ED":C.white,...(extra||{})}}/>);
+          // lineHeight is pinned so a read-only cell is exactly as tall as an
+          // input; without it the div inherits the app root's ~26px line box and
+          // the inactive row stands proud of the active one.
+          const dead=(val,what)=>(
+            <div title={`${what} does not apply to this ${isPP?"PP":"Box"} SKU — shown from Batch Context, not costed here`}
+              style={{...box,border:`1px solid ${C.border}`,background:"#F5F5F5",
+                color:C.slateL,cursor:"not-allowed"}}>
+              {val===""||val==null?"—":val}</div>);
+
+          const ppRow=isPP
+            ?[live(cKey,effConv,ovC),live(wKey,effWaste,ovW),live("margin",bd.margin??8,mgnOvr)]
+            :[dead(bd.convRatePP,"PP conversion"),dead(bd.wastePP,"PP waste"),dead(bd.marginPP,"PP margin")];
+          const boxRow=isPP
+            ?[dead(bd.convRate,"Box conversion"),dead(bd.waste,"Box waste"),dead(bd.margin,"Box margin")]
+            :[live(cKey,effConv,ovC),live(wKey,effWaste,ovW),live("margin",bd.margin??8,mgnOvr)];
+
           return(
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"4px 8px",marginBottom:5}}>
-            {fld("Waste %",_wKey,_effWaste,_isOvW)}
-            {fld("Conv Rs/kg",_cKey,_effConv,_isOvC)}
-            {fld("Margin %","margin",batchProfile.margin??8,mgnOvr)}
-            {fld("Interest %","interest",batchProfile.interest??0.5,intOvr)}
+          <div style={{display:"flex",gap:6,alignItems:"flex-start",flexWrap:"wrap",marginBottom:6}}>
+
+            {/* the Box/PP matrix — the only place row type means anything */}
+            <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr",
+              columnGap:5,rowGap:3,alignItems:"center",flex:"1 1 212px",minWidth:208}}>
+              <div style={hdrCell}/><div style={hdrCell}>Conv</div>
+              <div style={hdrCell}>Waste %</div><div style={hdrCell}>Mgn %</div>
+              <div style={{...rowCell,color:isPP?C.amberD:C.slateL}}>PP</div>{ppRow}
+              <div style={{...rowCell,color:isPP?C.slateL:C.amberD}}>Box</div>{boxRow}
+            </div>
+
+            {/* SKU exceptions — their own group, sharing the two lines only to
+                save height. Wraps below the matrix when the column narrows. */}
+            <div style={{flex:"0 0 auto",width:86,border:`1px solid ${C.border}`,
+              borderRadius:5,background:C.cream,padding:"3px 3px 4px",
+              display:"grid",gridTemplateColumns:"auto 32px",columnGap:3,rowGap:3,
+              alignItems:"center"}}>
+              <div style={{...hdrCell,gridColumn:"1 / -1"}}>SKU exception</div>
+              <span style={rowCell} title="Freight Rs/kg">Freight
+                {frOvr&&<span style={{color:C.amber,fontWeight:700}}> ↑</span>}
+                {!hasMx&&!frOvr&&<span style={{color:C.red}}> ⚠</span>}</span>
+              <input type="number" step="0.25" min="0" value={spec.freightOverride??""}
+                onChange={e=>s("freightOverride",e.target.value)}
+                placeholder={hasMx?String(mxVal):"— no rate"}
+                title={frOvr?`SKU exception — batch/matrix: ${hasMx?mxVal+" Rs/kg":"no entry"}`
+                  :hasMx?`Batch/matrix: ${mxVal} Rs/kg (${spec.plant||"?"} → ${spec.delivery||"?"})`
+                  :`No freight rate for ${spec.plant||"?"}→${spec.delivery||"?"}. Enter a manual exception.`}
+                style={{...box,fontFamily:mono,
+                  border:`1px solid ${frOvr?C.amber:(!hasMx&&!frOvr)?C.red:C.border}`,
+                  background:frOvr?"#FFF8ED":C.white}}/>
+              <span style={rowCell} title="Interest %">Interest
+                {intOvr&&<span style={{color:C.amber,fontWeight:700}}> ↑</span>}</span>
+              <input type="number" step="0.25" value={spec.interest??""}
+                onChange={e=>s("interest",e.target.value)}
+                placeholder={String(bd.interest??0.5)}
+                title={intOvr?`SKU exception — batch default: ${bd.interest??0.5}`
+                  :`Batch default in effect: ${bd.interest??0.5}`}
+                style={{...box,border:`1px solid ${intOvr?C.amber:C.border}`,
+                  background:intOvr?"#FFF8ED":C.white}}/>
+            </div>
           </div>);
         })()}
+        <div style={{fontSize:9,color:C.slateL,textAlign:"center",lineHeight:1.5}}>
+          Batch defaults live in <b>Batch Context</b> above. Values here are
+          <b> SKU exceptions</b> for this row; Payment Terms follow the batch.
+        </div>
       </div>
       <div style={card}>
         <div style={{fontSize:9,fontWeight:700,color:C.amber,textTransform:"uppercase",letterSpacing:"0.09em",borderBottom:`1px solid ${C.amber}`,paddingBottom:3,marginBottom:8,display:"flex",alignItems:"baseline",justifyContent:"center",gap:6}}>

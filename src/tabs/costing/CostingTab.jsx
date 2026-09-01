@@ -33,8 +33,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import SpecForm from "./SpecForm.jsx";
 import OutputPanel from "./OutputPanel.jsx";
-import { INIT_SPEC } from "../../data/defaults.js";
+import BatchContextBar from "./BatchContextBar.jsx";
 import { Btn } from "../../ui/primitives.jsx";
+import { useState } from "react";
 import { useAppState } from "../../state/AppStateContext.js";
 import { C, sans } from "../../theme.js";
 
@@ -49,12 +50,14 @@ const Subtab=({label,active,onClick,title})=>(
 
 export default function CostingTab(){
   const {
-    setSpec, setSetAutoFill, setSpecCommitted,
-    costingContext, setCostingContext, activeBatchRowId,
-    batchRows, exitReview, reviewDirty, _sendReady,
-    sendCostingToBatch, specFromProfile, specForNewBatch,
+    activeBatchRowId, batchRows, discardNewDraft, exitReview,
+    newDraftKeepClient, newDraftNewClient, profileDraft, reviewDirty,
+    sendCostingToBatch, startNewSku, _sendReady,
   } = useAppState();
   const inReview=!!activeBatchRowId;
+  // C5: new-batch is DERIVED from the draft profile's existence, not a flag.
+  const newBatch=profileDraft!==null;
+  const [draftMenu,setDraftMenu]=useState(false);
 
   // C4 - X1. The ONE exit path, shared by the Unlink button and the START
   // subtab. Confirms only when the review copy has unpushed changes; the
@@ -84,17 +87,17 @@ export default function CostingTab(){
           {/* C12: Context badge — visible when BatchEntry has rows, distinguishes same-batch vs new-batch */}
           {batchRows.length>0&&(
             <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:3,
-              background:costingContext==="new-batch"?"#EEF4FB":"#FFF8ED",
-              color:costingContext==="new-batch"?"#2E6094":C.amberD,
-              border:`1px solid ${costingContext==="new-batch"?"#6A9FD4":C.amber}44`,
+              background:newBatch?"#EEF4FB":"#FFF8ED",
+              color:newBatch?"#2E6094":C.amberD,
+              border:`1px solid ${newBatch?"#6A9FD4":C.amber}44`,
               whiteSpace:"nowrap"}}>
-              {costingContext==="new-batch"
+              {newBatch
                 ?`✦ Scratchpad · ${batchRows.length} row${batchRows.length!==1?"s":""} parked in Batch Entry`
                 :`🔗 Batch active · ${batchRows.length} row${batchRows.length!==1?"s":""}`}
             </span>)}
           {/* C13: Send button — disabled when new-batch context would hard-block */}
           {(()=>{
-            const _newBatchBlocked=costingContext==="new-batch"&&batchRows.length>0;
+            const _newBatchBlocked=newBatch&&batchRows.length>0;
             const _disabled=!!activeBatchRowId||!_sendReady||_newBatchBlocked;
             return(
             <button onClick={activeBatchRowId?undefined:sendCostingToBatch}
@@ -115,31 +118,44 @@ export default function CostingTab(){
           <Btn ch="Start new SKU" v="ghost" sm
             disabled={!!activeBatchRowId}
             title={activeBatchRowId?"Unavailable while reviewing an existing Batch row. Unlink the review first to start a new SKU."
-              :costingContext==="new-batch"?"Start a fresh scratchpad SKU — retains construction, reads nothing from the parked BatchEntry batch"
-              :"Start a fresh Costing spec seeded from the current Batch Profile"}
-            onClick={activeBatchRowId?undefined:()=>{
-              // costingContext is intentionally NOT changed — Start New SKU preserves current context
-              setSpec(costingContext==="new-batch"?specForNewBatch():specFromProfile());
-              setSpecCommitted(false);setSetAutoFill(true);}}/>
-          {/* Costing + New Batch: non-destructive independent scratchpad context. Does NOT clear BatchEntry. */}
-          <Btn ch="+ New Batch" v="ghost" sm
+              :"Another SKU in this batch — construction and board specs carry forward"}
+            onClick={activeBatchRowId?undefined:startNewSku}/>
+          {/* C5: New Draft replaces "+ New Batch". Two ruled choices, and the
+              parked Batch Entry batch is untouched by either. */}
+          <div style={{position:"relative"}}>
+            <Btn ch="New Draft ▾" v="ghost" sm
+              disabled={!!activeBatchRowId}
+              title={activeBatchRowId?"Unavailable while reviewing an existing Batch row."
+                :"Start a new batch. The current Batch Entry batch stays parked and untouched."}
+              onClick={activeBatchRowId?undefined:()=>setDraftMenu(m=>!m)}/>
+            {draftMenu&&!activeBatchRowId&&(
+              <div style={{position:"absolute",right:0,top:"100%",marginTop:3,zIndex:50,
+                background:C.white,border:`1px solid ${C.border}`,borderRadius:6,
+                boxShadow:"0 4px 14px rgba(0,0,0,.14)",minWidth:230,overflow:"hidden"}}>
+                {[["Keep current client",newDraftKeepClient,
+                   "Retains client and editable sector, plant, delivery and commercials. Clears construction and board specs."],
+                  ["New client",newDraftNewClient,
+                   "Clears customer and batch context, construction, board specs and commercials."]]
+                  .map(([label,fn,hint])=>(
+                  <div key={label} onClick={()=>{setDraftMenu(false);fn();}} title={hint}
+                    style={{padding:"7px 11px",fontFamily:sans,fontSize:11,cursor:"pointer",
+                      color:C.slate,borderBottom:`1px solid ${C.border}`}}>
+                    New batch — {label}
+                  </div>))}
+              </div>)}
+          </div>
+          {/* X3 — only while a new-batch draft exists. */}
+          {newBatch&&<Btn ch="Discard new draft" v="ghost" sm
             disabled={!!activeBatchRowId}
             title={activeBatchRowId?"Unavailable while reviewing an existing Batch row."
-              :"Start an independent scratchpad context. BatchEntry rows remain completely untouched."}
-            onClick={activeBatchRowId?undefined:()=>{
-              if(batchRows.length>0&&!window.confirm(
-                "Start a new scratchpad batch context in Costing?\n\n"+
-                `Your existing Batch Entry batch (${batchRows.length} row${batchRows.length!==1?"s":""}) remains completely untouched.\n\n`+
-                "To import this new work into Batch Entry, go to Batch Entry → + New Batch first.\n\n"+
-                "OK = Start scratchpad / Cancel = Stay"
-              ))return;
-              setSpec({...INIT_SPEC,plant:"",delivery:""});
-              setCostingContext("new-batch");
-              setSpecCommitted(false);
-              setSetAutoFill(true);
-            }}/>
+              :"Discard this new-batch draft and return to a clean START on the current batch."}
+            onClick={activeBatchRowId?undefined:discardNewDraft}/>}
         </div>
       </div>
+      {/* C5 · Batch Context — the relocated batch-level fields, sticky by
+          structure: outside both scroll containers, so it stays put while the
+          SKU form and the output panel scroll. */}
+      <BatchContextBar/>
       <div style={{display:"grid",gridTemplateColumns:"380px 1fr",flex:1,minHeight:0,overflow:"hidden"}}>
         <div style={{borderRight:`1px solid ${C.border}`,overflow:"hidden",
           display:"flex",flexDirection:"column"}}><SpecForm/></div>

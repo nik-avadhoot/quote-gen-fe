@@ -16,7 +16,7 @@ import { C, mono } from "../../theme.js";
 
 export default function OutputPanel(){
   const {
-    spec, s, card,
+    spec, s, card, profileDraft,
     r, missing, compliance, marginSugg, osSaving,
   } = useAppState();
 
@@ -27,7 +27,15 @@ export default function OutputPanel(){
              Plant warning injected locally (plant/delivery not in costing.js checkMissingInfo). */}
         {(()=>{
           const _extraWarnings=[];
-          if(!spec.plant||!spec.delivery) _extraWarnings.push("Avadhoot Plant & Client Plant not selected");
+          // C5: Producing Plant and Delivery are owned by Batch Context now, so
+          // the guidance has to point at the surface that actually owns them -
+          // which differs by mode. Telling a Maker preparing a new batch to go
+          // and edit the Batch Profile would send them to a profile that does
+          // not exist yet.
+          if(!spec.plant||!spec.delivery) _extraWarnings.push(
+            profileDraft!==null
+              ?"Producing Plant & Delivery not set — set them in Batch Context above"
+              :"Producing Plant & Delivery not set — use Edit Batch Profile in Batch Entry");
           const _allWarnings=[...missing.warnings,..._extraWarnings];
           if(missing.blockers.length===0&&_allWarnings.length===0) return null;
           return(
@@ -59,7 +67,7 @@ export default function OutputPanel(){
             Complete these fields to generate costing</div>
           {[["📐","Dimensions","L × W × H in mm (Costing form → Dimensions)"],
             ["📄","Paper Construction","Select grade + GSM for at least TOP, F1 and L1 layers"],
-            ["🏭","Commercial","Avadhoot Plant + Client Plant + Monthly Volume (nos/month)"],
+            ["🏭","Commercial","Producing Plant + Delivery (Batch Context) + Monthly Volume (nos/month)"],
             ["💰","Rates","Verify Rate Master prices are current — use Rate Master tab"],
           ].map(([icon,title,desc])=>(
             <div key={title} style={{display:"flex",gap:10,padding:"9px 12px",marginBottom:6,
