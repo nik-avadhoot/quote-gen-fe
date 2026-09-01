@@ -30,7 +30,7 @@ const SubHdr=({title})=>(
 
 export default function SpecForm(){
   const {
-    spec, s, setAutoFill, setSetAutoFill, specCommitted, activeBatchRowId,
+    spec, s, setAutoFill, setSetAutoFill, activeBatchRowId,
     aiNotes, setAiNotes, showToast, card,
     gradeCodes, partitionsMaster, freight,
     constructionLib, batchDefaults, batchRows, items,
@@ -49,18 +49,13 @@ export default function SpecForm(){
       </div>}
       <div style={card}>
         <SH title="Product & SET"/>
-        {/* Identity freeze — batch-wide fields (Client, Sector) are locked once a batch row exists.
-            G3/G5: MatCode is locked only in REVIEW (activeBatchRowId set) so the Maker can set a new
-            MatCode for the next SET component after Send. SKU/Product is always editable and pushable.
-            Exit from START lock: click "Start new SKU" (clears specCommitted).
-            Exit from REVIEW lock: "↑ Push" or "✕ Unlink". */}
-        {(activeBatchRowId||specCommitted)&&<div style={{
-            background:"#FFF8ED",border:`1px solid ${C.amber}`,borderRadius:5,
-            padding:"5px 10px",marginBottom:5,fontSize:10,color:C.amberD,lineHeight:1.5}}>
-          {activeBatchRowId
-            ?`🔒 Reviewing Batch Row ${batchRows.indexOf(batchRows.find(r=>r.id===activeBatchRowId))+1} — Client, Sector and Mat Code locked. SKU/Product editable. Push changes or ✕ Unlink.`
-            :`🔒 SKU sent to Batch Entry — Client and Sector locked to this batch. Edit Mat Code and SKU/Product for the next item, or click "Start new SKU" to reset.`}
-        </div>}
+        {/* C6 REMOVED THE IDENTITY-FREEZE BANNER. Both of its branches claimed
+            "Client and Sector locked" in a card that no longer holds either field:
+            C5 moved them to the Batch Context bar, which is read-only whenever
+            Costing is attached to a batch or reviewing a row. What remains true is
+            said where it applies - Mat Code renders locked with its own tooltip in
+            REVIEW, and the REVIEW banner lower in this form names the row, its Mat
+            Code and the Push rule. Do not reintroduce a flag to bring this back. */}
         {/* C5 visual pass: the "Part of a SET" card was merged in here. The SET
             switch is now a field in row 1 beside the two identity fields, and the
             SET fields follow as row 2 - one card, two rows, instead of two cards

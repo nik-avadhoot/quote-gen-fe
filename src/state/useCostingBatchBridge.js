@@ -28,7 +28,7 @@ import { findDuplicate } from "../lib/constructionIdentity.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useCostingBatchBridge(st){
-  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, freight, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewDirty, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setSetAutoFill, setSpecCommitted, setTab, showToast, spec, specRaw } = st;
+  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, freight, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewDirty, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setSetAutoFill, setTab, showToast, spec, specRaw } = st;
 
   const loadBatchRowIntoCosting=(row)=>{
     // Gate: block Deep Dive if this row has an unconfirmed SET Code
@@ -72,9 +72,7 @@ export function useCostingBatchBridge(st){
     // C5: setCostingContext("same-batch") was here. REVIEW's context is derived
     // now - contextValues and batchDefaults both read the live profile whenever
     // a review copy is open, so there is no flag to set and none to restore.
-    // C4: setSpecCommitted(false) was here. It is gone — the flag is masked by
-    // activeBatchRowId in every reader, so clearing it changed nothing during
-    // REVIEW and silently released START's identity freeze on the way out.
+    // C4 stopped clearing specCommitted here; C6 deleted the flag entirely.
     setTab("costing");
   };
 
@@ -173,7 +171,7 @@ export function useCostingBatchBridge(st){
       "product and dimensions are reset; construction and board specs carry forward." + "\n\n" +
       "OK = start the new SKU  |  Cancel = keep working"))return;
     resetDraft(specForNextSku(),profileDraft?profileDraft.values:null);
-    setSpecCommitted(false);setSetAutoFill(true);
+    setSetAutoFill(true);
   };
 
   // S2 / S3 - New Draft. The draft profile is seeded either from the live profile
@@ -185,7 +183,7 @@ export function useCostingBatchBridge(st){
       "will be discarded." + "\n\n" +
       "OK = discard it and start the new draft  |  Cancel = keep working"))return;
     resetDraft(specContextOnly(values),values);
-    setSpecCommitted(false);setSetAutoFill(true);
+    setSetAutoFill(true);
     showToast("✦ New draft started — the parked batch is untouched",'info',5000);
   };
   const newDraftKeepClient=()=>_newDraft({...batchProfile});
@@ -205,7 +203,7 @@ export function useCostingBatchBridge(st){
       "You return to a clean START on the current batch." + "\n\n" +
       "OK = discard  |  Cancel = keep the draft"))return;
     resetDraft(specContextOnly(batchProfile),null);
-    setSpecCommitted(false);setSetAutoFill(true);
+    setSetAutoFill(true);
     showToast("↩ Returned to the current batch",'info',4000);
   };
 
@@ -751,7 +749,6 @@ export function useCostingBatchBridge(st){
     // the same construction. Do NOT reset spec — that is B3's job only on explicit Unlink.
     // Do NOT set activeBatchRowId — that is REVIEW mode; START mode stays unlinked.
     setBatchRows(prev=>[...prev,newRow]);
-    setSpecCommitted(true); // freeze identity fields until Maker clicks Start New SKU
     // C5: the draft profile has just been written through, so it is retired and
     // the draft becomes CLEAN against what it produced - the batch row is now
     // the durable record of this spec. Mode returns to same-batch by derivation,
@@ -908,7 +905,6 @@ export function useCostingBatchBridge(st){
             setBatchResults({});
             setExpandedRows(new Set());
             exitReview(); // C4: leaves REVIEW and restores START's workspace flags
-            setSpecCommitted(false); // Costing identity fields become editable again
             setItems([]); // Fix 5: clear Quote Items so new customer starts clean
             // C5: setCostingContext("same-batch") was here. Mode is derived from
             // profileDraft now, and B2's resetDraft above already cleared it.

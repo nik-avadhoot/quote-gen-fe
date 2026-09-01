@@ -11,6 +11,17 @@
 // to be documented here - reading cbb_batchprofile through getItem() because
 // this slice composes before the batch slice - went with them.
 //
+// C6 DELETED specCommitted. The identity freeze it drove had ALREADY stopped
+// existing at C5: Client and Sector left SpecForm for the Batch Context bar,
+// where they are read-only whenever Costing is attached to a batch or reviewing
+// a row. The flag survived C5 driving nothing but a banner that still claimed
+// those fields were locked here. Nothing replaces it - the read-only rule lives
+// in the Context bar's own mode test, not in a flag.
+//
+// This also closes the Send-then-reload asymmetry: the spec persisted while the
+// flag did not, so a reload silently released a freeze the Maker had been shown.
+// There is no freeze and no flag to be asymmetric about.
+//
 // C5 DELETED costingContext. Which batch context Costing is in is DERIVED from
 // whether a profileDraft exists (useCostingDraft.js), so the flag and the thing
 // it described can no longer disagree.
@@ -31,15 +42,5 @@ import { useState } from "react";
 export function useCostingState(){
   const[setAutoFill,setSetAutoFill]=useState(true); // "Part of a SET" switch — ON=apply existing auto-fill, OFF=leave SetCode blank
   const[aiNotes,setAiNotes]=useState("");
-  // specCommitted: true after sendCostingToBatch successfully appends a row,
-  // cleared by Start New SKU / New Batch.
-  //
-  // C4: Deep Dive STOPPED clearing it. Every reader is SpecForm, always as
-  // (activeBatchRowId||specCommitted) or (!activeBatchRowId&&specCommitted)
-  // (:57, :68, :80, :82), so while a row is under review the flag is masked and
-  // cannot render — clearing it only leaked out the far side, releasing START's
-  // identity freeze after a Deep Dive round trip. loadItem is gone entirely.
-  // Session/UI state only — not persisted, not backed up.
-  const[specCommitted,setSpecCommitted]=useState(false);
-  return { aiNotes, setAiNotes, setAutoFill, setSetAutoFill, setSpecCommitted, specCommitted };
+  return { aiNotes, setAiNotes, setAutoFill, setSetAutoFill };
 }

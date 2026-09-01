@@ -130,10 +130,9 @@ export function isDirty(current,baseline){
 // path gives that, and useCostingDraft has none.
 //
 // `prev` carries START's workspace flags across the review, because Deep Dive
-// overwrites both (useCostingBatchBridge.js:56 and :58) and nothing restored
-// them before C4. specCommitted is deliberately absent: Deep Dive stops
-// clearing it, and every reader masks it behind activeBatchRowId
-// (SpecForm.jsx:57, :68, :80, :82), so it needs no snapshot.
+// overwrites them and nothing restored them before C4. It carries setAutoFill
+// only: costingContext went at C5 (mode is derived from profileDraft) and
+// specCommitted went at C6 (the identity freeze it drove no longer exists).
 export function freshReviewCopy(rowId,spec,prev){
   return {rowId,spec,baseline:spec,prev:{...prev}};
 }
