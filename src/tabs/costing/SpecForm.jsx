@@ -545,8 +545,13 @@ export default function SpecForm(){
           const rowCell={fontSize:9,fontWeight:700,color:C.slateL,whiteSpace:"nowrap"};
           const box={width:"100%",padding:"3px 4px",borderRadius:4,fontSize:11,
             textAlign:"center",boxSizing:"border-box",lineHeight:1.2};
+          // ppRow/boxRow below are ARRAYS spread into the grid, so every cell
+          // needs a stable key or React warns and loses its identity between
+          // renders. The field name is the natural key for a live cell and the
+          // "<type> <what>" label for a read-only one; both are unique among the
+          // six siblings in either row-type arrangement.
           const live=(key,ph,isOvr,extra)=>(
-            <input value={spec[key]??""} type="number" step="0.25"
+            <input key={key} value={spec[key]??""} type="number" step="0.25"
               onChange={e=>s(key,e.target.value)}
               placeholder={ph!=null?String(ph):""}
               title={isOvr?`SKU exception — effective: ${spec[key]}`:`Batch default in effect: ${ph}`}
@@ -566,7 +571,7 @@ export default function SpecForm(){
               background:"#EFEFEF",color:C.slateL,cursor:"default"}}>
               {val===""||val==null?"—":val}</div>);
           const dead=(val,what)=>(
-            <div title={`${what} does not apply to this ${isPP?"PP":"Box"} SKU — shown from Batch Context, not costed here`}
+            <div key={what} title={`${what} does not apply to this ${isPP?"PP":"Box"} SKU — shown from Batch Context, not costed here`}
               style={{...box,border:`1px solid ${C.border}`,background:"#F5F5F5",
                 color:C.slateL,cursor:"not-allowed"}}>
               {val===""||val==null?"—":val}</div>);
