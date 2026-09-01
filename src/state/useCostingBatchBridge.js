@@ -245,6 +245,27 @@ export function useCostingBatchBridge(st){
     // AND the Maker explicitly typed a value (blank = inherit, so never write an override for blank)
     const wasteOverride=(!_rwc.isWasteBlank&&Math.abs(specWaste-libWaste)>0.001)?specWaste:"";
     const convOverride=(!_rwc.isConvBlank&&Math.abs(specConv-libConv)>0.001)?specConv:"";
+
+    // ── PROVENANCE: DID THE MAKER ACTUALLY MOVE THIS FIELD? ─────────────────
+    // The delta-vs-profile writes above answer "what value?" but never "did
+    // anyone ask for a value?". A row carrying an EXPLICIT override that happens
+    // to equal the current profile produced a spec equal to the profile, so the
+    // delta was zero and Push wrote "" - silently converting a set value into an
+    // inherited one and dropping the grid's amber marker. The number did not
+    // move, so it looked harmless; what was destroyed is the row's INDEPENDENCE
+    // from the Batch Profile. An explicit 8 stays 8 when the profile later moves
+    // to 10; an inherited value follows it. Same failure for Margin, Waste and
+    // Conversion - all three are delta-vs-profile writes.
+    //
+    // THE TEST USES THE ROW ITSELF, so no state is added and the REVIEW baseline
+    // needs no new export. The review copy's value was built FROM this row
+    // (buildSpecFromRow, plus the row overrides Deep Dive applies), so the row's
+    // own effective figure IS what an untouched field still holds. Differ =>
+    // the Maker moved it.
+    const _rowEff=(rowVal,fallback)=>(rowVal!==""&&rowVal!=null)?+rowVal:+fallback;
+    const _marginTouched=+spec.margin!==_rowEff(row.marginOverride,profileMarginForRow);
+    const _wasteTouched=Math.abs(specWaste-_rowEff(row.wasteConv_waste,libWaste))>0.001;
+    const _convTouched =Math.abs(specConv -_rowEff(row.wasteConv_conv ,libConv ))>0.001;
     // ─────────────────────────────────────────────────────────────────────────
 
     // ── D-16: do NOT materialise derived dims back into the row ───────────────
@@ -296,10 +317,15 @@ export function useCostingBatchBridge(st){
       board_gsm:spec.board_gsm||"",spec_bs:spec.spec_bs||"",
       spec_bct:spec.spec_bct||"",spec_ect:spec.spec_ect||"",
       reqBoxWt:spec.reqBoxWt||"",salesMOQ:spec.salesMOQ||"",volume:spec.volume||"",
-      marginOverride:(+spec.margin!==+profileMarginForRow)?spec.margin:"",
+      // OMITTED WHEN UNTOUCHED. The row is written as {...r,...rowPatch}, so a
+      // key absent here leaves the row exactly as it was - an explicit override
+      // survives, and an inherited field is not handed a manufactured one. When
+      // the Maker DID move the field the delta-vs-profile rule is unchanged, so
+      // a genuine edit still writes a value and a clear still writes "".
+      ...(_marginTouched?{marginOverride:(+spec.margin!==+profileMarginForRow)?spec.margin:""}:{}),
       // A1-03: write waste/conv overrides back so next Calculate All matches Costing
-      wasteConv_waste:wasteOverride,
-      wasteConv_conv:convOverride,
+      ...(_wasteTouched?{wasteConv_waste:wasteOverride}:{}),
+      ...(_convTouched ?{wasteConv_conv :convOverride }:{}),
       // Fix 2: push all row-owned fields that Costing tab pre-populates and the Maker can edit.
       // Mirrors the existing marginOverride pattern. Without these, edits in Costing are silently discarded.
       boxType:spec.boxType||row.boxType||"RSC",
@@ -352,7 +378,11 @@ export function useCostingBatchBridge(st){
       .forEach(k=>_mark(k,Number.isFinite(+(spec[k]||0))));
     // Delta-style writes: the row stores an override only when it differs from
     // the profile, so the EFFECTIVE value is the override or the profile figure.
-    const _effMargin=rowPatch.marginOverride!==""?+rowPatch.marginOverride:+profileMarginForRow;
+    // These now read the RESULTING row, not the patch: a key the patch omits is
+    // still on the row, and asking the patch alone would read undefined and
+    // report a clean field as unpushed forever.
+    const _after=(k,cur)=>(k in rowPatch)?rowPatch[k]:cur;
+    const _effMargin=_rowEff(_after("marginOverride",row.marginOverride),profileMarginForRow);
     _mark("margin",+spec.margin===_effMargin);
     // C7a: interest and freightOverride are NOT marked. _pushed exists to
     // advance the REVIEW baseline for fields an edit actually reached the row
@@ -362,8 +392,8 @@ export function useCostingBatchBridge(st){
     // field this Push did not write would be a false clean.
     // Waste/conv: ONE pair per row type. The other pair is never written, so an
     // edit to it can never be formalised from this row.
-    const _effWaste=rowPatch.wasteConv_waste!==""?+rowPatch.wasteConv_waste:libWaste;
-    const _effConv=rowPatch.wasteConv_conv!==""?+rowPatch.wasteConv_conv:libConv;
+    const _effWaste=_rowEff(_after("wasteConv_waste",row.wasteConv_waste),libWaste);
+    const _effConv =_rowEff(_after("wasteConv_conv" ,row.wasteConv_conv ),libConv );
     _mark(isPPRowType?"wastePP":"waste",Math.abs(specWaste-_effWaste)<0.001);
     _mark(isPPRowType?"convRatePP":"convRate",Math.abs(specConv-_effConv)<0.001);
     // boxType is deliberately absent: it is Construction-gated below.
