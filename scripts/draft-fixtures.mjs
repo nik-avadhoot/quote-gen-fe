@@ -474,88 +474,114 @@ console.log("-- C7a: Push must not touch an existing Batch Entry row override --
 console.log("");
 console.log("-- Push preserves commercial-override PROVENANCE (Margin, Waste, Conv) --");
 {
-  // MODELS pushCostingToBatchRow's rule, which is React code and cannot be
-  // imported here. The rule, verbatim from useCostingBatchBridge.js:
+  // MODELS pushCostingToBatchRow's rule. The rule, verbatim from the bridge:
   //
-  //   rowEff(row)   = row key set ? +row key : the profile/library fallback
-  //   touched       = spec value !== rowEff(row)
-  //   untouched     -> the key is OMITTED, so {...row,...patch} keeps the row's
-  //   touched       -> the existing delta-vs-profile write, unchanged
+  //   touched   = !deepEqual(spec[k], reviewBaseline[k])     <- the REVIEW baseline
+  //   untouched -> the key is OMITTED, so {...row,...patch} keeps the row's value
+  //   touched   -> the existing delta-vs-profile write, unchanged
   //
-  // The defect this replaces: an EXPLICIT override equal to the current profile
-  // produced a zero delta, so Push wrote "" and the row silently became
-  // inherited. The number did not move - the row's INDEPENDENCE from a future
-  // profile change did.
-  const rowEff=(v,fb)=>(v!==""&&v!=null)?+v:+fb;
-  const build=(row,spec,prof)=>{
+  // THE BASELINE IS THE POINT. An earlier version compared the spec against the
+  // ROW's effective figure. That reads correctly in a quick review and fails in
+  // two ways once the review stays open: the row's fallback is the Batch
+  // Profile, so a profile edit made an untouched field look edited; and a row
+  // changed elsewhere made an untouched Push overwrite that change. The
+  // baseline moves only when the Maker types.
+  const build=(baseline,spec,prof,row)=>{
     const patch={};
-    if(+spec.margin!==rowEff(row.marginOverride,prof.margin))
+    if(!deepEqual(spec.margin,baseline.margin))
       patch.marginOverride=(+spec.margin!==+prof.margin)?spec.margin:"";
-    if(+spec.waste!==rowEff(row.wasteConv_waste,prof.waste))
+    if(!deepEqual(spec.waste,baseline.waste))
       patch.wasteConv_waste=(spec.waste!==""&&+spec.waste!==+prof.waste)?spec.waste:"";
     return {...row,...patch};
   };
   const prof={margin:8,waste:5};
 
-  // 1 · THE DEFECT. Explicit override that happens to equal the profile.
+  // 1 · THE DEFECT. An explicit override that happens to equal the profile.
   {
     const row={id:1,marginOverride:8,wasteConv_waste:5};
-    const spec={margin:8,waste:5};                 // untouched in REVIEW
-    const after=build(row,spec,prof);
-    ok("explicit margin equal to profile SURVIVES Push",  after.marginOverride===8);
-    ok("explicit waste equal to profile SURVIVES Push",   after.wasteConv_waste===5);
-    ok("...byte-for-byte, not re-derived",
-       Object.is(after.marginOverride,row.marginOverride));
-    // The differential: the old delta-only rule erased both.
+    const base={margin:8,waste:5}, spec={margin:8,waste:5};   // untouched
+    const after=build(base,spec,prof,row);
+    ok("explicit margin equal to profile SURVIVES Push", after.marginOverride===8);
+    ok("explicit waste equal to profile SURVIVES Push",  after.wasteConv_waste===5);
+    ok("...byte-for-byte, not re-derived",  Object.is(after.marginOverride,row.marginOverride));
     const old={...row,marginOverride:(+spec.margin!==+prof.margin)?spec.margin:"",
                       wasteConv_waste:(+spec.waste!==+prof.waste)?spec.waste:""};
     ok("the OLD delta-only rule WOULD have erased both",
        old.marginOverride===""&&old.wasteConv_waste==="");
-    // Why it matters: the profile later moves and the row must NOT follow.
-    const laterProf={margin:10,waste:9};
+    const later={margin:10};
+    const eff=(v,fb)=>(v!==""&&v!=null)?+v:+fb;
     ok("preserved override stays independent of a later profile change",
-       rowEff(after.marginOverride,laterProf.margin)===8);
+       eff(after.marginOverride,later.margin)===8);
     ok("the erased one would have FOLLOWED the new profile",
-       rowEff(old.marginOverride,laterProf.margin)===10);
+       eff(old.marginOverride,later.margin)===10);
   }
 
-  // 2 · An untouched INHERITED field must not gain a manufactured override.
+  // 2 · An untouched INHERITED field gains nothing.
   {
-    const row={id:2};                              // neither key present
-    const after=build(row,{margin:8,waste:5},prof);
-    ok("inherited margin stays inherited",  !("marginOverride" in after));
-    ok("inherited waste stays inherited",   !("wasteConv_waste" in after));
-    ok("no key was manufactured",           Object.keys(after).join()==="id");
+    const row={id:2};
+    const after=build({margin:8,waste:5},{margin:8,waste:5},prof,row);
+    ok("inherited margin stays inherited", !("marginOverride" in after));
+    ok("inherited waste stays inherited",  !("wasteConv_waste" in after));
+    ok("no key was manufactured",          Object.keys(after).join()==="id");
   }
 
-  // 3 · An intentional CLEAR still means inherit.
+  // 3 · An intentional CLEAR still means inherit - including the case that a
+  //     resolved comparison would MISS, where the cleared value equalled what
+  //     it inherits. Raw "" differs from the baseline number, so it registers.
   {
-    const row={id:3,marginOverride:12,wasteConv_waste:9};
-    const after=build(row,{margin:8,waste:""},prof); // margin typed back to
-    ok("clearing waste writes \"\" (inherit), not the old value",
-       after.wasteConv_waste==="");
-    ok("margin moved to the profile figure also inherits", after.marginOverride==="");
+    const row={id:3,marginOverride:12,wasteConv_waste:5};
+    const after=build({margin:12,waste:5},{margin:8,waste:""},prof,row);
+    ok("clearing waste writes \"\" (inherit)",      after.wasteConv_waste==="");
+    ok("clear registers even though 5 === the profile",
+       "wasteConv_waste" in after);
+    ok("margin moved to the profile figure inherits", after.marginOverride==="");
   }
 
   // 4 · A genuine edit writes the new override.
   {
     const row={id:4,marginOverride:12};
-    const after=build(row,{margin:14,waste:7},prof);
+    const after=build({margin:12,waste:5},{margin:14,waste:7},prof,row);
     ok("edited margin writes the new value", after.marginOverride===14);
     ok("edited waste writes the new value",  after.wasteConv_waste===7);
   }
 
-  // 5 · _pushed must read the RESULTING row, never the patch alone.
+  // 5 · A BATCH PROFILE CHANGE DURING REVIEW must not look like a Maker edit.
+  //     This is what the row-based test got wrong: the row's fallback moved
+  //     with the profile.
   {
-    const row={id:5,marginOverride:8};
-    const spec={margin:8,waste:5};
-    const patchOmits={};                            // untouched -> nothing written
+    const row={id:5};                                  // inherited, no keys
+    const base={margin:8,waste:5}, spec={margin:8,waste:5};
+    const profMoved={margin:12,waste:9};               // edited mid-review
+    const after=build(base,spec,profMoved,row);
+    ok("profile moving mid-review does NOT mark margin edited", !("marginOverride" in after));
+    ok("profile moving mid-review does NOT mark waste edited",  !("wasteConv_waste" in after));
+    // The differential: comparing against the row would have fired.
+    const rowEff=(v,fb)=>(v!==""&&v!=null)?+v:+fb;
+    ok("a ROW-based test WOULD have called it edited",
+       +spec.margin!==rowEff(row.marginOverride,profMoved.margin));
+  }
+
+  // 6 · An EXTERNAL row change during REVIEW must survive an untouched Push.
+  {
+    const row={id:6,marginOverride:20};                // changed in the grid
+    const base={margin:8,waste:5}, spec={margin:8,waste:5};  // review untouched
+    const after=build(base,spec,prof,row);
+    ok("an untouched Push does not overwrite an external row change",
+       after.marginOverride===20);
+    const rowEff=(v,fb)=>(v!==""&&v!=null)?+v:+fb;
+    ok("a ROW-based test WOULD have overwritten it",
+       +spec.margin!==rowEff(row.marginOverride,prof.margin));
+  }
+
+  // 7 · _pushed reads the RESULTING row, never the patch alone.
+  {
+    const row={id:7,marginOverride:8};
+    const patchOmits={};
     const after=(k,cur)=>(k in patchOmits)?patchOmits[k]:cur;
+    const rowEff=(v,fb)=>(v!==""&&v!=null)?+v:+fb;
     const eff=rowEff(after("marginOverride",row.marginOverride),prof.margin);
     ok("effective margin after an omitting Push is the ROW's value", eff===8);
-    ok("so the field marks as pushed and the baseline can advance",
-       +spec.margin===eff);
-    // Reading the patch alone would have produced undefined -> NaN -> never clean.
+    ok("so the field marks as pushed and the baseline can advance", 8===eff);
     ok("reading the patch alone WOULD have broken the mark",
        Number.isNaN(+patchOmits.marginOverride));
   }

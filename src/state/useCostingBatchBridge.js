@@ -22,13 +22,14 @@
 // byte-identical to the monolith; only the surrounding closure changed.
 // ═══════════════════════════════════════════════════════════════════════════
 import { INIT_SPEC } from "../data/defaults.js";
+import { deepEqual } from "./costingDraftModel.js";
 import { buildSpecFromRow } from "../engine/costing.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
 import { findDuplicate } from "../lib/constructionIdentity.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useCostingBatchBridge(st){
-  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewDirty, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setSetAutoFill, setTab, showToast, spec, specRaw } = st;
+  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setSetAutoFill, setTab, showToast, spec, specRaw } = st;
 
   const loadBatchRowIntoCosting=(row)=>{
     // Gate: block Deep Dive if this row has an unconfirmed SET Code
@@ -257,15 +258,29 @@ export function useCostingBatchBridge(st){
     // to 10; an inherited value follows it. Same failure for Margin, Waste and
     // Conversion - all three are delta-vs-profile writes.
     //
-    // THE TEST USES THE ROW ITSELF, so no state is added and the REVIEW baseline
-    // needs no new export. The review copy's value was built FROM this row
-    // (buildSpecFromRow, plus the row overrides Deep Dive applies), so the row's
-    // own effective figure IS what an untouched field still holds. Differ =>
-    // the Maker moved it.
-    const _rowEff=(rowVal,fallback)=>(rowVal!==""&&rowVal!=null)?+rowVal:+fallback;
-    const _marginTouched=+spec.margin!==_rowEff(row.marginOverride,profileMarginForRow);
-    const _wasteTouched=Math.abs(specWaste-_rowEff(row.wasteConv_waste,libWaste))>0.001;
-    const _convTouched =Math.abs(specConv -_rowEff(row.wasteConv_conv ,libConv ))>0.001;
+    // THE TEST IS THE REVIEW BASELINE, not the current row. An earlier version
+    // compared against the row's own effective figure, which is wrong in two
+    // ways that only appear once a review stays open for a while:
+    //
+    //  · the row's fallback is the Batch Profile, so a PROFILE edit during the
+    //    review moved the comparison and made an untouched field look edited -
+    //    the Push would then write an override nobody asked for;
+    //  · if the row itself is changed elsewhere (the grid, another Push) while
+    //    the review is open, the row no longer matches the review copy, so an
+    //    UNTOUCHED Push would look edited and overwrite that external change.
+    //
+    // The baseline is the snapshot this review opened with, so it moves only
+    // when the Maker types. It is compared RAW, not resolved: clearing a field
+    // whose value happened to equal the library resolution still registers,
+    // because "" is not the number it inherits.
+    const _wKey=isPPRowType?"wastePP":"waste";
+    const _cKey=isPPRowType?"convRatePP":"convRate";
+    // No baseline means no review - Push cannot be reached that way, but if it
+    // ever were, fall back to writing rather than silently skipping.
+    const _touched=k=>!reviewBaseline||!deepEqual(spec[k],reviewBaseline[k]);
+    const _marginTouched=_touched("margin");
+    const _wasteTouched=_touched(_wKey);
+    const _convTouched=_touched(_cKey);
     // ─────────────────────────────────────────────────────────────────────────
 
     // ── D-16: do NOT materialise derived dims back into the row ───────────────
@@ -382,6 +397,7 @@ export function useCostingBatchBridge(st){
     // still on the row, and asking the patch alone would read undefined and
     // report a clean field as unpushed forever.
     const _after=(k,cur)=>(k in rowPatch)?rowPatch[k]:cur;
+    const _rowEff=(v,fb)=>(v!==""&&v!=null)?+v:+fb;
     const _effMargin=_rowEff(_after("marginOverride",row.marginOverride),profileMarginForRow);
     _mark("margin",+spec.margin===_effMargin);
     // C7a: interest and freightOverride are NOT marked. _pushed exists to

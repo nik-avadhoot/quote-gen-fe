@@ -82,6 +82,12 @@ export function useCostingDraft(st){
   const profileDraft=draft.profileDraft;
 
   const activeBatchRowId=inReview?reviewCopy.rowId:null;
+  // The REVIEW baseline, exposed READ-ONLY for provenance decisions in the
+  // bridge: it answers "did the Maker move this field during THIS review?",
+  // which nothing else can answer. It is the snapshot freshReviewCopy already
+  // took - no new state is created, nothing is persisted, and it is null
+  // outside REVIEW so a reader cannot mistake START for a review.
+  const reviewBaseline=inReview?reviewCopy.baseline:null;
   const reviewDirty=inReview&&isDirty(reviewCopy.spec,reviewCopy.baseline);
   const draftDirty=isDraftDirty(draft.spec,draft.baseline,profileDraft);
 
@@ -197,6 +203,6 @@ export function useCostingDraft(st){
 
   return { activeBatchRowId, applyContextCascade, batchDefaults, contextValues,
     draftDirty, exitReview, markDraftSent, markReviewPushed, openReview,
-    profileDraft, resetDraft, reviewDirty, s, setContextField, setSpec, spec,
-    specRaw };
+    profileDraft, resetDraft, reviewBaseline, reviewDirty, s, setContextField,
+    setSpec, spec, specRaw };
 }
