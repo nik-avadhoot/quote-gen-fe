@@ -849,7 +849,11 @@ export function useCostingBatchBridge(st){
               "Start a new batch?\n\n"+
               "• Clears the current batch — profile, all SKU rows, results and Quote Items.\n"+
               _keepLine+
-              "• Returns Costing to same-batch context: the identity freeze is released and any Deep-Dive review is unlinked.\n\n"+
+              // C6 deleted specCommitted and the identity freeze with it, but this
+              // line went on telling the Maker a freeze was being released. It named
+              // a mechanism that no longer exists. Unlinking the review is the part
+              // that is still true, so that is all it now says.
+              "• Returns Costing to same-batch context: any Deep-Dive review is unlinked.\n\n"+
               "OK = Start new batch   |   Cancel = Stay"
             ))return;
             // ── D-5 prerequisite: archive the batch being cleared ────────────────
