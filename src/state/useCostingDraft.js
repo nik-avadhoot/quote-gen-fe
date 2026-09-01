@@ -106,12 +106,24 @@ export function useCostingDraft(st){
       const v=contextValues?contextValues[k]:undefined;
       out[k]=(v===undefined||v===null)?(INIT_SPEC[k]??""):v;
     });
-    // Freight is a SKU exception WITH a batch fallback: an explicit SKU value
-    // wins, a blank inherits the batch figure, and calcCosting falls back to the
-    // matrix when that is blank too.
-    const skuFr=specRaw.freightOverride;
-    if(skuFr===""||skuFr==null)
-      out.freightOverride=(contextValues&&contextValues.freightOverride)||"";
+    // C7a · FREIGHT AND INTEREST ARE NO LONGER COSTING-EDITABLE EXCEPTIONS.
+    //
+    // Outside REVIEW they are overlaid from the Batch Context every render, so
+    // whatever sits in the raw draft - including a value written by an older
+    // build - can never reach the engine. That is what makes them inert rather
+    // than dormant.
+    //
+    // Inside REVIEW they are LEFT ALONE. The review copy was built from the batch
+    // row with its existing override already applied
+    // (useCostingBatchBridge.js:52-53), so this is the row's EFFECTIVE figure and
+    // overwriting it from the profile would make Costing show a different number
+    // from the one Calculate All produces for that row. It is calculation input,
+    // not editable state: no path can change it.
+    if(!inReview){
+      const cv=contextValues||{};
+      out.interest=cv.interest===undefined||cv.interest===null?INIT_SPEC.interest:cv.interest;
+      out.freightOverride=cv.freightOverride||"";
+    }
     return out;
   })();
 

@@ -28,7 +28,7 @@ import { findDuplicate } from "../lib/constructionIdentity.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useCostingBatchBridge(st){
-  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, freight, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewDirty, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setSetAutoFill, setTab, showToast, spec, specRaw } = st;
+  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewDirty, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setSetAutoFill, setTab, showToast, spec, specRaw } = st;
 
   const loadBatchRowIntoCosting=(row)=>{
     // Gate: block Deep Dive if this row has an unconfirmed SET Code
@@ -99,10 +99,12 @@ export function useCostingBatchBridge(st){
   // blank; a blank presented as inherited is D-25's job, not this series'.
   const _skuFromDefaults=(explicit)=>{
     const bd=explicit||batchDefaults||{};
-    return {interest:bd.interest??0.5,margin:bd.margin??8,
+    // C7a: interest and freightOverride are NOT seeded. They resolve from the
+    // Batch Context every render, so seeding a copy here would be the mirroring
+    // the model forbids - and would hand a Costing-authored value to the engine.
+    return {margin:bd.margin??8,
       waste:bd.waste??5,convRate:bd.convRate??7,
-      wastePP:bd.wastePP??5,convRatePP:bd.convRatePP??12.5,
-      freightOverride:""};
+      wastePP:bd.wastePP??5,convRatePP:bd.convRatePP??12.5};
   };
   const specFromProfile=()=>({
     ...INIT_SPEC,
@@ -303,17 +305,13 @@ export function useCostingBatchBridge(st){
         moqCharge:+(spec.moqCharge||0),packing:+(spec.packing||0),
         other:+(spec.other||0),unloading:+(spec.unloading||0),
       },
-      interestOverride:(()=>{
-        // Only write an override if Costing's interest differs from the profile default
-        const profInt=batchProfile.interest??0.5;
-        return Math.abs(+spec.interest-profInt)>0.001?spec.interest:"";
-      })(),
-      freightRowOverride:(()=>{
-        // Only write an override if Costing's freightOverride differs from the profile/matrix freight
-        const profFr=batchProfile.freightOverride||freight?.[batchProfile.plant]?.[batchProfile.delivery]||0;
-        const specFr=spec.freightOverride;
-        return (specFr!==""&&specFr!=null&&Math.abs(+specFr-profFr)>0.001)?specFr:"";
-      })(),
+      // C7a: interestOverride and freightRowOverride are NOT in this patch.
+      // OMISSION IS THE MECHANISM. The row is written as {...r,...rowPatch}
+      // below, so a key that is absent here is left exactly as the row holds it
+      // - an existing Batch Entry override survives a Push byte-for-byte,
+      // including the "" that means "no override". Writing them as "" would
+      // DELETE a Maker's row override from Costing, which is precisely what this
+      // commit removes the authority to do.
     };
     // ── C4 · WHICH SPEC FIELDS THE ROW NOW ACTUALLY CARRIES ─────────────────
     // Derived from the rowPatch just built, NOT from a parallel field list that
@@ -352,13 +350,12 @@ export function useCostingBatchBridge(st){
     // the profile, so the EFFECTIVE value is the override or the profile figure.
     const _effMargin=rowPatch.marginOverride!==""?+rowPatch.marginOverride:+profileMarginForRow;
     _mark("margin",+spec.margin===_effMargin);
-    const _profIntNow=batchProfile.interest??0.5;
-    const _effInt=rowPatch.interestOverride!==""?+rowPatch.interestOverride:+_profIntNow;
-    _mark("interest",+spec.interest===_effInt);
-    const _profFrNow=batchProfile.freightOverride||freight?.[batchProfile.plant]?.[batchProfile.delivery]||0;
-    const _effFr=rowPatch.freightRowOverride!==""?+rowPatch.freightRowOverride:+_profFrNow;
-    _mark("freightOverride",(spec.freightOverride===""||spec.freightOverride==null)
-      ?true:+spec.freightOverride===_effFr);
+    // C7a: interest and freightOverride are NOT marked. _pushed exists to
+    // advance the REVIEW baseline for fields an edit actually reached the row
+    // with, and neither can be edited any more: the review copy carries the
+    // row's own figure and no path writes it, so both are equal to their
+    // baseline for the life of the review and can never be dirty. Marking a
+    // field this Push did not write would be a false clean.
     // Waste/conv: ONE pair per row type. The other pair is never written, so an
     // edit to it can never be formalised from this row.
     const _effWaste=rowPatch.wasteConv_waste!==""?+rowPatch.wasteConv_waste:libWaste;
@@ -675,12 +672,10 @@ export function useCostingBatchBridge(st){
     const profMarginNew=isPPItem?(batchProfile.marginPP??batchProfile.margin??8):(batchProfile.margin??8);
     const marginOverrideNew=(spec.margin!=null&&spec.margin!==""&&Math.abs(+spec.margin-profMarginNew)>0.001)?spec.margin:"";
 
-    const profIntNew=batchProfile.interest??0.5;
-    const interestOverrideNew=Math.abs(+spec.interest-profIntNew)>0.001?spec.interest:"";
-
-    const profFrNew=batchProfile.freightOverride||freight?.[batchProfile.plant]?.[batchProfile.delivery]||0;
-    const specFrNew=spec.freightOverride;
-    const freightOverrideNew=(specFrNew!==""&&specFrNew!=null&&Math.abs(+specFrNew-profFrNew)>0.001)?specFrNew:"";
+    // C7a: no interest/freight delta is computed. Both now resolve FROM the
+    // batch context this row is being created under, so the delta was
+    // structurally zero; computing it would only re-open the possibility of
+    // Costing authoring a row override.
 
     const newRow={
       id:newId,
@@ -715,8 +710,11 @@ export function useCostingBatchBridge(st){
         moqCharge:+(spec.moqCharge||0),packing:+(spec.packing||0),
         other:+(spec.other||0),unloading:+(spec.unloading||0),
       },
-      interestOverride:interestOverrideNew,       // C2: delta vs profile
-      freightRowOverride:freightOverrideNew,      // C2: delta vs profile
+      // C7a: written as "" - no override. The KEYS stay so a Costing-created
+      // row is shaped exactly like every existing one and Batch Entry's own
+      // editors (BatchGrid.jsx:727,742) keep working on it unchanged.
+      interestOverride:"",
+      freightRowOverride:"",
       remarks:"",
       reviewed:false,
       autoCode:false,

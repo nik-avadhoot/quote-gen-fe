@@ -410,8 +410,19 @@ ok("context-only fields are exactly the seven relocated ones",
 ok("no SKU-exception field is context-only",
    !CONTEXT_ONLY_FIELDS.some(k=>SKU_EXCEPTION_FIELDS.includes(k)));
 ok("margin is a SKU exception",          SKU_EXCEPTION_FIELDS.includes("margin"));
-ok("interest and freight are too (until C7)",
-   SKU_EXCEPTION_FIELDS.includes("interest")&&SKU_EXCEPTION_FIELDS.includes("freightOverride"));
+// C7a INVERTED THIS CASE. It read "interest and freight are too (until C7)"
+// and asserted the opposite. Both are now resolved from Batch Context outside
+// REVIEW and are read-only everywhere, so there is no SKU copy for the advance
+// rule to advance - and listing them here would be a standing invitation to
+// reintroduce one.
+ok("C7a: interest and freight are NOT SKU exceptions",
+   !SKU_EXCEPTION_FIELDS.includes("interest")&&!SKU_EXCEPTION_FIELDS.includes("freightOverride"));
+ok("C7a: the list is exactly the five that remain",
+   SKU_EXCEPTION_FIELDS.join()==="waste,convRate,wastePP,convRatePP,margin");
+// They stay BATCH-level fields: the profile draft must still carry them, or a
+// new batch would have no freight and no interest to resolve from.
+ok("C7a: both remain profile-draft fields",
+   PROFILE_DRAFT_FIELDS.includes("interest")&&PROFILE_DRAFT_FIELDS.includes("freightOverride"));
 ok("both Box and PP waste/conv are SKU exceptions",
    ["waste","convRate","wastePP","convRatePP"].every(k=>SKU_EXCEPTION_FIELDS.includes(k)));
 ok("the profile draft carries every batch-level field",
@@ -427,6 +438,37 @@ console.log("-- freshProfileDraft: a new draft profile is clean --");
   ok("valid shape",                    isValidProfileDraft(pd));
   ok("baseline equals values",         !isDirty(pd.values,pd.baseline));
   ok("so a fresh new-batch draft is clean", !isDraftDirty({L:1},{L:1},pd));
+}
+
+console.log("");
+console.log("-- C7a: Push must not touch an existing Batch Entry row override --");
+{
+  // THIS MODELS THE SPREAD, NOT THE BRIDGE. pushCostingToBatchRow is React code
+  // and cannot be imported here; what it does with the patch it builds is
+  //     setBatchRows(prev=>prev.map(r=>r.id===id?{...r,...rowPatch}:r))
+  // (useCostingBatchBridge.js). The property under test is that OMITTING a key
+  // from that patch preserves the row's value byte-for-byte - the mechanism C7a
+  // relies on, and the differential against the obvious wrong fix of writing ""
+  // into the patch instead.
+  const push=(row,patch)=>({...row,...patch});
+  const row={id:"r1",interestOverride:0.9,freightRowOverride:"3.25",
+    marginOverride:"",product:"OLD"};
+  // A C7a patch: it carries what Costing owns and neither of the two names.
+  const patch={product:"NEW",marginOverride:12};
+  const after=push(row,patch);
+  ok("interest override survives a Push",   after.interestOverride===0.9);
+  ok("freight override survives a Push",    after.freightRowOverride==="3.25");
+  ok("...byte-for-byte, not re-typed",      Object.is(after.freightRowOverride,row.freightRowOverride));
+  ok("not merely present-and-blank",
+     after.interestOverride!==""&&after.freightRowOverride!=="");
+  ok("what Costing DOES own still lands",   after.product==="NEW"&&after.marginOverride===12);
+  ok("no key was added or lost",
+     Object.keys(after).sort().join()===Object.keys(row).sort().join());
+  // The differential: the pre-C7a patch wrote a computed delta into both keys,
+  // so a Push from a Costing spec matching the profile ERASED the row override.
+  const wrong=push(row,{...patch,interestOverride:"",freightRowOverride:""});
+  ok("a patch that wrote a blank WOULD have erased both",
+     wrong.interestOverride===""&&wrong.freightRowOverride==="");
 }
 
 console.log(fails === 0 ? "\nall checks pass" : `\n${fails} FAILED`);

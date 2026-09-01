@@ -198,9 +198,14 @@ export const CONTEXT_ONLY_FIELDS=['client','sector','customerType','priceContext
 
 // Fields that have BOTH a batch default and a genuine SKU exception. These stay
 // in spec. A Context edit advances one ONLY while it is still tracking the old
-// default - see advanceOnDefaultChange.
-export const SKU_EXCEPTION_FIELDS=['interest','freightOverride',
-  'waste','convRate','wastePP','convRatePP','margin'];
+// default - see shouldAdvanceSkuValue.
+//
+// C7a REMOVED interest and freightOverride. They are no longer Costing-editable
+// exceptions: nothing in START or REVIEW can write them, so there is nothing for
+// the advance rule to advance. THIS IS A COSTING-SIDE CHANGE ONLY - Batch Entry
+// still owns interestOverride/freightRowOverride on the row, and existing rows
+// keep whatever they carry.
+export const SKU_EXCEPTION_FIELDS=['waste','convRate','wastePP','convRatePP','margin'];
 
 export function isValidProfileDraft(pd){
   if(pd===null)return true;

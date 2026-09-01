@@ -95,11 +95,13 @@ export default function BatchContextBar(){
   const pickPlace=(key,val)=>{
     const plant=key==="plant"?val:v.plant, deliv=key==="delivery"?val:v.delivery;
     const fr=freight?.[plant]?.[deliv];
-    applyContextCascade(fr===undefined?{[key]:val}:{[key]:val,freightOverride:fr},
-      {freightOverride:"freightOverride"});
+    // C7a: no skuMap - freight is not a Costing-editable SKU exception any more,
+    // so there is no SKU copy to advance.
+    applyContextCascade(fr===undefined?{[key]:val}:{[key]:val,freightOverride:fr});
   };
+  // C7a: no skuMap for interest, for the same reason as freight above.
   const pickPayment=code=>applyContextCascade(
-    {paymentDisc:code,interest:PAY_INTEREST[code]||1.5},{interest:"interest"});
+    {paymentDisc:code,interest:PAY_INTEREST[code]||1.5});
 
   // Plain FUNCTIONS, not components: a component declared inside render gets a
   // new identity every render, so React would remount the input on every

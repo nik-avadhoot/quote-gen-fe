@@ -38,6 +38,29 @@ export default function SpecForm(){
     pushCostingToBatchRow,
   } = useAppState();
 
+  // C7a · ROW-INHERITED FREIGHT / INTEREST. Computed once here because BOTH the
+  // Commercial Parameters preview and the sentence under it need it, and the
+  // sentence sits outside that card's IIFE.
+  //
+  // In REVIEW batchDefaults IS the live Batch Profile, so a spec value that
+  // differs from it can only have come from the Batch Entry row's own override
+  // (applied at useCostingBatchBridge.js:52-53). Outside REVIEW both are false:
+  // spec resolves from Batch Context, so there is nothing to inherit from.
+  const _bdC=batchDefaults||{};
+  // getFreightRate's OWN test, reproduced exactly (engine/costing.js:29-32): a
+  // freight override counts only when it is present AND greater than zero -
+  // "", null and 0 all mean "use the plant × location matrix". Comparing the
+  // stored values instead would report a row as carrying an override whenever
+  // the profile holds a 0 and buildSpecFromRow seeded a "" from it, which is
+  // the same freight by any measure the engine applies.
+  const _frEff=v=>(v!=null&&v!==""&&+v>0)?+v:null;
+  const _frFromRow=!!activeBatchRowId
+    &&_frEff(spec.freightOverride)!==_frEff(_bdC.freightOverride);
+  // Both sides default the same way buildSpecFromRow does (engine:209), so a
+  // profile with no interest set is not read as a row override.
+  const _intFromRow=!!activeBatchRowId
+    &&+(spec.interest??0.5)!==+(_bdC.interest??0.5);
+
   return(
     <div style={{overflowY:"auto",height:"100%",padding:"10px 10px 24px"}}>
       {aiNotes&&<div style={{background:aiNotes.startsWith("✅")?C.greenL:C.redL,
@@ -497,11 +520,25 @@ export default function SpecForm(){
           const ovC=spec[cKey]!==""&&spec[cKey]!=null&&+spec[cKey]!==+effConv;
           const mgnOvr=spec.margin!==""&&spec.margin!=null&&+spec.margin!==(bd.margin??8);
 
+          // C7a · FREIGHT AND INTEREST ARE NO LONGER EDITABLE HERE.
+          // What is shown is the EFFECTIVE figure the engine will use for THIS
+          // SKU - not a Batch Context reading, and not a stored draft value:
+          //  · START  - spec resolves both from Batch Context, and freight falls
+          //    back to the plant x delivery matrix when the batch sets none
+          //    (getFreightRate, engine/costing.js:75).
+          //  · REVIEW - spec carries the ROW's own override where one exists
+          //    (useCostingBatchBridge.js:52-53), otherwise the Batch Profile
+          //    figure buildSpecFromRow seeded (engine/costing.js:205,209). The
+          //    Batch Context reading is deliberately NOT shown in REVIEW: it
+          //    would be a number the engine is not using for this row.
           const mxFr=freight?.[spec.plant]?.[spec.delivery];
           const hasMx=mxFr!=null;
           const mxVal=hasMx?+mxFr:null;
-          const frOvr=spec.freightOverride!==""&&spec.freightOverride!=null&&+spec.freightOverride>0;
-          const intOvr=spec.interest!==""&&spec.interest!=null&&+spec.interest!==(bd.interest??0.5);
+          const frSet=_frEff(spec.freightOverride)!==null;
+          const effFr=frSet?+spec.freightOverride:(hasMx?mxVal:null);
+          const frFromRow=_frFromRow, intFromRow=_intFromRow;
+          const profFrTxt=_frEff(bd.freightOverride)!==null
+            ?bd.freightOverride:(hasMx?mxVal+" (matrix)":"none");
 
           const hdrCell={fontSize:8,fontWeight:700,color:C.slateL,textAlign:"center",
             textTransform:"uppercase",letterSpacing:"0.04em"};
@@ -518,6 +555,16 @@ export default function SpecForm(){
           // lineHeight is pinned so a read-only cell is exactly as tall as an
           // input; without it the div inherits the app root's ~26px line box and
           // the inactive row stands proud of the active one.
+          // C7a's read-only cell. Grey, never focusable, no handler. A REVIEW
+          // value inherited from the batch row carries a grey left bar - GREY
+          // deliberately, because amber in this card means "editable SKU
+          // exception" and this is the opposite of one.
+          const ro=(val,fromRow,title)=>(
+            <div title={title} style={{...box,fontFamily:mono,
+              border:`1px solid ${C.border}`,
+              borderLeft:fromRow?`3px solid ${C.slateM}`:`1px solid ${C.border}`,
+              background:"#EFEFEF",color:C.slateL,cursor:"default"}}>
+              {val===""||val==null?"—":val}</div>);
           const dead=(val,what)=>(
             <div title={`${what} does not apply to this ${isPP?"PP":"Box"} SKU — shown from Batch Context, not costed here`}
               style={{...box,border:`1px solid ${C.border}`,background:"#F5F5F5",
@@ -543,40 +590,41 @@ export default function SpecForm(){
               <div style={{...rowCell,color:isPP?C.slateL:C.amberD}}>Box</div>{boxRow}
             </div>
 
-            {/* SKU exceptions — their own group, sharing the two lines only to
-                save height. Wraps below the matrix when the column narrows. */}
+            {/* C7a · FREIGHT AND INTEREST — A GREY PREVIEW, NOT AN EDITOR.
+                The group keeps its position, width and two-line shape so the
+                card's geometry is unchanged, but every control inside it is
+                gone: no input, no handler, nothing focusable, and no path from
+                this card can write either field. The heading says so rather
+                than leaving two dead-looking boxes unexplained. */}
             <div style={{flex:"0 0 auto",width:86,border:`1px solid ${C.border}`,
-              borderRadius:5,background:C.cream,padding:"3px 3px 4px",
+              borderRadius:5,background:"#F7F7F7",padding:"3px 3px 4px",
               display:"grid",gridTemplateColumns:"auto 32px",columnGap:3,rowGap:3,
               alignItems:"center"}}>
-              <div style={{...hdrCell,gridColumn:"1 / -1"}}>SKU exception</div>
-              <span style={rowCell} title="Freight Rs/kg">Freight
-                {frOvr&&<span style={{color:C.amber,fontWeight:700}}> ↑</span>}
-                {!hasMx&&!frOvr&&<span style={{color:C.red}}> ⚠</span>}</span>
-              <input type="number" step="0.25" min="0" value={spec.freightOverride??""}
-                onChange={e=>s("freightOverride",e.target.value)}
-                placeholder={hasMx?String(mxVal):"— no rate"}
-                title={frOvr?`SKU exception — batch/matrix: ${hasMx?mxVal+" Rs/kg":"no entry"}`
-                  :hasMx?`Batch/matrix: ${mxVal} Rs/kg (${spec.plant||"?"} → ${spec.delivery||"?"})`
-                  :`No freight rate for ${spec.plant||"?"}→${spec.delivery||"?"}. Enter a manual exception.`}
-                style={{...box,fontFamily:mono,
-                  border:`1px solid ${frOvr?C.amber:(!hasMx&&!frOvr)?C.red:C.border}`,
-                  background:frOvr?"#FFF8ED":C.white}}/>
-              <span style={rowCell} title="Interest %">Interest
-                {intOvr&&<span style={{color:C.amber,fontWeight:700}}> ↑</span>}</span>
-              <input type="number" step="0.25" value={spec.interest??""}
-                onChange={e=>s("interest",e.target.value)}
-                placeholder={String(bd.interest??0.5)}
-                title={intOvr?`SKU exception — batch default: ${bd.interest??0.5}`
-                  :`Batch default in effect: ${bd.interest??0.5}`}
-                style={{...box,border:`1px solid ${intOvr?C.amber:C.border}`,
-                  background:intOvr?"#FFF8ED":C.white}}/>
+              <div style={{...hdrCell,gridColumn:"1 / -1"}}>Not editable</div>
+              <span style={{...rowCell,color:C.slateL}} title="Freight Rs/kg">Freight
+                {!hasMx&&!frSet&&<span style={{color:C.red}}> ⚠</span>}</span>
+              {ro(effFr,frFromRow,
+                frFromRow?`${effFr} Rs/kg — from this Batch Entry row's own freight override. Batch Profile: ${profFrTxt}. Edit it in Batch Entry.`
+                :frSet?`${effFr} Rs/kg — the batch freight figure in effect for this SKU.`
+                :hasMx?`${mxVal} Rs/kg — from the plant × location matrix (${spec.plant||"?"} → ${spec.delivery||"?"}); the batch sets no freight.`
+                :`No freight rate for ${spec.plant||"?"}→${spec.delivery||"?"} and none set on the batch — costed as 0. Set it in Batch Context or Freight Rates.`)}
+              <span style={{...rowCell,color:C.slateL}} title="Interest %">Interest</span>
+              {ro(spec.interest,intFromRow,
+                intFromRow?`${spec.interest}% — from this Batch Entry row's own interest override. Batch Profile: ${bd.interest??0.5}%. Edit it in Batch Entry.`
+                :`${spec.interest}% — the batch interest in effect for this SKU, set by Payment Terms in Batch Context.`)}
             </div>
           </div>);
         })()}
         <div style={{fontSize:9,color:C.slateL,textAlign:"center",lineHeight:1.5}}>
-          Batch defaults live in <b>Batch Context</b> above. Values here are
-          <b> SKU exceptions</b> for this row; Payment Terms follow the batch.
+          Batch defaults live in <b>Batch Context</b> above. Conversion, Waste and
+          Margin here are <b>SKU exceptions</b> for this row.
+          {/* C7a · mode-aware. The REVIEW wording is used only when an override
+              is actually in effect on this row; a reviewed row with no override
+              is showing the Batch Profile figure, which is what the START
+              sentence already says truthfully. */}
+          <br/>{(_frFromRow||_intFromRow)
+            ?"Existing Batch Entry row values shown; editing is not enabled in Costing."
+            :"Freight and Interest follow Batch Context."}
         </div>
       </div>
       <div style={card}>
