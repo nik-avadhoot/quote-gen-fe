@@ -64,23 +64,19 @@ export default function BatchGrid(){
       const base=baseOf(r);
       return {label:String(i+1),group:isPP(r)?"PP":"Box",baseline:base,value:valOf(r,base)};
     }));
-    const buildQuote=(base,valOf)=>findDivergence(batchRows.map((r,i)=>
-      ({label:String(i+1),group:"",baseline:base,value:valOf(r)})));
-    const profFreight=batchProfile.freightOverride
-      ||freight?.[batchProfile.plant]?.[batchProfile.delivery]||0;
+    // WAVE 3 removed buildQuote and profFreight with the two quote-level
+    // entries below. Divergence exists to warn that the workbook holds ONE slot
+    // per group while rows disagree - and rows can no longer disagree about
+    // Freight or Interest, because there is one Batch value and no row override.
+    // Waste and Conv keep theirs: those ARE still per-row.
     return {
       // Box/PP-pair level — the effective value is the override, else the profile default
       waste:build(r=>isPP(r)?(batchProfile.wastePP??5):(batchProfile.waste??5),
                   (r,b)=>set(r,"wasteConv_waste")?r.wasteConv_waste:b),
       conv: build(r=>isPP(r)?(batchProfile.convRatePP??12.5):(batchProfile.convRate??7),
                   (r,b)=>set(r,"wasteConv_conv")?r.wasteConv_conv:b),
-      // Quote level — one slot for every row, so the group is constant
-      interest:buildQuote(batchProfile.interest??0.5,
-                  r=>set(r,"interestOverride")?r.interestOverride:(batchProfile.interest??0.5)),
-      freight: buildQuote(profFreight,
-                  r=>set(r,"freightRowOverride")?r.freightRowOverride:profFreight),
     };
-  },[batchRows,batchProfile,freight]);
+  },[batchRows,batchProfile]);
   // Shared marker: red border + a ⚠ line in the tooltip. Amber (override) is untouched.
   const _divStyle=d=>d?{border:`1px solid ${C.red}`,background:"#FFF1F0"}:null;
   const _divTitle=(d,label,unit)=>d
@@ -638,8 +634,6 @@ export default function BatchGrid(){
                       const isPP=isPPType(row.itemType); // R-2
                       const profInt=batchProfile.interest??0.5;
                       const profFr=batchProfile.freightOverride||freight?.[batchProfile.plant]?.[batchProfile.delivery]||0;
-                      const isIntOvr=row.interestOverride!==""&&row.interestOverride!=null;
-                      const isFrOvr=row.freightRowOverride!==""&&row.freightRowOverride!=null;
                       const res2=batchResults[row.id];
                       return(
                       <tr style={{background:ri%2?"#F5F0E8":"#F8F5EF"}}>
@@ -717,40 +711,31 @@ export default function BatchGrid(){
                                   </div>))}
                               </div>
                             </div>
-                            {/* Interest + Freight overrides */}
+                            {/* WAVE 3 · FREIGHT AND INTEREST ARE BATCH-LEVEL ONLY.
+                                The two row-override editors stood here. They are
+                                gone, not hidden: no input, no handler, and nothing
+                                in this file writes either key. What remains is a
+                                read-only statement of the figures this row is
+                                actually costed at, so the Maker can still see them
+                                without hunting for the Batch Profile bar. Same
+                                shape as Costing's own preview after C7a. */}
                             <div>
-                              <div style={{fontSize:9,color:C.amber,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>
-                                Row Overrides</div>
+                              <div style={{fontSize:9,color:C.slateL,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>
+                                From Batch Profile</div>
                               <div style={{display:"flex",flexDirection:"column",gap:5}}>
                                 <div style={{display:"flex",alignItems:"center",gap:5}}>
                                   <span style={{fontSize:9,color:C.slateL,minWidth:68}}>Interest%</span>
-                                  <input type="number" step="0.25" value={row.interestOverride??""}
-                                    placeholder={String(profInt)}
-                                    onChange={e=>updC("interestOverride",e.target.value===""?"":+e.target.value)}
-                                    title={`Profile default: ${profInt}%${isIntOvr?" | OVERRIDDEN":""}`
-                                      +_divTitle(_divergence.interest[0],"Interest%")}
-                                    style={{width:52,padding:"2px 4px",border:`1px solid ${isIntOvr?C.amber:C.border}`,
+                                  <span title="Batch-level. Edit it in the Batch Profile bar above."
+                                    style={{width:52,padding:"2px 4px",border:`1px solid ${C.border}`,
                                       borderRadius:3,fontSize:10,textAlign:"center",fontFamily:mono,
-                                      background:isIntOvr?"#FFF8ED":C.white,
-                                      ..._divStyle(isDiverged(_divergence.interest,"",
-                                        isIntOvr?row.interestOverride:profInt,profInt))}}/>
-                                  {isIntOvr&&<button onClick={()=>updC("interestOverride","")}
-                                    style={{background:"none",border:"none",color:C.slateL,cursor:"pointer",fontSize:10}}>✕</button>}
+                                      background:"#EFEFEF",color:C.slateL,boxSizing:"border-box"}}>{profInt}</span>
                                 </div>
                                 <div style={{display:"flex",alignItems:"center",gap:5}}>
                                   <span style={{fontSize:9,color:C.slateL,minWidth:68}}>Freight Rs/kg</span>
-                                  <input type="number" step="0.25" value={row.freightRowOverride??""}
-                                    placeholder={String(profFr)}
-                                    onChange={e=>updC("freightRowOverride",e.target.value===""?"":+e.target.value)}
-                                    title={`Profile freight: ${profFr}${isFrOvr?" | OVERRIDDEN":""}`
-                                      +_divTitle(_divergence.freight[0],"Freight Rs/kg")}
-                                    style={{width:52,padding:"2px 4px",border:`1px solid ${isFrOvr?C.amber:C.border}`,
+                                  <span title="Batch-level: the profile figure, else the plant × location matrix. Edit it in the Batch Profile bar above."
+                                    style={{width:52,padding:"2px 4px",border:`1px solid ${C.border}`,
                                       borderRadius:3,fontSize:10,textAlign:"center",fontFamily:mono,
-                                      background:isFrOvr?"#FFF8ED":C.white,
-                                      ..._divStyle(isDiverged(_divergence.freight,"",
-                                        isFrOvr?row.freightRowOverride:profFr,profFr))}}/>
-                                  {isFrOvr&&<button onClick={()=>updC("freightRowOverride","")}
-                                    style={{background:"none",border:"none",color:C.slateL,cursor:"pointer",fontSize:10}}>✕</button>}
+                                      background:"#EFEFEF",color:C.slateL,boxSizing:"border-box"}}>{profFr}</span>
                                 </div>
                               </div>
                             </div>

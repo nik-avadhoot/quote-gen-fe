@@ -229,8 +229,9 @@ export function useQuoteActions(st){
     // Apply row-level overrides on top of buildSpecFromRow output
     sp.waste=isPP?sp.waste:effWaste; sp.convRate=isPP?sp.convRate:effConv;
     sp.wastePP=isPP?effWaste:sp.wastePP; sp.convRatePP=isPP?effConv:sp.convRatePP;
-    if(row.interestOverride!==""&&row.interestOverride!=null)sp.interest=+row.interestOverride;
-    if(row.freightRowOverride!==""&&row.freightRowOverride!=null)sp.freightOverride=row.freightRowOverride;
+    // WAVE 3: no row-level Interest/Freight override. sp already carries the
+    // canonical Batch figures from buildSpecFromRow, and calcCosting resolves
+    // freight as override-else-matrix (getFreightRate, engine/costing.js:29-32).
     applyAddOns(sp,row); // R-1: single injection point
     return calcCosting(sp,rates,freight,boxTrim);
   };
@@ -342,8 +343,8 @@ export function useQuoteActions(st){
       sp.convRate=isPP?sp.convRate:(rowConv!==""&&rowConv!=null?+rowConv:profConv);
       sp.wastePP=isPP?(rowWaste!==""&&rowWaste!=null?+rowWaste:profWaste):sp.wastePP;
       sp.convRatePP=isPP?(rowConv!==""&&rowConv!=null?+rowConv:profConv):sp.convRatePP;
-      if(row.interestOverride!==""&&row.interestOverride!=null)sp.interest=+row.interestOverride;
-      if(row.freightRowOverride!==""&&row.freightRowOverride!=null)sp.freightOverride=row.freightRowOverride;
+      // WAVE 3: as in calcBatchRow above - the Batch figures already on sp are
+      // what reaches the item, and from there the exporter and backend.
       // ─────────────────────────────────────────────────────────────────────
 
       // ── Add-on costs from batch row into the spec ─────────────────────────

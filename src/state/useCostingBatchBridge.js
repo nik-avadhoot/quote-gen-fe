@@ -49,8 +49,12 @@ export function useCostingBatchBridge(st){
     const profConv=isPP?(batchProfile.convRatePP??12.5):(batchProfile.convRate??7);
     if(rowWaste!==""&&rowWaste!=null){if(isPP)sp.wastePP=+rowWaste;else sp.waste=+rowWaste;}
     if(rowConv!==""&&rowConv!=null){if(isPP)sp.convRatePP=+rowConv;else sp.convRate=+rowConv;}
-    if(row.interestOverride!==""&&row.interestOverride!=null)sp.interest=+row.interestOverride;
-    if(row.freightRowOverride!==""&&row.freightRowOverride!=null)sp.freightOverride=row.freightRowOverride;
+    // WAVE 3: the two row-override reads were here. Freight and Interest are
+    // BATCH-level only now, so the review copy keeps what buildSpecFromRow
+    // seeded from the profile - freightOverride:prof.freightOverride||"" and
+    // interest:prof.interest??0.5 (engine/costing.js:205,209). Those two lines
+    // are the CANONICAL Batch values and are deliberately untouched; only the
+    // per-row override on top of them is gone.
     applyAddOns(sp,row); // R-1: single injection point
     // C4 · E4: replacing a review copy that has unpushed changes is the one
     // Deep Dive that can lose work. Opening a review from START cannot — the
