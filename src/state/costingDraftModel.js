@@ -200,11 +200,12 @@ export const CONTEXT_ONLY_FIELDS=['client','sector','customerType','priceContext
 // in spec. A Context edit advances one ONLY while it is still tracking the old
 // default - see shouldAdvanceSkuValue.
 //
-// C7a REMOVED interest and freightOverride. They are no longer Costing-editable
-// exceptions: nothing in START or REVIEW can write them, so there is nothing for
-// the advance rule to advance. THIS IS A COSTING-SIDE CHANGE ONLY - Batch Entry
-// still owns interestOverride/freightRowOverride on the row, and existing rows
-// keep whatever they carry.
+// C7a REMOVED interest and freightOverride from Costing; WAVE 3 then removed
+// the Batch Entry row overrides too. Both are BATCH-LEVEL ONLY now: one value
+// per batch, resolved from the Batch Profile, with no per-row exception
+// anywhere. Nothing can write them, so there is nothing for the advance rule to
+// advance. Rows stored before Wave 3 may still carry an interestOverride or
+// freightRowOverride key; they are inert and were deliberately not migrated.
 export const SKU_EXCEPTION_FIELDS=['waste','convRate','wastePP','convRatePP','margin'];
 
 export function isValidProfileDraft(pd){

@@ -760,11 +760,12 @@ export function useCostingBatchBridge(st){
         moqCharge:+(spec.moqCharge||0),packing:+(spec.packing||0),
         other:+(spec.other||0),unloading:+(spec.unloading||0),
       },
-      // C7a: written as "" - no override. The KEYS stay so a Costing-created
-      // row is shaped exactly like every existing one and Batch Entry's own
-      // editors (BatchGrid.jsx:727,742) keep working on it unchanged.
-      interestOverride:"",
-      freightRowOverride:"",
+      // WAVE 3 RESIDUE: interestOverride:"" and freightRowOverride:"" were
+      // written here for Batch Entry's row editors. Wave 3 deleted those
+      // editors and every read, so the keys had no consumer left and a new row
+      // carried two fields nothing could ever look at. Confirmed exhaustively
+      // across src/, scripts/ and quote-gen-be/ before removal.
+      // Existing stored rows keep whatever they hold - inert, and no migration.
       remarks:"",
       reviewed:false,
       autoCode:false,
