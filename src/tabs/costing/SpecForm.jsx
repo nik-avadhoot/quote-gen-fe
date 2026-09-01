@@ -583,7 +583,7 @@ export default function SpecForm(){
 
             {/* the Box/PP matrix — the only place row type means anything */}
             <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr",
-              columnGap:5,rowGap:3,alignItems:"center",flex:"1 1 212px",minWidth:208}}>
+              columnGap:5,rowGap:3,alignItems:"center",flex:"1 1 195px",minWidth:191}}>
               <div style={hdrCell}/><div style={hdrCell}>Conv</div>
               <div style={hdrCell}>Waste %</div><div style={hdrCell}>Mgn %</div>
               <div style={{...rowCell,color:isPP?C.amberD:C.slateL}}>PP</div>{ppRow}
@@ -596,9 +596,9 @@ export default function SpecForm(){
                 gone: no input, no handler, nothing focusable, and no path from
                 this card can write either field. The heading says so rather
                 than leaving two dead-looking boxes unexplained. */}
-            <div style={{flex:"0 0 auto",width:86,border:`1px solid ${C.border}`,
+            <div style={{flex:"0 0 auto",width:103,border:`1px solid ${C.border}`,
               borderRadius:5,background:"#F7F7F7",padding:"3px 3px 4px",
-              display:"grid",gridTemplateColumns:"auto 32px",columnGap:3,rowGap:3,
+              display:"grid",gridTemplateColumns:"auto 42px",columnGap:3,rowGap:3,
               alignItems:"center"}}>
               <div style={{...hdrCell,gridColumn:"1 / -1"}}>Not editable</div>
               <span style={{...rowCell,color:C.slateL}} title="Freight Rs/kg">Freight
