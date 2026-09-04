@@ -1512,3 +1512,132 @@ Low. The 2 rows lost are legacy test data superseded by `app_users`, and the Pro
 holds backups. The one operational consequence is that any **not-yet-deployed** build still
 running the pre-S2 backend would break — so S3(c) should be applied after the S2 backend
 change is deployed, or accepted knowingly on a project with no production rollout.
+
+---
+
+# S3(c) removal packet — REVISION 2
+
+## VERDICT: 🚫 **BLOCKED**
+
+Not on the privileged-function deviation, which is now resolved, but on **identity-data
+continuity**. My previous packet asserted the two legacy rows were *"already replaced by
+`app_users`"*. **That was wrong, and I did not verify it before writing it.**
+
+## 1. Identity continuity — measured, not assumed
+
+| Measure | Value |
+|---|---|
+| `public.profiles` rows | **2** |
+| **persistent `app_users` rows** | **0** |
+| active `app_users` | 0 |
+| capability grants | 0 group / 0 plant |
+| `auth.users` accounts | 2 |
+| pending invitations | 1 |
+
+Per legacy row, without names, emails or UUIDs:
+
+| Row | Legacy role | Legacy plant | Active | Auth account | Persistent successor | Pending invitation | Approved retirement |
+|---|---|---|---|---|---|---|---|
+| 1 | admin | `Group` | yes | yes | **NO** | **yes** | — |
+| 2 | maker | `Group` | yes | yes | **NO** | **NO** | **NO** |
+
+**Neither row has a successor.** `app_users` is empty because the administrator bootstrap has
+not run in production, and every test identity was created and removed inside a self-cleaning
+fixture. So the earlier claim was not merely unproven — it was contradicted by state I had
+already measured and reported.
+
+## 2. What removal would do today
+
+| Row | Next sign-in after `profiles` is dropped |
+|---|---|
+| 1 (admin) | Authenticates successfully. `resolve_caller` finds no `app_users` row → **403 "Account is not active"**. Recovers by claiming the pending invitation, which grants `administer_users` and seeds the operational baseline. **Governed path exists.** |
+| 2 (maker) | Authenticates successfully. `resolve_caller` finds no `app_users` row → **403**, permanently. No invitation exists, and only an administrator can issue one — but no administrator exists until row 1 bootstraps. **Stranded, with no governed onboarding path.** |
+
+That is precisely the outcome the Product Owner's constraint forbids. **Authentication
+continuity is intact for both; application authorization continuity exists for neither.**
+
+## 3. Information that would be discarded
+
+- **Role.** Row 2's `maker` has no successor grant; nothing records that this identity was a Maker.
+- **Plant.** Both rows carry `plant = 'Group'`, which is **not a valid plant code** — the seeded
+  codes are `NAG`, `PUN`, `KOL`. So the legacy plant value maps to no plant and cannot be
+  migrated mechanically. Whatever access it was meant to convey must be restated as a capability
+  grant, and that is a **product decision, not an inference I should make**.
+- **Active state.** Both are active; neither has an active successor.
+
+## 4. Canonical approval — what exists and what it does not cover
+
+Two rulings are on record and are cited rather than inferred:
+
+> *"The current Supabase project contains test data only. Loss or reset of application test
+> data is acceptable…"* — Phase 1 authorisation
+>
+> *"The Product Owner accepts loss or reset of all current application masters and other
+> application data. Adequate backups exist."* — programme authorisation
+
+**These authorise losing DATA. They do not authorise stranding an identity**, and the current
+instruction says so explicitly. The two are separate, and only the first is approved.
+
+## 5. Remediation options — all require a decision
+
+| # | Option | Effect |
+|---|---|---|
+| **A** | Issue a second pending invitation for row 2 before removal | Both rows gain a governed onboarding path. Row 2's role/plant are restated as capability grants at bootstrap. **Needs the intended plant and role, which is a product decision** |
+| **B** | Bootstrap row 1 in production first, then have that administrator create row 2's identity through `/admin/users` | Uses only approved mechanisms; no extra invitation. Requires the real first sign-in to happen before S3(c) |
+| **C** | Explicitly approve retiring row 2 | Valid if that identity is genuinely disposable — but that is the Product Owner's call, and the row is currently `active` |
+
+I have **not** issued an invitation, because doing so grants future access to an identity and
+implies a role and plant I have no approved basis to choose.
+
+## 6. Privileged-function deviation — RESOLVED via option 1
+
+No deviation proposal is needed. The canonical design is restored:
+
+| Layer | Object | Properties |
+|---|---|---|
+| Routing | `public.admin_create_app_user`, `public.admin_set_app_user_status` | **SECURITY INVOKER**, `search_path=''`, no owner privilege, no reads, no decisions |
+| Implementation | `app_private.admin_create_app_user`, `app_private.admin_set_user_status` | **SECURITY DEFINER**, outside every exposed schema, `search_path=''`, revoked from `PUBLIC`/`anon`, granted only to `authenticated`, and checking **authentication → active identity → capability** in that order |
+
+The invoker shim runs as the caller, so reaching the implementation needs `USAGE` on
+`app_private` plus `EXECUTE`, which `authenticated` already holds for `has_group_cap`. **No new
+privilege is created and no definer function of ours remains in an exposed schema.**
+
+**Both `0029` warnings are gone.** The only remaining security advisor is the pre-existing
+`auth_leaked_password_protection` project setting, unrelated to this work.
+
+Guards **P-1…P-5** enforce the placement rule going forward. P-5 immediately caught
+`public.set_updated_at()` carrying an anon grant — inert (pseudo-type `trigger`), now revoked.
+
+## 7. `get_supabase_admin()` stub vs the five allow-listed operations
+
+They are independent code paths. `privileged_client()` builds its own service-role client from
+`SUPABASE_SECRET_KEY` and **never calls `get_supabase_admin()`** — proved by source inspection
+(**C-9a/C-9b**) and by exercising all five operations successfully while the stub raises
+(**C-9**, **C-9c**). Invite, deactivation, global sign-out, password reset and account
+administration are therefore unaffected.
+
+## 8. Direct REST/RPC attack probes (anon, backend bypassed)
+
+| Probe | Result |
+|---|---|
+| `rpc/admin_create_app_user`, `rpc/admin_set_app_user_status` | **401 `42501` permission denied for function** |
+| `rpc/has_group_cap`, `rpc/bootstrap_app_user` | **404 `PGRST202`** — private helpers not routable via `public` |
+| `GET`/`POST` `app_users`, `GET parties` | **401 `42501` permission denied** |
+| `app_private.pending_invitations`, `ref_private.reference_sequences`, `tests.run_all` | **406 `PGRST106`** — schema not exposed |
+
+## 9. Gate results
+
+| Gate | Result |
+|---|---|
+| pgTAP `tests.run_all()` | **106 / 106** |
+| Backend caller-context | **25 / 25** |
+| Backend route conversion | **23 / 23** |
+| G-A local ⇄ remote | **29 / 29, every file byte-exact** |
+| Uncovered foreign keys | **none**, all schemas |
+| Security advisors | **1** — pre-existing Auth setting only |
+| Performance advisors | `0003`/`0006` on legacy `profiles` only; `0005` INFO on an untrafficked schema |
+
+## 10. To reach READY
+
+One thing: **a decision on remediation option A, B or C for legacy row 2** (and confirmation
+for row 1, whose invitation already exists). Everything else in this packet is proven.
