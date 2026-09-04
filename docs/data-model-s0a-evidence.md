@@ -1050,3 +1050,172 @@ commit approval.
 
 **G-B (fresh-environment replay) remains the one open gate before S1 is complete.** S0d removes the
 known blocker; it does not demonstrate the replay.
+
+---
+
+# G-B — fresh-environment replay
+
+**Date:** 2026-09-04. **Performed by:** SR DEV, under the Product Owner's implementation
+authorisation. **Status: see result at §5.**
+
+## 1. Method selection
+
+| Option | No-cost? | Remote impact | Available here? |
+|---|---|---|---|
+| **A — local Supabase stack** (`supabase start` + `db reset --local`) | yes | **none** | ❌ **No.** Docker Desktop requires WSL2; `wsl --status` reports *"The Windows Subsystem for Linux is not installed"*, and `wsl --install` needs elevation — `net session` returns **System error 5 (access denied)**. Not installable from this session |
+| B — bare PostgreSQL container / embedded binaries | yes | none | ❌ No container runtime; and a bare Postgres has no `auth` schema (migration 2's FK) and none of Supabase's default ACLs, so assertion 5 about grants could not be proved. **Not technically valid for this gate** |
+| C — Supabase preview branch | **no — billed per branch-hour** | creates a remote branch | ❌ Excluded by the no-cost constraint |
+| D — second Supabase project | free tier possible | creates a remote project | ❌ No MCP tool creates projects; heavier than A with no added fidelity |
+| **E — reset the application objects in the live test project and replay** | yes | **destructive to application test data** | ✅ **Selected** |
+
+**Why E is technically valid and, for this gate, the highest fidelity available.** It replays into a
+real Supabase environment with the genuine `auth` schema and the platform's real default ACLs — the
+two things a bare Postgres cannot supply, and precisely what assertions 5 and 6 depend on. Product
+Owner ruling 3 states the project contains test data only and that loss or reset of application test
+data is acceptable.
+
+**This is a selection under the delegation in ruling 4, not a substitution for a mandated mechanism.**
+Option A was never mandated; it was my recommendation, and it is unavailable rather than failed.
+
+## 2. Exact objects and data affected — stated before execution
+
+**Dropped (all application-owned):**
+
+| Object |
+|---|
+| `public.profiles` — table, **2 rows of test data** |
+| policies `profiles_select_own`, `profiles_select_admin_all`, `profiles_update_admin_all` |
+| trigger `profiles_set_updated_at` |
+| `public.set_updated_at()` |
+| `public.rls_auto_enable()` |
+| event trigger `ensure_rls` |
+| `app_private.is_admin()` |
+| schema `app_private` |
+| 4 rows in `supabase_migrations.schema_migrations` |
+
+**Data loss: the 2 `public.profiles` rows.** Nothing else holds application data — the project has no
+other application table.
+
+## 3. Recovery method
+
+1. **The replay is itself the recovery** for every object: all four migration files recreate the
+   complete pre-existing structure, and they are byte-exact against the history they reconstruct.
+2. **The 2 profile rows were captured before execution** as ready-to-run `INSERT` statements
+   (id, display_name, role, plant, active, created_at, updated_at) and are restored after replay.
+   `auth.users` is untouched, so the FK targets survive and the restore cannot fail for missing users.
+3. If replay fails midway, the four SQL files remain on disk and in two commits; re-applying them by
+   hand restores the database to its pre-G-B state.
+
+**Window of exposure:** between drop and replay the deployed backend's `profiles` reads would fail.
+The project is test-only and no rollout has occurred.
+
+## 4. Proof that Supabase-managed infrastructure remains intact
+
+Nothing outside `public` (application objects only), `app_private` and the
+`supabase_migrations.schema_migrations` rows is addressed by any statement.
+
+| Schema | Contents | Touched? |
+|---|---|---|
+| `auth` | 23 tables, **2 users**, owner `supabase_admin` | **No** |
+| `storage` | 8 tables, owner `supabase_admin` | **No** |
+| `realtime` | 2 tables, owner `supabase_admin` | **No** |
+| `vault` | 1 table, owner `supabase_admin` | **No** |
+| `graphql`, `graphql_public` | owner `supabase_admin` | **No** |
+| `extensions` | owner `postgres` | **No** |
+| roles | 30 | **No** — no `CREATE/ALTER/DROP ROLE` is issued |
+| project configuration, exposed schemas, Auth settings | — | **No** — no console or config change |
+
+`drop schema app_private cascade` is bounded to that schema. No `drop schema public cascade` is
+issued — individual application objects are dropped by name, so nothing platform-managed inside
+`public` (such as the default ACLs or the schema itself) is removed.
+
+A platform-integrity hash is taken before and after and compared in §5.
+
+## 5. Result — ✅ **G-B PASSED**
+
+Executed 2026-09-04 under explicit Product Owner authorisation of route 1. The earlier attempt on the
+same day was refused by the environment's permission classifier and was reported rather than
+rephrased; that refusal is retained in the programme record as the reason this run needed explicit
+approval.
+
+### 5.1 Execution
+
+| Step | Action | Outcome |
+|---|---|---|
+| 1 | Capture before-state and the two test rows | `PLATFORM_HASH_BEFORE = 1eb6af6d5dd4bd3642bd0f34bfd76225`, `APP_DRIFT_BEFORE = 61ae467a9a8e1e417f30de7e372d4dc7`, 2 `profiles` rows captured as restorable `INSERT`s |
+| 2 | Drop only the disclosed objects | Verified empty: 0 `public` tables, 0 policies, 0 migration rows, `app_private` gone, `ensure_rls` gone. **`auth.users` still 2; 6 Supabase-managed event triggers untouched** |
+| 3 | Replay all four **committed** migrations in chronological order | All four applied **without error** |
+| 4 | Restore the two test rows | 2 rows restored; `auth.users` FK targets intact |
+| 5 | Assertion matrix | Below |
+
+Replay used the files as committed (`git show HEAD:…`), not the working copy.
+
+### 5.2 Assertion matrix — all pass
+
+| # | Assertion | Result |
+|---|---|---|
+| 1 | All migration files run in timestamp order | ✅ `20260823111400 → 20260823111434 → 20260823111457 → 20260904114045` |
+| 2 | No duplicate function or event-trigger conflict | ✅ exactly **1** `ensure_rls`; no error on any statement |
+| 3 | `ensure_rls` exists, enabled, correctly bound | ✅ `ddl_command_end`, `enabled=O`, bound to `rls_auto_enable`, tags `CREATE TABLE, CREATE TABLE AS, SELECT INTO` |
+| 4 | **Event trigger actually operates** | ✅ **Functionally proven from the Postgres log**: `rls_auto_enable: enabled RLS on public.profiles` at `14:13:10.253`, emitted when migration 2 created the table. Not merely structural |
+| 5 | S0b migration succeeds during replay | ✅ applied cleanly — the failure this whole baseline exists to prevent did **not** occur |
+| 6 | Only `postgres` retains execution authority | ✅ ACL `postgres=X/postgres`; `anon`, `authenticated`, `service_role` all `false`; `postgres` `true` |
+| 7 | Default grants reproduced before the revoke | ✅ replayed `profiles` carries `anon=arwdDxtm authenticated=arwdDxtm service_role=arwdDxtm` — the platform default ACL applied exactly as predicted, which is what makes assertion 6 meaningful |
+| 8 | `profiles`, policies and helper match the pre-S1 baseline | ✅ RLS enabled; the three original policies present; `app_private.is_admin` `SECURITY DEFINER`, `search_path=public`, ACL `postgres`+`authenticated` with `PUBLIC` revoked |
+| 9 | Local ⇄ remote migration sets aligned | ✅ both `{20260823111400, 20260823111434, 20260823111457, 20260904114045}` |
+| 10 | **Replayed database identical to the original** | ✅ `APP_DRIFT_AFTER = 61ae467a9a8e1e417f30de7e372d4dc7` — **identical to `APP_DRIFT_BEFORE`** |
+| 11 | No Supabase-managed infrastructure changed | ✅ `PLATFORM_HASH_AFTER = 1eb6af6d5dd4bd3642bd0f34bfd76225` — **identical**. `auth.users` 2 before and after |
+
+**Assertion 10 is the strongest available result**: replaying the four files from zero reproduced the
+live database exactly, function bodies, ACLs, RLS flags and policies included. The migration set is
+now a faithful, executable description of the database rather than an approximation of it.
+
+### 5.3 Data reset
+
+The two `public.profiles` test rows were dropped and restored from the pre-capture. No other
+application data exists in the project. `auth.users` was never touched, so both identities survived
+independently of the restore.
+
+## 6. S1 — **BLOCKED by the environment, not started**
+
+With G-B passed, S1(a) was submitted as a migration under ruling 8. **The environment's permission
+classifier refused it:**
+
+> *Permission for this action was denied by the Claude Code auto mode classifier.*
+
+**Exact blocked operation:** `apply_migration` named `s1a_foundation_org_access_rls` — the Family A
+foundation: 7 `public` tables plus `ref_private.reference_sequences`, the blanket `REVOKE`, `ENABLE`
+and `FORCE ROW LEVEL SECURITY`, four `app_private` helpers, `alter function app_private.is_admin`,
+14 policies, and the group/plant/capability seeds.
+
+**I stopped rather than rephrase.** Product Owner ruling: *"Do not weaken or rephrase operations
+merely to bypass a denied safety control. If the environment still refuses after this explicit
+authorisation, stop and report the exact blocked operation."*
+
+**Nothing was partially applied.** Verified immediately after the refusal:
+
+| Check | Value |
+|---|---|
+| `public` tables | `profiles` only |
+| `ref_private` schema | does not exist |
+| `app_private` functions | `is_admin` only |
+| Migration versions | the same four |
+| `profiles` rows | 2 |
+| `APP_DRIFT_NOW` | `61ae467a9a8e1e417f30de7e372d4dc7` — the post-G-B state |
+
+S1 therefore has: **no migration applied, no `pgtap` installed, no proof matrix run, no advisors run,
+no commit.**
+
+## 7. Position
+
+| | |
+|---|---|
+| **G-B** | ✅ **PASSED and closed.** No longer blocks anything |
+| **S0c / S0d commits** | created and now unblocked by G-B |
+| **S1** | **not started** — blocked by the environment classifier, not by any gate or design defect |
+| **Live project** | at the post-G-B state, which is byte-identical in structure to its pre-G-B state |
+| **Rollback** | the four migrations reproduce this database from zero — demonstrated, not asserted |
+
+**What is needed to proceed with S1:** the same permission grant that route 1 provided for G-B,
+extended to `apply_migration`. The S1(a) SQL is unchanged from the approved packet and is reproduced
+in full in this record's sibling document; no part of it was altered in response to the refusal.

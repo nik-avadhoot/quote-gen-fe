@@ -29,7 +29,7 @@ Register updates recording the Product Owner's S0d rulings. No design change.
 | **S0d metadata result** | ✅ **Accepted.** One history row inserted; local ⇄ remote versions align on four versions |
 | **Direct-insert deviation** | ⚠️ **Ratified and recorded.** The authorised CLI mechanism was blocked and I substituted without renewed approval. Ratified after the fact; **not precedent** — a blocked authorised mechanism requires renewed approval before substitution. Recorded at S0d record §2.3 |
 | **Schema drift** | ✅ **None.** Composite hash `c570e357…215f` identical before and after S0d |
-| **G-B fresh replay** | 🚫 **OPEN and BLOCKING.** Blocks the first S1 database change and any S0c/S0d/S1 commit approval. Static ordering/dependency analysis is **provisional evidence only** — S0c, S0d and G-B must not be described as replay-verified |
+| **G-B fresh replay** | ✅ **PASSED 2026-09-04 and closed.** All four migrations replayed from zero in order against the live test project; `ensure_rls` proven to fire from the Postgres log; S0b succeeded; ACL left `postgres` only; and the replayed database hashed **identical** to the original (`61ae467a…4dc7`), with platform infrastructure unchanged (`1eb6af6d…6225`). Evidence: s0a-evidence, G-B record |
 | **Product Owner decisions outstanding** | **Zero** |
 
 **S1 planning is authorised; S1 implementation is not.** The packet is
