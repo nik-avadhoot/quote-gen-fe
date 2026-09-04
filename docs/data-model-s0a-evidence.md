@@ -1225,3 +1225,73 @@ depends on. Corrected in `20260904142135`; re-verified clean.
 
 None changes an approved commercial rule or the target model.
 
+
+---
+
+# Phase 2 record — identity, scope and core masters
+
+**Date:** 2026-09-04. **Slices:** P2-1, P2-2, P2-3. **Status: complete, 58/58 assertions pass.**
+
+## Slices and migrations
+
+| Slice | Migrations | Contents |
+|---|---|---|
+| **P2-1** | `20260904142846`, `…142927`, `…143000`, `…143024`, `…143047`, `…143143` | `pgtap` + `tests.run_all()` regression harness (the deferred S1(b)), plus five corrections made while building it |
+| **P2-2** | `20260904143300`, `…143341`, `…143403` | `app_private.pending_invitations`, P-2 bootstrap, P-3 `admin_set_user_status`, P-5 `allocate_reference`, first-admin invitation seed, `edit_lock_stale_seconds` |
+| **P2-3** | `20260904144313`, `…144336` | Family B — 7 party-master tables, grants, RLS, 16 policies, tests |
+
+**11 migrations. G-A holds: 17 local files, 17 remote versions, every one byte-exact.**
+
+## First administrator — determined from evidence, no Product Owner question needed
+
+The legacy `public.profiles` table identifies exactly one `role='admin'`, active, confirmed Auth
+user: **NikunjRL**. The only other identity is **ClaudeCode**, `role='maker'` — an agent account.
+The invitation is seeded **by join**, not by a hardcoded identifier, so no email or UUID appears in
+any migration file or document, and a fresh replay where that user does not exist inserts nothing and
+still succeeds.
+
+## Defects corrected
+
+| # | Defect | Where |
+|---|---|---|
+| 1 | **Privilege escalation in the approved S1 packet.** P-2 claimed a pre-created invited `app_users` row by matching `display_name`, so any authenticated caller could claim the administrator's identity by passing their display name. Invitations are now bound to the invited **email**, matched against the caller's own verified JWT claim | P2-2, test **B-3** |
+| 2 | pgtap assertions call their internals unqualified — unusable under `search_path=''` | P2-1 |
+| 3 | `SET search_path = 'a, b'` parses as **one** schema named `"a, b"` | P2-1 |
+| 4 | pgtap needs a plan declared and finished around assertions | P2-1 |
+| 5 | `no_plan()` returns `setof boolean`, not `setof text` | P2-1 |
+| 6 | **Test N-8 failed against correct code.** Postgres stores an empty search_path as `search_path=""`; the assertion compared against `search_path=`. The access model was re-confirmed independently *before* the test was changed | P2-1 |
+
+## Deviations from the approved design
+
+| # | Deviation | Reason |
+|---|---|---|
+| 1 | Invitations live in `app_private.pending_invitations`, a table not in the proposal's 54 | Required to make invitation-only actually secure. Kept out of `app_users` so DM-181's separation of identity from login details holds — `app_users` still stores no email |
+| 2 | `edit_lock_stale_seconds` is seeded **by the bootstrap**, not by a migration | `created_by` is `NOT NULL` and no `app_user` exists until the first admin does. The alternative was inventing an attribution |
+| 3 | Five corrective migrations remain in history rather than being squashed | Migration history is the source of truth (S0c). Rewriting it to look tidy would defeat the point |
+
+None changes an approved commercial rule.
+
+## Proof gates
+
+`tests.run_all()` — **58 assertions, 0 failures**, re-runnable at any time:
+
+- **N-2/N-3/N-5/N-6/N-7/N-8/N-9/N-10** — access model, including the recursion proof and column-level
+  restriction on `app_users`.
+- **B-1…B-7** — bootstrap security: unauthenticated refused, uninvited refused, **impostor knowing the
+  display name refused**, invitation survives every refused attempt, no identity created, invitation
+  table unreadable by clients, admin RPC refuses without capability.
+- **F-1…F-7** — Family B: RLS forced, `anon` has nothing, **no DELETE policy on any table for any
+  role**, one policy per table/action, read denied without `read_party_master`, and two approved
+  rules refused at the database: a `customer` without a permanent code, and a Location eligible for
+  neither bill-to nor ship-to.
+
+Advisors: **no new security finding**. No uncovered foreign key anywhere in `public`. Only legacy
+`profiles` lacks forced RLS and carries a duplicate policy; it is removed at S3.
+
+## Remaining risks
+
+- **No `app_users` row exists yet.** The capability model is proven to deny correctly but has not been
+  exercised with a *granted* user; that needs the real administrator's first sign-in.
+- **The bootstrap has never run successfully** — only its refusal paths are tested.
+- Legacy `profiles` still live, still carrying its two advisor warnings, retained for S2's rollback
+  window.
