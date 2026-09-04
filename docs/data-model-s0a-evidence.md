@@ -1295,3 +1295,107 @@ Advisors: **no new security finding**. No uncovered foreign key anywhere in `pub
 - **The bootstrap has never run successfully** — only its refusal paths are tested.
 - Legacy `profiles` still live, still carrying its two advisor warnings, retained for S2's rollback
   window.
+
+---
+
+# Phase 2 closure record
+
+**Date:** 2026-09-04. **Status: S2 and S3 complete and proven. S3(c) BLOCKED — see below.**
+
+## Correction to the earlier Phase 2 report
+
+Two claims in the previous report were wrong and are withdrawn:
+
+1. **S2 was reported as covered. It had not been started.** No caller-context client existed; the
+   backend still resolved identity with the service-role client.
+2. **Creating the seven Family B tables was reported as the S3 Party slice.** Graduation, merge,
+   reassignment and code allocation — the operations CDM-06/07 and DM-109…129 actually require —
+   did not exist.
+
+Both are now implemented and proven.
+
+## S2 — caller context
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Per-request Supabase client | ✅ | `caller_context.get_supabase_for_caller()`; tests **C-1, C-3, C-7** |
+| Caller's token reaches PostgREST | ✅ | **C-2a/C-2b** |
+| Concurrent-request token isolation | ✅ | **C-4a/b/c** — 16 concurrent builds, each keeps its own token, 16 distinct |
+| Anonymous/invalid token refused | ✅ | **C-5** |
+| `get_supabase_admin` confined to an allow-list | ✅ | **C-6a…C-6e** — four entries, all Auth-admin, none a table bypass |
+| Wrong-plant denial | ✅ | **M-3** (see note) |
+| Route conversion | ⚠️ **partial** — see deviations |
+
+> **Where wrong-plant denial is proved, and why there.** The backend adds no authorisation of its
+> own: it passes the caller's token through and the database decides. The HTTP layer is proved to
+> deliver the right token in isolation (C-2, C-4); the authorisation outcome is proved against the
+> real policies in `tests.fixtures_matrix()`, which sets `request.jwt.claims` and the `authenticated`
+> role exactly as PostgREST does. Splitting it this way keeps each layer's test honest about what it
+> covers, rather than one test appearing to prove both.
+
+## S3 — Party slice
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Seven Family B tables, RLS, policies | ✅ | **F-1…F-7** |
+| Graduation (one identity, not two) | ✅ | **L-1, L-2, L-3**; idempotent **L-4** |
+| Merge (party and family) | ✅ | `merge_parties`, `merge_families` |
+| Family reassignment, effective-dated | ✅ | **L-5, L-6**; code unchanged **L-7** |
+| Concurrency-safe single current membership | ✅ | **L-8** — partial unique index refuses a second current row |
+| Permanent, non-reused codes | ✅ | **L-1, L-9, L-10, R-1, R-2, R-3** |
+| Maker proposal boundary | ✅ | **M-5** (may propose) / **M-6** (may not create an active Customer) |
+
+## Risks closed
+
+| Risk | Closed by |
+|---|---|
+| Bootstrap success path never exercised | **S-1…S-7** — creates the identity, grants `administer_users`, seeds `edit_lock_stale_seconds`, consumes the invitation, is idempotent, and refuses reuse. No live login required |
+| Capability model never tested with a *granted* user | **M-1…M-9** — granted, wrong-plant, missing-capability, deactivated-with-stale-token, and anonymous |
+
+Fixtures are self-cleaning on both the success and exception paths; a deliberately failed run left
+**zero residue**, verified.
+
+## Invitation security boundary
+
+| Property | Test |
+|---|---|
+| Identity bound only to verified auth data | **B-3** — email from the JWT, never a user-supplied display name |
+| User-editable metadata cannot grant authority | **B-3**, **M-6** |
+| An invitation cannot be claimed by another user | **S-7** |
+| Not reusable after successful bootstrap | **S-5, S-6, S-7** |
+| Stale/disabled identity cannot regain access | **M-7, M-8** |
+| Private invitation data unreachable via the API | **B-6**, `app_private` not an exposed schema |
+| Every privileged function pinned, minimally granted, caller-checked | **G-1…G-4**, **B-7** |
+
+## Migration recoverability (11 → 17 Phase 2 migrations)
+
+- **Every migration is atomic.** `apply_migration` wraps each in `begin … commit` (confirmed in the
+  Postgres log), so no intermediate state is observable to any other session.
+- **No table is ever exposed without its protection.** Within each schema migration the table,
+  `REVOKE`, grants, RLS, `FORCE`, policies and indexes are one transaction. Independently, the
+  `ensure_rls` event trigger enables RLS at `CREATE TABLE` time — proved firing on all seven S1
+  tables and correctly skipping `ref_private`.
+- **Post-state verified:** no `public` table lacks forced RLS except legacy `profiles`; no table has
+  a grant without a policy; `anon` can touch nothing except legacy `profiles`; no uncovered foreign
+  key anywhere.
+- **The five corrective pgTAP migrations are safe to retain** because they touch only functions in
+  the `tests` schema, which holds no application data, has no client grant, and is not exposed. Each
+  is a `create or replace` or `alter function`, so every intermediate state is a valid database —
+  just a test harness that had not yet run. Rewriting them away would falsify the record for
+  cosmetic gain, which S0c's whole purpose forbids.
+
+## S3(c) legacy removal — **BLOCKED, decision NOT requested**
+
+The precondition — *prove nothing depends on them* — **is not met.**
+
+| Target | Dependencies found |
+|---|---|
+| `public.profiles` | **6 live backend call sites**: `auth.py:43`, `server.py:446, 566, 623, 669, 715` |
+| `app_private.is_admin` | 2 policies: `profiles_select_admin_all`, `profiles_update_admin_all` |
+| 3 legacy policies | the table itself |
+| — | plus 5 migrations reference `public.profiles`, including this phase's own test fixtures |
+
+**S3(c) cannot proceed until the backend routes are converted off `profiles`.** `caller_context.py`
+provides the mechanism; converting `auth.py` and the five `server.py` sites is the remaining S2 route
+work. Asking for the removal decision now would be asking to authorise something that would break the
+running backend.
