@@ -1399,3 +1399,116 @@ The precondition — *prove nothing depends on them* — **is not met.**
 provides the mechanism; converting `auth.py` and the five `server.py` sites is the remaining S2 route
 work. Asking for the removal decision now would be asking to authorise something that would break the
 running backend.
+
+---
+
+# S3(c) removal packet — legacy identity objects
+
+**Status: precondition SATISFIED. Awaiting Product Owner authorisation. NOT executed.**
+**Date:** 2026-09-04.
+
+## 1. Exact removal targets
+
+| # | Object | Detail |
+|---|---|---|
+| 1 | `public.profiles` | table, **2 rows of legacy test data** |
+| 2 | `profiles_select_own` | policy on `profiles` |
+| 3 | `profiles_select_admin_all` | policy on `profiles` |
+| 4 | `profiles_update_admin_all` | policy on `profiles` |
+| 5 | `profiles_set_updated_at` | trigger on `profiles` |
+| 6 | `app_private.is_admin(uuid)` | `SECURITY DEFINER`, reads `profiles.role` |
+
+**`public.set_updated_at()` is deliberately NOT proposed for removal.** It is a generic
+three-line helper with no remaining caller once the trigger goes. Dropping it is optional
+cleanup, not part of closing the legacy identity path — recommend retaining it.
+
+## 2. Proof that nothing depends on them
+
+Every match in the repository and database was classified. **No current runtime or current
+test depends on any target.**
+
+| Match | Classification |
+|---|---|
+| `auth.py:8,13`, `caller_context.py:139`, `server.py:451,629` | **Documentation** — comments explaining what was replaced |
+| `tests/test_routes_caller_context.py:256` | **Documentation/assertion** — asserts `profiles` does **not** appear in an error response |
+| `20260823111434`, `20260904143300`, `20260904145607/145711/145839/145940` | **Historical migrations** — legitimately mention objects that existed at that point. Untouched |
+| `app_private.is_admin` reads `public.profiles` | **A removal target itself** |
+| Everything else | **none** |
+
+Database-enforced guards, all passing in `tests.run_all()`:
+
+- **D-1** nothing except the removal targets reads `public.profiles`
+- **D-2** nothing calls `app_private.is_admin`
+- **D-3** no policy outside `profiles` depends on `is_admin`
+- **D-4** no table has a foreign key to `public.profiles`
+- **D-5** `profiles` carries only its own known trigger
+
+Backend greps return **zero live code references**; the frontend has never referenced `profiles`.
+
+## 3. Replacement path for every former dependency
+
+| Former dependency | Replacement |
+|---|---|
+| `auth.py` service-role `profiles` read | `caller_context.resolve_caller()` — reads `app_users` as the caller, through RLS |
+| `profiles.role` | derived from capability grants (`administer_users` → admin, `check_quote` → checker, else maker) |
+| `profiles.plant` | `plant_capability_grants` → `plants.plant_code` |
+| `profiles.active` | `app_users.status = 'active'` |
+| `profiles` insert (`/admin/users` POST) | `public.admin_create_app_user()` — capability-checked |
+| `profiles` update (`/admin/users` PATCH) | `public.admin_set_app_user_status()` + grant rows under existing policies |
+| `profiles` self-update (`/auth/me`) | `app_users.display_name` via column grant |
+| `app_private.is_admin()` in policies | `app_private.has_group_cap('administer_users')` |
+| Test fixture identity lookup | `tests.__fixture_auth_uid()` reading `auth.users` |
+
+## 4. Proposed migration body
+
+```sql
+-- S3(c): remove the legacy identity path. Policies and the trigger belong to the
+-- table and are dropped with it; is_admin is dropped explicitly because it lives
+-- in another schema.
+drop table if exists public.profiles cascade;   -- takes its 3 policies + trigger
+drop function if exists app_private.is_admin(uuid);
+```
+
+## 5. Rollback and recovery
+
+Migration `20260823111434` contains the exact original DDL for the table, the trigger,
+`is_admin` and all three policies, byte-exact against `schema_migrations.statements`.
+Recovery is re-running that section, then restoring the 2 rows from the capture already
+held (`id, display_name, role, plant, active, created_at, updated_at`). `auth.users` is
+untouched, so the FK targets survive and the restore cannot fail for missing users.
+
+**Nothing depends on the rollback succeeding**: no current code path reads these objects,
+so a failed restore would leave the application fully functional.
+
+## 6. Fresh-replay implications
+
+Replay is unaffected in ordering terms — `20260823111434` still creates the objects and the
+new S3(c) migration drops them later, which is a valid sequence and the normal shape of an
+evolving schema. Two consequences to note:
+
+- After S3(c), a fresh replay ends with **no** `profiles` table. That is the intended end
+  state, and the G-B assertion "reconstructed `profiles`, policies and helper match the
+  pre-S1 baseline" must be **retired** at the same time, or it will fail against a correct
+  database.
+- Migration `20260904143300` seeds the first-admin invitation by joining `public.profiles`.
+  It runs *before* the drop, so replay order is fine. On a fresh environment where that user
+  does not exist it already inserts nothing.
+
+## 7. What removal does NOT delete
+
+| | |
+|---|---|
+| `public.app_users` | **untouched** — the authoritative application identities |
+| `auth.users` | **untouched** — no authentication account is affected. Nobody loses the ability to sign in |
+| Capability grants, plants, group | untouched |
+| The pending first-admin invitation | untouched |
+
+`profiles` has **no** foreign key from any other table (**D-4**), so `cascade` cannot reach
+beyond its own policies and trigger.
+
+## 8. Residual risk
+
+Low. The 2 rows lost are legacy test data superseded by `app_users`, and the Product Owner
+holds backups. The one operational consequence is that any **not-yet-deployed** build still
+running the pre-S2 backend would break — so S3(c) should be applied after the S2 backend
+change is deployed, or accepted knowingly on a project with no production rollout.
