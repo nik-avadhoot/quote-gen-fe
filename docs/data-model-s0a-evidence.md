@@ -2918,3 +2918,158 @@ carrying an identifier.
 S3(c) is **not** executed. Nothing is pushed. Phase 3 is not begun. G-B is now complete with no
 outstanding gap; what remains before Phase 2 closes is the Product Owner's sign-in verification and
 row 2's provisioning.
+
+---
+
+# Post-replay recovery complete — S3(c) AUTHORIZATION PACKET (final)
+
+**Date:** 2026-09-05. **Performed by:** SR DEV. **Administrator bootstrap after the empty replay:
+CONFIRMED by the Product Owner.**
+
+## 1. Row 2 — governed continuity, existing Auth account preserved
+
+**Mechanism chosen: ADOPTION, not invitation.** `admin_create_app_user(uuid, name, role,
+plant_codes[])` creates the application identity **and every plant grant inside one RPC — one
+transaction**. So the first branch of the Product Owner's test applies: the identity and grants land
+atomically, and no invitation was created.
+
+There is therefore **no pending state to misreport and no inconsistent double state**: 0 open
+invitations existed before the adoption and 0 exist after, and the only invitation on record is the
+administrator's, correctly marked consumed.
+
+Performed through the governed path on the administrator's explicit authority: their claims were set
+for the transaction so the RPC's own checks — authenticated → active identity → `administer_users` —
+all ran for real, and the grants are attributed to them as grantor. **No capability check was
+bypassed and no privileged shortcut was used.** Stated plainly because it is impersonation-equivalent:
+the attribution records the administrator as having made these grants, which is accurate in the sense
+that they authorised them.
+
+### Result — exactly the intended end state
+
+| | Administrator | Row 2 |
+|---|---|---|
+| Application identity | active | **active** |
+| Group capabilities | `administer_users` | **(none)** |
+| Plant capabilities | NAG, PUN, KOL — `plant_access` + `make_quote` | **NAG, PUN, KOL — `plant_access` + `make_quote`** |
+| Checker capability | none | **none** |
+| Administrator capability | yes | **no** |
+
+`check_quote` is granted **nowhere in the system** (0 rows). Exactly one group grant exists in the
+whole database, and it is the administrator's.
+
+### Auth account preserved, not recreated
+
+| Check | Result |
+|---|---|
+| `auth.users` total | **2**, unchanged throughout |
+| Both uuids identical to the pre-replay recovery mapping | **yes** — verified before the mapping was destroyed |
+| Sign-in history retained | **2 of 2** accounts still carry `last_sign_in_at` |
+| Orphaned Auth accounts | **0** |
+
+**Observed, not altered:** the administrator had already assigned themselves NAG, PUN and KOL through
+the new plant picker before this step. That is their own use of the interface; it was left exactly as
+found and is reported rather than adjusted.
+
+## 2. `gb2_scratch` destroyed
+
+| Check | Result |
+|---|---|
+| Scratch schemas remaining | **0** — both `gb_scratch` and `gb2_scratch` dropped |
+| Scratch tables remaining | **0** |
+| Recovery mapping | **gone** — it lived only in `gb2_scratch.recovery` |
+| Remaining schemas | `app_private, auth, extensions, graphql, graphql_public, public, realtime, ref_private, storage, supabase_migrations, tests, vault` — nothing extra |
+| Artifact scan (`recovery|scratch|backup`) | one hit: `auth.recovery_token_idx`, a **Supabase-managed GoTrue index** that predates all of this and was never touched |
+
+**The recovery was deliberately NOT written as a migration.** It necessarily references real
+addresses and uuids, and putting it in the migration set would embed exactly what the greenfield
+procedure was built to keep out of version control. It is recorded here as an operational act.
+
+## 3. Administrator state verified intact
+
+| Check | Result |
+|---|---|
+| Identity | active |
+| `administer_users` | held |
+| `operational_settings` | **1** row, `edit_lock_stale_seconds = 900` |
+| Attributed to an actual administrator | **yes** |
+| Own plant assignment | NAG, PUN, KOL — as they set it |
+
+## 4. `public.profiles` — empty, and not used for recovery
+
+**0 rows**, before and after. The table exists only because the migration set still creates it; it is
+the S3(c) removal target. Nothing in the recovery read it, wrote it, or depended on it: row 2's
+display name came from the temporary recovery mapping and its Auth account from `auth.users`.
+`SF-5` confirms the table was unchanged across the whole test suite.
+
+## 5. Safe post-bootstrap checks — nothing that can alter a real identity
+
+| Check | Result |
+|---|---|
+| pgTAP `tests.run_all()` | **217 / 217** |
+| `SF-3` fixture refuses to remove a non-synthetic identity | ok (`55000`) |
+| `SF-4` real authentication accounts unchanged across the suite | ok |
+| `SF-5` legacy table unchanged across the suite | ok |
+| Backend caller-context / routes / first-sign-in / multi-plant / email+plants | **25 / 23 / 28 / 29 / 66** — hermetic and offline |
+| Direct anon REST/RPC probes | **20 / 20 refused** — read-only |
+| Live routes | `/health` 200; `/masters/plants`, `/admin/users`, `/admin/auth-orphans` all 401 |
+| Security advisors | **2**, unchanged |
+| Uncovered foreign keys | **0** |
+| G-A | **55 local ⇄ 55 remote**, 51 byte-exact, 4 repair rows |
+
+Every fixture provisions and removes its own synthetic identity; none can reach a real one.
+
+---
+
+# S3(c) — FINAL AUTHORIZATION PACKET
+
+## VERDICT: **READY FOR AUTHORIZATION**
+
+### A. Preconditions
+
+| Precondition | State |
+|---|---|
+| Every legitimate identity has a proven successor | **MET** — both legacy identities now hold **persistent, active `app_users` rows** with their correct capabilities. Neither depends on an invitation any longer |
+| Nothing runtime, test, trigger, policy or documentation depends on the legacy objects | **MET** — `D-1`…`D-5`, `CN-1`; `CLAUDE.md:22` corrected |
+| Removal proven not to strand anyone | **MET twice over** — `CN-1`…`CN-9` execute the whole sign-in path with `profiles` renamed away, and the system has since run from a genuinely empty `profiles` throughout |
+| Destructive targets and data consequence documented | **MET** — §B |
+| Rollback and backup evidence | **MET** — the 55-migration set reconstructs the database from zero, demonstrated live; five dated backups remain in the repository root |
+| Fresh replay | **MET, no gaps** — 55/55 from a genuinely empty application state, 217/217 there |
+| Product Owner authorises S3(c) | **NOT GIVEN** |
+
+### B. Exact removal targets
+
+| Dropped | Consequence |
+|---|---|
+| `public.profiles` | **0 rows.** No data is lost — the table is already empty |
+| `profiles_select_own`, `profiles_select_admin_all`, `profiles_update_admin_all` | — |
+| trigger `profiles_set_updated_at` | — |
+| `public.set_updated_at()` | only that trigger uses it |
+| `app_private.is_admin()` | nothing calls it (`D-2`) |
+
+**Untouched:** `auth.users`, `app_users`, every capability grant, the Plant Master, every Family A/B
+table, `operational_settings`.
+
+**The data consequence is now nil.** Earlier packets had to weigh the loss of two legacy rows; the
+empty replay removed them, and both identities were re-established through governed mechanisms
+instead. Removal is now purely structural.
+
+### C. Three things that must land WITH the removal
+
+1. **Retire G-B's assertion that replay reconstructs `profiles` and its policies** in the same change,
+   or it starts failing against a correct database.
+2. **`20260904143300` and `20260905075709` both `select … from public.profiles`.** They run before the
+   removal in version order, so replay stays valid — but that ordering becomes load-bearing and the
+   removal migration must say so.
+3. **After removal, a from-zero replay produces no invitations at all** — which is already true today
+   and already handled: `app_private.provision_pending_invitation` (P2-15) is the greenfield
+   administrator route and does not depend on `profiles`. The removal migration should point at it.
+
+### D. Outstanding, non-blocking
+
+- `rls_enabled_no_policy` INFO on `app_private.email_change_audit` — the deliberate deny-all posture,
+  reported not waived, plus the private-table consistency question.
+- `auth_leaked_password_protection` — a project Auth setting.
+- No dedicated administrative action log: identity creation is attributed via the `granted_by` on the
+  grants it produces, not a separate audit row.
+
+**S3(c) is not executed. Nothing is pushed. Phase 3 is not begun.**
