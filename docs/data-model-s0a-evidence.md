@@ -3316,3 +3316,147 @@ delivered work; each is deliberately out of Phase 2 scope.
 Phase 2 is **closed and accepted**. No further Phase 2 work is to be performed in this chat, nothing
 is pushed, and Phase 3 is not begun. Both repositories remain committed locally only, so the entire
 programme is still reviewable, amendable or discardable before it reaches `origin`.
+
+---
+
+# PHASE 3 — S4 Product / Family C
+
+**Date:** 2026-09-05. **Performed by:** SR DEV. **Status:** S4 complete; S5 not begun.
+
+Phase 2 was re-verified read-only before any change: 58 ⇄ 58 migrations with the accepted G-A
+disposition, `profiles` / `set_updated_at` / `is_admin` absent, two active governed identities with
+their recorded grants, `tests.run_all()` at 217/217, and the running backend confirmed to match
+source by file mtime rather than by commit time — the commit timestamp is later than the process
+start and would have produced a false "stale runtime" verdict.
+
+## 1. What was built
+
+Seven tables, nine operations, four commits. Every commit that creates a table in `public` installs
+its complete RLS, `FORCE`, grants, policies and indexes in the same atomic change (§16.1), so no
+commit and no moment between commits leaves an exposed table without its policies.
+
+| Commit | Contents |
+|---|---|
+| `f72272a` **S4-1** | `constructions`, `construction_versions`, `plant_construction_adoptions` + guard triggers + 35 gates |
+| `f8569cc` **S4-2** | `skus`, `sku_versions`, `sku_external_references`, `sku_location_applicabilities` + guard triggers + 47 gates |
+| `5914196` **S4-3** | nine proposal / approval / publication / adoption RPCs + 67 gates |
+| `474999b` **S4-4** | gate-id collision repair (`PC-` → `CL-`); labels only |
+
+## 2. Proof gate results
+
+| Suite | Gates | Result |
+|---|---|---|
+| Accepted Phase 2 baseline | 217 | **217 pass** |
+| `CL` — Construction Library | 35 | **35 pass** |
+| `PS` — SKU master | 47 | **47 pass** |
+| `PW` — product workflow | 67 | **67 pass** |
+| **`tests.run_all()` total** | **366** | **366 / 366, zero failures** |
+
+| Other required evidence | Result |
+|---|---|
+| Direct REST/RPC attack probes as `anon` | **36 / 36 refused.** Every Family C table 401 on SELECT, INSERT *and* DELETE; all nine RPCs 404; `app_private` returns `PGRST106 Invalid schema`, which re-confirms S0a's E-1 exposed-schema finding empirically rather than by reading configuration |
+| Backend acceptance suites | **171 pass** — caller-context 25, routes 23, first-sign-in 28, multi-plant 29, email+plants 66. Identical to the accepted Phase 2 figures |
+| Frontend engine golden fixtures | **all pass** — `test:costing`, `test:blanket`, `test:draft`. S4 changed no engine code; run as a regression guard |
+| Security advisors | **2 — unchanged.** The leaked-password WARN and the deliberate `email_change_audit` deny-all INFO. No new finding |
+| Performance advisors | **6 INFO `unused_index`**, all on empty tables. **No `unindexed_foreign_keys` finding** |
+| G-A | **72 local ⇄ 72 remote**, 68 bodied, 4 dispositioned bodyless rows unchanged. One fingerprint over the whole bodied set: `4fa5337b630637d91f6bfca7f17d04d6`, identical on both sides |
+
+## 3. The canonical commercial rules, and where each is enforced
+
+| Rule | Mechanism | Gate |
+|---|---|---|
+| No waste/conversion tier on Construction (CDM-13/37) | Columns structurally absent | **CL-11 / CL-11a / PS-13a** — a **pattern scan**, not four literal names, so a later `wastage_pct` fails too |
+| Approved Construction Version immutable (CDM-12) | UPDATE policy **and** `before update` trigger | **CL-13 / CL-14** — the write is refused *as the table owner*, so immutability holds where RLS does not reach |
+| Approved SKU spec version immutable (CDM-10) | Same two-layer shape | **PS-17 / PW-24** |
+| SKU Construction authority is singular (CDM-13) | `sku_versions.construction_version_id` **`not null`** FK | **PS-13 / PS-14 / PW-17c / PW-19** |
+| Maker confined to the proposal workflow | Narrow OR-branches; every denial asserted from the persona's own session | **CL-18/19/20/21, PS-8/11/22/24/27a, PW-3/4/10/20/27** |
+| Wrong-plant SKUs invisible and unusable (CDM-35) | Predicate on the row's own `plant_id` | **PS-6a** (zero rows) **and PS-7** (refused when naming the plant explicitly) |
+| Cross-plant isolation of child rows | Redundant `plant_id` + composite FK | **PS-18 / PS-19 / CL-23 / PW-11** |
+| Permanent codes, never reused (CDM-03/09) | `ref_private.allocate_reference`, plus permanence triggers | **PW-7 / PW-9** (second publication takes a different code), **CL-9 / CL-9a / PS-20 / PW-22** |
+| Audit attribution is the system's word (CDM-34) | Written from `current_app_user()` and `now()`; never a parameter | **PW-2c / PW-5 / PW-13a / PW-23**, and `ck_*_approval_pair` (**CL-16**) makes act and timestamp inseparable |
+| Anonymous / inactive / missing-capability denial | Grants + policies + helper `status='active'` test | **CL-2 / PS-2 / PS-28 / PW-1**, plus the 36 live REST probes |
+| No delete path anywhere in Family C (CDM-31) | No DELETE grant, no DELETE policy | **CL-3 / CL-3a / PS-3 / PS-3a** and the live DELETE probes |
+
+## 4. Three declared decisions
+
+**4.1 Redundant `plant_id` on the SKU child tables, and `party_id` on applicabilities.** §4.3 declares
+`uk_sku_id_plant` and `uk_sku_id_party` on `skus`, both marked *[scope]*, and no Family C table
+consumed them. They exist to be composite-FK targets — the technique §5 mandates. Adding the
+redundant columns makes three properties structural rather than procedural: a child cannot be written
+under the wrong plant (**PS-18**), the parent's plant is pinned once a child exists (**PS-19**), and a
+SKU can only be made applicable at a Location of its **own** Customer, because `(sku_id, party_id)`
+and `(location_id, party_id)` bind the same column (**PS-26**). These are structural enforcement
+columns, not business fields, and introduce no rule the canonical record does not already contain.
+
+**4.2 Immutability is a trigger as well as a policy.** §7.5 specifies immutability for
+`construction_versions` and `sku_versions` as an UPDATE-policy predicate. RLS does not apply to
+`service_role`, which holds `BYPASSRLS` (S0a E-4), so a policy states immutability for `authenticated`
+and for nobody else. The trigger reproduces the reasoning §7.5 already accepted for the Family E
+transition matrix.
+
+**4.3 DELETE is governed by grant and policy absence, not by a trigger.** That is exactly how every
+Family A and Family B table governs it, and it was accepted at 217/217. A trigger-level DELETE block
+would be stricter than the accepted standard and would leave the fixtures unable to clean up after
+themselves. Asserted rather than assumed: **CL-3/CL-3a/PS-3/PS-3a** plus 7 live DELETE probes.
+
+## 5. What S4 does NOT deliver, stated plainly
+
+**CDM-13's mutual exclusivity is not fully enforced, and cannot be in S4.** The rule — *a Batch row
+holds a Construction reference only for a Quote-specific Proposed Construction* — is a
+`before insert or update` trigger on **`batch_rows`**, a Family F table created in **S6**.
+
+What S4 delivers instead:
+
+- the authoritative side made structural — `sku_versions.construction_version_id` is `not null`, so a
+  published SKU spec version always has exactly one Construction authority (**PS-13/PS-14**);
+- **PS-15 and PS-15a execute the exact predicate S6's trigger will use**, against a real proposed
+  Construction and a real published one, so the discriminator is demonstrated working now.
+
+**Owed to S6:** the `batch_rows` trigger itself. Recorded in the carry-forward register below.
+
+**Also deferred to S9, and deliberately:** CDM-09's rule that `plant_id` and `party_id` become
+immutable once a SKU has appeared on an **issued Quote**. That predicate needs Family G. The part
+that is decidable now — the composite FK pinning `plant_id` the moment any child row exists — is
+enforced and proved (**PS-19**).
+
+## 6. Two questions the canonical record does not settle
+
+Neither was invented into scope. Both are enforced exactly as written and raised here for a ruling.
+
+1. **May a *published* Construction later be merged?** §4.3 states the lifecycle as
+   `proposed → published | merged`, which makes both terminal from `proposed`. CDM-12 says duplicates
+   merge with retained lineage, without saying whether that can happen after publication. The trigger
+   enforces the written lifecycle — `published` is terminal (**CL-10**) — so a post-publication
+   duplicate would need a Product Owner ruling before it could be merged.
+2. **May a *proposed* SKU be abandoned?** §4.3 gives `proposed → active → discontinued` with
+   reactivation. There is no withdrawn state, so a rejected proposal has nowhere to go. The trigger
+   enforces the written lifecycle (**PS-21**).
+
+## 7. G-B — authorisation required, deliberately not taken
+
+"Fresh replay from zero" is required S4 evidence and is **not** claimed. The accepted method (Option
+C, P2-15) is a **destructive drop-and-replay on the live project**: it erased all application data
+and required both governed identities to be re-provisioned afterwards. That needed explicit Product
+Owner authorisation and would need it again. It was **not** performed unilaterally.
+
+Every other gate is closed. G-B is the single outstanding item at the S4 boundary.
+
+## 8. Carry-forward register — updated
+
+The Phase 2 items 1, 2, 3, 4a, 4b and 4c stand unchanged and un-mitigated by S4. Added:
+
+| # | Item | Status | Owner phase |
+|---|---|---|---|
+| 5 | **CDM-13 mutual-exclusivity trigger on `batch_rows`** | Discriminator proved (PS-15/PS-15a); the trigger needs a table that does not exist yet | **S6** |
+| 6 | **CDM-09 SKU `plant_id`/`party_id` immutability once on an issued Quote** | Composite-FK pinning enforced and proved (PS-19); the issued-Quote predicate needs Family G | **S9** |
+| 7 | **Post-publication Construction merge — undecided** | Lifecycle enforced as written; `published` is terminal | **Product Owner ruling** |
+| 8 | **Abandoning a proposed SKU — no withdrawn state** | Lifecycle enforced as written | **Product Owner ruling** |
+| 9 | **G-B fresh replay for S4** | Not run; requires authorisation of a destructive replay | **Product Owner authorisation** |
+
+## 9. Scope boundaries preserved
+
+- `quote-gen-fe/src/tabs/batch/BatchProfileBar.jsx` — **never touched**, staged, reverted or
+  committed. Still the same uncommitted working-tree change belonging to a parallel window.
+- **Commercial Intelligence excluded throughout.** `docs/commercial-intelligence-decisions.md`
+  remains untracked and unmodified.
+- Nothing pushed. Both repositories remain local-only.
