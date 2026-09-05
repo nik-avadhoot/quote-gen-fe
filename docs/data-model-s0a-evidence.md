@@ -3073,3 +3073,187 @@ instead. Removal is now purely structural.
   grants it produces, not a separate audit row.
 
 **S3(c) is not executed. Nothing is pushed. Phase 3 is not begun.**
+
+---
+
+# S3(c) EXECUTED — PHASE 2 CLOSURE REPORT
+
+**Date:** 2026-09-05. **Performed by:** SR DEV under explicit Product Owner authorisation.
+**Status: S3(c) complete. Phase 2 closed.**
+
+## 1. What was removed
+
+| Object | State before | After |
+|---|---|---|
+| `public.profiles` | table, **0 rows** | **absent** |
+| `profiles_select_own` | policy | **absent** |
+| `profiles_select_admin_all` | policy | **absent** |
+| `profiles_update_admin_all` | policy | **absent** |
+| trigger `profiles_set_updated_at` | trigger | **absent** |
+| `public.set_updated_at()` | function | **absent** |
+| `app_private.is_admin(uuid)` | function | **absent** |
+
+**Pre-flight verification before dropping `set_updated_at()`:** the only other trigger in our schemas
+is `pgrant_active_plant_only`, which uses `app_private.enforce_active_plant_grant()`. Nothing else
+used it.
+
+## 2. What was preserved — measured, not assumed
+
+| | Before | After |
+|---|---|---|
+| `auth.users` | 2 | **2** |
+| Active application identities | 2 | **2** |
+| `administer_users` grants | 1 | **1** |
+| Active plant grants | 12 | **12** |
+| `check_quote` grants | 0 | **0** |
+| Plant Masters | 3 | **3** |
+| `operational_settings` | 1 (`edit_lock_stale_seconds = 900`) | **1, unchanged** |
+| `email_change_audit` | 0 rows | **0 rows** |
+| Application tables | 18 | **17** — exactly one fewer |
+
+Both identities retain NAG, PUN and KOL with `plant_access` + `make_quote`. The administrator retains
+`administer_users`. No Checker capability exists anywhere in the system.
+
+## 3. Absence proved, not asserted
+
+`D-1`…`D-7` were **inverted** from "nothing depends on it" to "it is gone and stays gone", so
+re-creating any removed object fails the suite immediately:
+
+| | |
+|---|---|
+| `D-1` | the legacy identity table no longer exists |
+| `D-2` | the legacy admin helper no longer exists |
+| `D-3` | the legacy updated_at function no longer exists |
+| `D-4` | **no function in any of our schemas** references the removed objects — **with no exemption list** |
+| `D-5` | no policy anywhere depends on the removed admin helper |
+| `D-6` | the legacy updated_at trigger is gone |
+| `D-7` | every remaining table in `public` still has RLS enabled |
+
+`D-4` deserves a note. The pre-removal guard needed an exemption list, because a guard that polices a
+name necessarily contains that name. Rather than carry that compromise forward, the guards now
+**assemble the literals at runtime**, so no function anywhere contains them and `D-4` is strict at
+zero with nothing exempt. That is a stronger guarantee than the guard ever had before.
+
+`CN-1`…`CN-7` no longer simulate the table's absence by renaming it — **the table is genuinely
+absent**, and `CN-3` proves an invited identity still completes first sign-in in that world. `CN-7`
+was rewritten from a tautology I had left in (`count = count`) to a real property: **`app_users` is
+the sole application link to `auth.users`**, scoped to our schemas so Supabase's own eight `auth.*`
+foreign keys are correctly excluded.
+
+**End-to-end through PostgREST:** an anonymous `GET /rest/v1/profiles` now returns
+**`404 PGRST205 — Could not find the table 'public.profiles' in the schema cache`**, where it
+previously returned `401`. The removal is visible at the API boundary, not merely in the catalogue.
+
+## 4. G-B assertion retired, migration order recorded
+
+**The G-B assertion that replay reconstructs `profiles`, its policies and the helper (recorded at
+line 1490 of this document, 2026-09-04) is RETIRED.** It described a database that no longer exists.
+Its successor is the fresh-replay result in §6, which asserts the post-S3(c) structure instead. The
+historical G-B record is left intact rather than edited — it was true when written.
+
+**The two historical migration-order dependencies are recorded in the removal migration itself:**
+
+1. `20260904143300` and `20260905075709` both `insert into app_private.pending_invitations … select …
+   from public.profiles`. They run **before** the removal in version order, so replay succeeds — the
+   table exists when they execute. **That ordering must never be disturbed.** Both files are
+   preserved unchanged as historical records; neither was edited to remove the reference.
+2. On a from-zero replay both select from an **empty** table and insert nothing, so a fresh
+   deployment has no invitation and no administrator. That is correct greenfield behaviour. The
+   supported route in is `app_private.provision_pending_invitation` (P2-15).
+
+## 5. Current-state documentation updated
+
+| File | Change |
+|---|---|
+| `quote-gen-fe/CLAUDE.md` | Now states 17 tables, `public.profiles` **removed** along with its policies, trigger, `set_updated_at()` and `is_admin()`; no role column anywhere; `app_users` the sole link to `auth.users` |
+| `quote-gen-be/auth.py` | The legacy role column is described as **gone**, not merely superseded |
+| `quote-gen-be/caller_context.py` | `profiles.role` corrected from present to past tense — the table no longer exists |
+
+The remaining `profiles` mentions in `server.py` are historical comments explaining why the current
+design differs from the old one, already in the past tense, and are correct as they stand. The
+assertion in `test_routes_caller_context.py` that a refusal body contains neither `profiles` nor
+`app_users` is a leakage check and remains valuable.
+
+## 6. Fresh replay reaches the post-S3(c) structure — without `profiles` data
+
+Run in the disposable PGlite database, from zero, with **nothing injected**:
+
+| | Fresh replay | Live | |
+|---|---|---|---|
+| Migrations applied | **58 / 58** | 58 | ✓ |
+| Application tables | **17** — `public.profiles` **not among them** | 17 | ✓ |
+| Functions | 57 | 57 | ✓ |
+| Policies | **33** (was 36 — the three profiles policies gone) | 33 | ✓ |
+| SECURITY DEFINER in `public` | `{rls_auto_enable}` | same | ✓ |
+| Anon-reachable tables in `public` | **none** | none | ✓ |
+
+The replay required no `profiles` row at any point: the two legacy-derived migrations selected from
+an empty table and inserted nothing, exactly as designed.
+
+## 7. Full gate results
+
+| Gate | Result |
+|---|---|
+| pgTAP `tests.run_all()` | **217 / 217** |
+| Backend caller-context | **25 / 25** |
+| Backend route conversion | **23 / 23** |
+| Backend first-sign-in | **28 / 28** |
+| Backend multi-plant assignment | **29 / 29** |
+| Backend email + Plant Master + atomicity + orphans | **66 / 66** |
+| Direct anon REST/RPC probes | **20 / 20 refused** |
+| FE `npm run build` | pass |
+| FE `npx eslint src` | **66 / 0** — ceiling held all programme |
+| FE `test:costing` / `test:blanket` / `test:draft` | pass / pass / pass |
+| FE `audit-doc-sections.py` / `audit-setcode.py` | pass / pass |
+| Live routes | `/health` 200; `/masters/plants`, `/admin/users`, `/admin/auth-orphans` 401; `/auth/login` bad creds 401; `/auth/refresh` bogus 401 |
+| Server log | no traceback |
+| Uncovered foreign keys | **0** |
+| G-A local ⇄ remote | **58 ⇄ 58**, 54 byte-exact, 4 repair rows dispositioned |
+
+## 8. Advisor disposition — no new finding, two resolved
+
+| Advisor | Before S3(c) | After |
+|---|---|---|
+| `0003 auth_rls_initplan` on `profiles` | WARN | **GONE** — cause removed |
+| `0006 multiple_permissive_policies` on `profiles` | WARN | **GONE** — cause removed |
+| `0005 unused_index` | INFO ×6 | INFO ×2 |
+| `0008 rls_enabled_no_policy` on `app_private.email_change_audit` | INFO | INFO — **intentional**, the deny-all posture; reported, not waived |
+| `auth_leaked_password_protection` | WARN | WARN — pre-existing project Auth setting |
+
+**No new advisor finding.** S3(c) removed two WARN-level findings outright.
+
+## 9. Remaining pre-beta security items
+
+1. **`auth_leaked_password_protection` is disabled.** A project Auth setting; enabling it is a
+   dashboard change, not code. Recommended before any real user data exists.
+2. **`rls_enabled_no_policy` on `email_change_audit`**, and the consistency question it raises: that
+   table is RLS-forced with zero policies and no grants (deny-all by construction), while
+   `pending_invitations` and `reference_sequences` rely on revoked grants alone. Worth settling on
+   one pattern.
+3. **No dedicated administrative action log.** Identity creation is attributed via `granted_by` on
+   the grants it produces, not a separate audit row. `email_change_audit` covers email changes only.
+4. **Session revocation reaches into `auth.refresh_tokens` / `auth.sessions`** because the client
+   library exposes no revoke-by-id. Should be replaced when Supabase ships one.
+5. **An already-issued access token stays valid until it expires** — inherent to stateless JWTs, not
+   a defect, but it bounds how fast deactivation takes effect.
+6. **Auth account + database identity cannot be one transaction.** Compensation covers the ordinary
+   case; a failed compensation leaves a harmless orphan, now **detectable** (`/admin/auth-orphans`)
+   and **recoverable** (`/admin/users/adopt`).
+
+## 10. Rollback position
+
+- **The migration set is the rollback.** 58 migrations reconstruct the database from zero,
+  demonstrated live twice — once with a legacy-data injection and once genuinely empty.
+- **`public.profiles` is recoverable structurally** by replaying to `20260823111434`; its two legacy
+  rows are not, and were deliberately discarded under the authorised empty replay. **The data
+  consequence was nil at the moment of removal — the table held 0 rows.**
+- **Both identities are independent of it.** They exist as `app_users` rows with capability grants
+  and would survive any further work on the legacy path, of which none remains.
+- Five dated backup files remain in the repository root.
+- **Nothing is pushed.** Both repositories are committed locally only, so the entire programme can be
+  reviewed, amended or discarded before it reaches `origin`.
+
+## 11. Phase 2 status
+
+**CLOSED.** S3(c) executed and proved. Phase 3 not begun. Nothing pushed.
+`BatchProfileBar.jsx` untouched throughout; Commercial Intelligence excluded throughout.
