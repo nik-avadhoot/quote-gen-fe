@@ -2656,3 +2656,134 @@ revision 6 already warns must be handled at S3(c).
 
 S3(c) is not executed. Nothing is pushed. Phase 3 is not begun. Phase 2 remains open pending the
 Product Owner's visible acceptance test.
+
+---
+
+# P2-14 — atomicity claim corrected, orphans made detectable, and the G-B options
+
+**Date:** 2026-09-05. **Performed by:** SR DEV. **Visible acceptance: PASSED** (Product Owner, on the
+running localhost application).
+
+## 1. The atomicity claim was overstated — corrected
+
+The Product Owner is right. Creating a user spans **two systems**, and the previous wording blurred
+what is guaranteed:
+
+| Half | Guarantee |
+|---|---|
+| The **database** half — the application identity and *all* its plant grants | **Atomic.** One RPC, one transaction: every grant commits or none does (P2-13, `TX-1`…`TX-13`) |
+| The **pair** — Supabase Auth account + database identity | **Not atomic, and cannot be.** There is no distributed transaction across GoTrue and Postgres |
+
+The route compensates by deleting the Auth account when the database half fails, and that covers the
+ordinary case. It **cannot** cover a failure of the compensating delete itself — an Auth outage or a
+network fault at exactly that moment. What survives then is an authentication account with no
+application identity.
+
+**That residual is now stated rather than described away, and it is bounded:**
+
+- It is **harmless in access terms.** Every route resolves through `app_users` and refuses anything
+  that does not (`R-11`). An orphaned Auth account can authenticate and then do nothing at all.
+- It is **detectable** — §2.
+- It is **recoverable** — §3.
+- It is **recorded** — the failure path logs the auth uuid explicitly, naming the report that will
+  surface it and the route that fixes it. The uuid is an internal identifier, not an address.
+
+**"End-to-end atomicity" is withdrawn.** The accurate claim is: *database-atomic for the whole plant
+set, with compensating rollback of the Auth account, and a detectable, recoverable residue if that
+compensation also fails.*
+
+## 2. Detection — `GET /admin/auth-orphans`
+
+Administrator-only. Reports authentication accounts with **no application identity and no open
+invitation**. An account carrying an open invitation is deliberately *not* an orphan — it is a
+pending onboarding, and reporting it would be a false positive that invites someone to delete a live
+invitation.
+
+The one fact the backend cannot read for itself is invitation status; `pending_invitations` is
+private and stays private. `admin_emails_with_open_invitation` therefore returns only the **subset of
+addresses the caller already supplied** that have an open invitation.
+
+| Proof | |
+|---|---|
+| `OD-1` / `OD-2` | invoker shim, anon cannot execute |
+| `OD-3` | an ordinary caller is refused |
+| `OD-4` / `OD-5` | reports an address with an open invitation, not one without |
+| `OD-6` | an **empty** request returns nothing — it cannot be used to ENUMERATE invitations |
+| `OD-7` | a consumed invitation is not reported as outstanding |
+| `O-1`…`O-7` | the route reports exactly the unattached account; linked and invited accounts are excluded; only already-held addresses are submitted |
+
+## 3. Recovery — `POST /admin/users/adopt`
+
+Gives an **existing** authentication account an application identity.
+
+This closes a second gap as well. `POST /admin/users` always mints a **new** Auth account, so it
+fails on a duplicate address and could never reconnect an account that already exists — the exact
+limitation recorded against remediation option B in revision 4 §8.3.
+
+The account is named by **address**, not by Auth uuid: the uuid is resolved from the Auth listing, so
+a caller cannot aim this at an arbitrary uuid. The database refuses anything not genuinely
+unattached (`uk_app_users_auth`), and the grants land in the **same single atomic RPC** as ordinary
+creation.
+
+| Proof | |
+|---|---|
+| `O-8`…`O-11` | an orphan is adopted; the uuid is resolved from the address; the same atomic grant call is used |
+| `O-12` / `O-12a` | an address with no unattached account is refused, with one answer for both "absent" and "already attached" |
+| `O-13` | adoption obeys the same plant rule |
+| `O-14` / `O-14a` | a refused adoption fails truthfully and compensates nothing — it creates no Auth account |
+
+## 4. G-B — the remaining options, and what is actually still unproven
+
+Neither existing run is a complete G-B on its own:
+
+| | PGlite | Live reconstruction |
+|---|---|---|
+| Empty start | **yes** | no — 2 legacy `profiles` rows injected mid-sequence |
+| Supabase Auth / roles / default ACLs | stubbed preamble | **genuine** |
+| pgTAP assertions | not run | **207 / 207** |
+
+**The residual gap is narrower than it first looks, and it is worth stating precisely.** The
+injection changed **data**, not structure or privileges. The live run dropped and recreated every
+application table inside a real Supabase project, so Supabase's genuine default privileges *did*
+apply to freshly created tables, and the anon-reachability sweep still came back empty. The only
+behaviour the two rows affect is invitation seeding, and PGlite exercised exactly that path with
+`profiles` empty — both guarded `insert … select` statements were no-ops, and the structural result
+still matched live.
+
+So what remains unproven is one specific combination: **Supabase platform defaults + a genuinely
+empty start + the assertions running.** The case that it is fine is an argument, not a test — which
+is the same standard this programme applied to G-B in the first place.
+
+### Options — none executed, all for the Product Owner to choose
+
+| # | Option | Cost | Fidelity | Touches live? | Notes |
+|---|---|---|---|---|---|
+| **A** | Temporary Supabase **preview branch** | **$0.01344/hr**, under **$0.05** for a run | **Complete** — genuine Auth, roles, ACLs; pgtap installable; branches start from migrations, not a data copy | **No** — fully isolated | Not covered by the Spend Cap; Compute Credits do not apply; needs a paid plan. Previously declined on cost |
+| **B** | A **second Supabase project** (free tier) | **$0** on free tier | **Complete** | **No** | Needs the Product Owner to create it in the dashboard and supply the ref and keys — no MCP tool creates projects. Free plan allows a limited number of active projects |
+| **C** | Repeat the live replay **without** the data injection | $0 | Complete | **Yes — destructively** | Produces a correct greenfield schema with **no invitations**, locking both accounts out until the same restore is applied. **Explicitly excluded by the Product Owner; not recommended** |
+| **D** | Local Supabase stack (`supabase start`) | $0 | Complete | No | Still blocked: no Docker, and WSL is not installed. Would need a machine change |
+| **E** | **Explicit gate waiver** | $0 | Partial, by conjunction | No | Record G-B as satisfied by the two partial runs plus the narrowing argument above, and name the unproven combination as accepted residual risk |
+
+**Recommendation: B if a zero-cost complete proof is wanted, A if speed matters more than two pence,
+E if the narrowed residual is acceptable.** A and B are equivalent in fidelity; they differ only in
+who does the setup and whether a few pence appear on an invoice. C is not recommended and D is
+unavailable.
+
+**Nothing here has been executed.** G-B remains formally incomplete and is recorded as such.
+
+## 5. Gate results
+
+| Gate | Result |
+|---|---|
+| pgTAP `tests.run_all()` | **207 / 207** (200 → +7 OD) |
+| Backend caller-context / routes / first-sign-in / multi-plant / email+plants | **25 / 23 / 28 / 29 / 66** |
+| FE build, costing, blanket, draft, both audits | pass |
+| FE `npx eslint src` | **66 / 0** |
+| Security advisors | **2**, unchanged — the pre-existing Auth setting and the deliberate deny-all INFO |
+| G-A | **51 local ⇄ 51 remote**, 47 byte-exact, 4 repair rows dispositioned |
+| Runtime | backend restarted (PID 15860); `/admin/auth-orphans` and `/admin/users/adopt` answer 401, i.e. present and authenticated |
+
+## 6. Status
+
+S3(c) is **not** executed. Nothing is pushed. Phase 3 is not begun. Phase 2 remains open pending a
+G-B decision from §4.
