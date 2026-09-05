@@ -2298,3 +2298,236 @@ every grant, and both pending invitations.
 
 **Outstanding before execution:** the G-B branch authorization (§6.2), and correcting
 `CLAUDE.md:22`, which still says the project has one table, `public.profiles`.
+
+---
+
+# P2-11 / P2-12 — email management, Plant Master, and G-B closed in full
+
+**Date:** 2026-09-05. **Performed by:** SR DEV. **Status: READY FOR S3(c) AUTHORIZATION.**
+
+## 1. G-B — full-fidelity replay, run on the live project
+
+The Product Owner declined the preview branch and directed the replay onto the main project,
+reaffirming that there is no application data to lose. **No branch was created and nothing was
+billed.**
+
+Before touching anything, one consequence was established and stated, because it is not data loss
+and was not what the authorisation described: **both invitation-seeding migrations derive their rows
+from `public.profiles`** (`20260904143300`, `20260905075709`). A naive drop-and-replay recreates
+`profiles` empty, so both seed nothing, `app_users` is empty, and the administrator's own invitation
+is already consumed — leaving both accounts able to authenticate and permanently unable to be
+authorised, with no administrator in existence to issue a new invitation. That is lockout, not data
+loss, and the replay was built to prevent it rather than to discover it afterwards.
+
+### 1.1 Method
+
+| Step | |
+|---|---|
+| Capture | Migration bodies, the 2 `profiles` rows and a structural fingerprint copied to a `gb_scratch` schema outside the drop set |
+| Baseline bodies | The 4 S0c repair rows carry no recorded body, so their local files were staged into the replay set — making this a genuine **46 / 46** replay rather than 42 |
+| Privilege probe | An event trigger was created and dropped first, because `ensure_rls` had to be dropped and recreated and an inability to recreate it would have been unrecoverable |
+| Drop | Application objects **named one by one**. No `drop schema public`. `auth`, `storage`, `realtime`, `vault`, `graphql`, `extensions` and the `supabase_migrations` schema itself are never named |
+| Replay | Every recorded body executed in version order |
+| Data restore | The 2 legacy `profiles` rows re-inserted at the point migration `20260823111434` creates the table, so the two later migrations derive the invitations exactly as they stood |
+| Atomicity | The whole thing is **one transaction**. Any failure at any point rolls back to the untouched database |
+| Guard | `auth.users` counted before and after; a change aborts the transaction |
+
+### 1.2 Result — **PASSED, no remaining gaps**
+
+| Measure | Pre-replay | Post-replay | |
+|---|---|---|---|
+| Migrations recorded | 46 | **46** | match (4 repair rows still bodyless, by design) |
+| Tables in `public`/`app_private`/`ref_private` | 18 | **18** | match |
+| Functions | 51 | **51** | match |
+| Policies | 36 | **36** | match |
+| SECURITY DEFINER in `public` | 1 (`rls_auto_enable`) | **1** | match |
+| `ensure_rls` event trigger | present | **present** | restored |
+| `auth.users` | 2 | **2** | untouched |
+| Security advisors | 2 | **2**, identical | the posture is reproduced, not just the shape |
+
+**`tests.run_all()` in the freshly replayed database: 186 / 186.** This is what the disposable PGlite
+replay could not do — pgtap is not installable there — and it is now closed. Both G-B gaps recorded
+in revision 5 §6.1 are gone: the assertions ran, and they ran against genuine Supabase Auth, genuine
+roles and genuine platform default ACLs.
+
+`gb_scratch` was dropped; nothing from the exercise remains.
+
+### 1.3 Identity state after the replay
+
+| | Row 1 | Row 2 |
+|---|---|---|
+| Auth account | retained | retained |
+| Open invitation | **yes**, grants admin | **yes**, Maker |
+| `app_users` | 0 — cleared by the replay | 0 |
+
+Both identities hold a governed path. **The administrator must sign in once more to bootstrap**;
+their invitation was regenerated unconsumed by the replay, which is why the lockout described above
+did not occur.
+
+## 2. Email management
+
+Email is the Supabase Auth login identity. **It is not stored in `app_users` and no column was added
+for it** — asserted by `EM-1`. The database holds authorization, audit and revocation; the address
+itself lives only in `auth.users`.
+
+### 2.1 Self-service
+
+`POST /auth/me/email`. The **current password is re-verified first** — a valid access token proves
+the session authenticated at some point, which is not the same as being the account holder now, and
+changing the login identity is exactly where that difference matters. Verification uses a throwaway
+anonymous client; the password is used once and never stored, logged or audited.
+
+The change itself is Supabase's documented `updateUser({ email })`, called at its REST endpoint with
+the caller's own token — not an admin call. With Secure email change enabled the project confirms
+with both addresses, so the route reports **pending verification** rather than claiming success.
+
+`supabase-py`'s `auth.update_user()` operates on a session the client object holds internally; a
+caller-context client carries the token as a header and has no such session, so the REST endpoint is
+called directly rather than faking one.
+
+### 2.2 Administrator
+
+`PATCH /admin/users/<id>/email`. The Auth identity is **resolved from the selected `app_users` row**
+by `app_private.admin_prepare_email_change`, which also enforces `administer_users` and a non-empty
+administrative reason. The route never accepts an Auth uuid, so an arbitrary or guessed one cannot be
+targeted — `EM-7` proves the resolved uuid is the target's own, `E-15` proves the route names the
+target by application identity only.
+
+Afterwards the change is audited and **the target's sessions are revoked**. No grant, role or plant
+is read or written anywhere on the path (`EM-16`, `E-20`).
+
+### 2.3 Audit content
+
+`app_private.email_change_audit` stores actor, target, kind, reason, timestamp, and for each address
+a **domain plus a truncated sha256 fingerprint** — never the address. `EM-10` asserts no stored value
+contains an address or an `@`; `EM-11` asserts the fingerprints still distinguish old from new. The
+table is RLS-enabled and forced with **zero policies** and all privileges revoked: deny-all by
+construction. That is stricter than the two older private tables, which rely on revoked grants alone.
+
+### 2.4 Session revocation — one honest limitation
+
+`gotrue 2.12.3` exposes `auth.admin.sign_out(jwt, scope)` only. It revokes **by token**, and an
+administrator does not hold another user's token; there is no revoke-by-id in the client library. So
+revocation happens where sessions actually live — the refresh tokens and sessions GoTrue stores —
+scoped to one resolved user, behind `administer_users`.
+
+**This is the one place the programme writes to an auth-managed table**, and it is recorded as such
+rather than buried. It has the same inherent limit as a global sign-out: an already-issued access
+token remains valid until it expires, because it is a stateless JWT. No design can revoke that
+sooner. It should be replaced the moment Supabase ships revoke-by-id.
+
+### 2.5 Non-disclosure
+
+Duplicate, malformed and provider-rejected addresses all answer with the identical
+`That email address cannot be used`, on both paths. `E-13`/`E-13a`/`E-22` assert the body is
+byte-identical and leaks no provider text.
+
+## 3. Plant Master
+
+**Read-only, and maintenance explicitly deferred.** The canonical brief seeds `plants` as a Family A
+table and approves no create, edit or deactivate operation for it. Checked before building rather
+than assumed: no such approval exists, so none was invented. `GET /masters/plants` reports
+`"maintenance": "deferred"` so an administrator is told, not left hunting for a button.
+
+**No plant deletion semantics were invented.** Physical deletion of a referenced plant already fails
+— the grant FK is `ON DELETE RESTRICT` — and retiring a plant is a status change needing an approved
+rule first.
+
+| Requirement | How it is met |
+|---|---|
+| Visible Plant Master view from the database | `PlantMasterPanel` in User Management, sourced from `GET /masters/plants` |
+| Code, name, active status | `PM-3`, `P-3` |
+| Selection from active records | `PlantPicker` renders only `status === 'active'` |
+| Free-text plant entry removed | The text input is gone from both the create form and the profile modal |
+| Add/remove multiple assignments without replacing others | Set reconciliation (`MPB-2`…`MPB-4`), `PM-6`…`PM-8` |
+| At least one plant for Maker/Checker | `_plant_requirement_error`, `P-6`/`P-7`, and the form disables submit with the reason shown |
+| Group-only administrator may hold none | `P-8` |
+| Removing an assignment ≠ deactivating the master | `PM-10` asserts the plant stays active |
+| Options come only from active masters | `P-4`, `PlantPicker` |
+| Arbitrary text cannot create or grant a plant | `P-10`, `PM-5`, and the DB trigger |
+| Inactive plants cannot receive new assignments | `PM-4` (trigger, binds every writer), `MPB-10b`, `P-9`, plus the RLS predicate |
+| Wrong-plant access denied | `PM-9`, `MP-3` |
+| Row 2's NAG/PUN/KOL Maker grants correct | `MP-4`…`MP-10` |
+
+Enforced in **two** places deliberately: the RLS predicate gives an ordinary caller the right error at
+the right layer, and the `pgrant_active_plant_only` trigger binds **every** writer including definer
+code and `service_role`. Neither is redundant — RLS alone is bypassable by privileged paths, a
+trigger alone lets the policy drift.
+
+The self-service profile modal's free-text Plant box has been replaced by a read-only display. The
+backend had always refused a self-edit there (`R-2`); showing an editable box only invited the attempt.
+
+## 4. Advisors — reported exactly, nothing waived
+
+| Advisor | Level | Disposition |
+|---|---|---|
+| `auth_leaked_password_protection` | WARN | Pre-existing project Auth setting, unrelated to this work. Not waived — outstanding |
+| `rls_enabled_no_policy` on `app_private.email_change_audit` | **INFO** | **New, and intentional.** RLS enabled + forced with zero policies and every privilege revoked *is* the deny-all posture; the advisor is describing the intended state. Reported rather than waived. It also makes the table stricter than `pending_invitations` and `reference_sequences`, which rely on revoked grants alone — **that inconsistency is flagged for a ruling**, not resolved unilaterally |
+
+No `0011`, no `0029`. Performance advisors unchanged: `0003`/`0006` on legacy `profiles` only.
+
+## 5. Gate results
+
+| Gate | Result |
+|---|---|
+| pgTAP `tests.run_all()` | **186 / 186** (159 → +17 EM, +10 PM) |
+| pgTAP in the **replayed** database | **186 / 186** |
+| Backend caller-context / routes / first-sign-in / multi-plant / email+plants | **25 / 23 / 28 / 29 / 38**, all pass |
+| Direct anon REST/RPC probes | **23 / 23 refused** (15 sweep + 5 profiles + 3 new email shims) |
+| FE build, costing, blanket, draft, both audits | pass |
+| FE `npx eslint src` | **66 / 0** — ceiling holds |
+| Security advisors | 2 (§4) |
+| Uncovered foreign keys | **none** |
+| G-A | **46 local ⇄ 46 remote**, 42 byte-exact, 4 repair rows dispositioned |
+| G-B | **46 / 46 replayed on the live project; 186/186 there; structure and advisors identical** |
+
+### 5.1 Two fixture defects caught
+
+`test_multi_plant_grants`'s plant fixture had no `status`, so it would have passed against a rule the
+database enforces. `test_email_and_plants`'s group-grant fixture lacked the `id` the reconciler reads,
+which failed *inside* the helper and disguised itself as an assertion failure. Both fixtures now
+mirror the real tables.
+
+## 6. S3(c) — revision 6
+
+### VERDICT: **READY FOR AUTHORIZATION**
+
+| Precondition | State |
+|---|---|
+| Every legitimate identity has a proven successor or an approved continuity mechanism | **MET** — both hold an open, unconsumed invitation; `CN-3` proves the path works with `profiles` absent |
+| No runtime, test, trigger, policy or current-state documentation depends on the legacy objects | **MET** — `D-1`…`D-5`, `CN-1`; `CLAUDE.md:22` corrected |
+| Exact destructive targets and data consequence documented | **MET** — §6.1 |
+| Rollback and backup evidence | **MET** — five dated backups in the repository root; the replay in §1 demonstrates the migration set reconstructs the database end to end |
+| Fresh replay | **MET** — §1, no gaps |
+| Product Owner authorizes S3(c) | **NOT GIVEN** |
+
+### 6.1 Exact removal targets
+
+| Dropped | Consequence |
+|---|---|
+| `public.profiles` | 2 legacy rows |
+| `profiles_select_own`, `profiles_select_admin_all`, `profiles_update_admin_all` | — |
+| trigger `profiles_set_updated_at` | — |
+| `public.set_updated_at()` | only that trigger uses it |
+| `app_private.is_admin()` | nothing calls it (`D-2`) |
+
+**Untouched:** `auth.users`, `app_users`, every capability grant, both pending invitations, the Plant
+Master, and every Family A/B table.
+
+### 6.2 Three things that must land WITH the removal
+
+1. **G-B's assertion that replay reconstructs `profiles` and its policies must be retired in the same
+   change**, or it starts failing against a correct database.
+2. **`20260904143300` and `20260905075709` both `select … from public.profiles`.** They run before the
+   removal in version order, so replay stays valid — but that ordering becomes load-bearing and must
+   be stated in the removal migration.
+3. **The `profiles` rows are the input to both invitation migrations.** After removal, a from-zero
+   replay produces **no invitations at all**. That is correct for a greenfield deployment and wrong
+   for a rebuild of *this* project, so the removal migration must record that the legacy identities
+   are, from that point, carried by `app_users` alone and a rebuild needs an explicitly seeded
+   invitation instead.
+
+### 6.3 Outstanding, non-blocking
+
+- The `rls_enabled_no_policy` INFO and the private-table consistency question (§4).
+- `auth_leaked_password_protection` — a project Auth setting.
