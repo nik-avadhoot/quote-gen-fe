@@ -44,6 +44,41 @@ plant grants are separate and changeable. Access is invitation-only and denied w
 grant. Deactivation stops future access while retaining audit attribution and requiring reassignment
 of open owned work.
 
+## CDM-05-A — Legacy `Group` scope, and multi-plant assignment
+
+**Ruled by the Product Owner 2026-09-05. Amends CDM-05.**
+
+The legacy `profiles.plant` value `Group` is a **deliberate commercial scope, not dirty data**. It
+means group-wide access: across all current plants, all future plants, and relevant group-level
+areas beyond an individual producing plant. It must not be treated as an invalid plant code, mapped
+onto `NAG`/`PUN`/`KOL` as though it were one of them, or retired.
+
+**One user may hold any number of plant assignments.** This is the normal case, not an edge case.
+The user-management model must not collapse plant assignment into a single field. The legacy single
+`profiles.plant` column was one column; the capability model is not, and the API's singular `plant`
+field survives only as a read-only convenience and a single-value input alias.
+
+**Phase 2 representation, accepted with a stated limitation.** The `Group` scope is carried forward
+as **explicit** grants of `plant_access` + `make_quote` at each currently seeded plant — `NAG`, `PUN`
+and `KOL`. **Access to a plant created later requires an explicit administrator grant.** Automatic
+inclusion of future plants is **deferred for separate product consideration** and is not implemented.
+
+That limitation is asserted as a test (`MP-8`), not merely documented, so that it fails loudly if a
+later change ever makes new plants automatic without a decision.
+
+**Group-level visibility is separate.** It comes only from the appropriate existing group
+capabilities, granted explicitly. It is **not** inferred from, and not conferred by, the legacy
+`Group` value. In particular the legacy value does not imply `read_party_master`,
+`manage_customer_master`, `administer_users` or any other group capability.
+
+**Scope of the carried-forward identity:** Maker. No Checker authority, no `administer_users`.
+
+**Superseded proposal.** An earlier reading of this ruling would have introduced a new group-wide
+*operational* scope into the capability model. That was withdrawn by the Product Owner: no new scope
+kind is introduced in Phase 2, and the current capability architecture stands unless multi-plant
+assignment itself proves unsupportable. It was not — only the write path collapsed to one plant, and
+that was a defect in the route, not in the model.
+
 ## CDM-06 — Customer hierarchy and lifecycle
 
 Customer Family contains one or more Customer/Prospect identities; each contains Customer

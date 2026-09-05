@@ -1919,3 +1919,138 @@ owner-maintained guidance.
 4. Correct `CLAUDE.md:22`.
 
 Everything else in this packet is proven.
+
+---
+
+# P2-9 — CDM-05-A, multi-plant assignment, and S3(c) revision 4
+
+**Date:** 2026-09-05. **Performed by:** SR DEV. **Status: BLOCKED** — see §6.
+
+## 1. The ruling, and what it overturned in my own analysis
+
+Revision 3 recorded that both legacy rows carry `plant = 'Group'`, that this "is **not** a valid
+plant code", and that it "maps to no plant and cannot be migrated mechanically".
+
+**The first half was a category error.** `Group` is not a malformed plant code. It is a deliberate
+commercial scope — group-wide access across all current plants, all future plants, and relevant
+group-level areas. Recorded as **CDM-05-A**. Only the second half stands: it cannot be migrated
+*mechanically*, because the target representation is a product decision. That decision is now made.
+
+## 2. Asked and answered: does the canonical model already express it?
+
+Asked before implementing, because the answer determined whether this was a grant or a schema change.
+
+| Evidence | Finding |
+|---|---|
+| `capabilities.scope_kind` | `make_quote` and `plant_access` are **`plant`**-scoped; `administer_users`, `read_party_master`, `manage_customer_master` are `group` |
+| `app_private.has_plant_cap(p_plant, p_cap)` | reads **only** `plant_capability_grants`, filtered by `plant_id`. A group-table row is invisible to it |
+| `app_private.is_plant_member` | delegates to `has_plant_cap` — same |
+| `group_capability_grants` | has **no constraint** tying `capability_id` to `scope_kind='group'`, so a plant capability *could* be inserted there — and would be **silently inert**, because nothing reads it. That is the dangerous non-solution, and it is why this was worth checking rather than assuming |
+
+**Conclusion reported: the model does NOT support a group-wide operational scope**, and expressing
+one would have meant changing `has_plant_cap` plus three Family B policies that inline the same
+lookup. The Product Owner then ruled that no new scope kind is introduced in Phase 2.
+
+**What the model DOES support is multi-plant assignment** — and that turned out to be the only thing
+actually required.
+
+## 3. Defect 4 — the write path collapsed every user to one plant
+
+`_apply_role_and_plant(client, app_user_id, role, plant_code)` took a **single** code, and its plant
+branch **revoked every active plant grant** before inserting for that one plant. Assigning a second
+plant silently removed the first. The legacy `Group` scope was therefore unrepresentable — not
+because the capability model lacked the shape, but because the administrator route could not write it.
+
+The read path was already correct: `_read_one_user`, `list_users` and `resolve_caller` all return a
+`plants` **list**; the singular `plant` is a legacy convenience field. Only the writer was wrong.
+
+**Fixed as set reconciliation, not replace-all.** Only grants genuinely no longer wanted are revoked;
+only genuinely missing ones are inserted. Re-applying the same assignment is now a no-op, so an
+unrelated edit no longer churns grant history. `plants: [...]` is the real input; `plant: "X"`
+remains a single-value alias so the existing frontend is unchanged. `POST /admin/users` accepts a
+list too — the capability-checked RPC covers the first plant and the same grant policies cover the
+rest, so the RPC signature did not have to grow.
+
+Also fixed while there: changing a Checker's plants **without** naming a role silently demoted them
+to Maker, because the operational capability was derived from `role` alone and `role` was `None`.
+It now falls back to the capability they already hold (`MPB-8`).
+
+## 4. Row 2's governed successor
+
+`20260905075709` inserts a pending invitation bound to **row 2's existing email**, `grant_admin =
+false`, display name carried from the legacy row. Written as a guarded `insert … select` so **no
+email, display name or uuid appears anywhere in the migration set**; idempotent; and a no-op on a
+fresh replay, where `profiles` is empty and there is no legacy identity to carry forward.
+
+Both legacy identities now hold an open invitation — one administrator, one Maker.
+
+The remaining steps are the Product Owner's, because they need passwords I must not handle:
+
+1. Row 1 signs in → bootstraps → becomes the administrator.
+2. Row 2 signs in → bootstraps → becomes an **active identity holding nothing**.
+3. The administrator sets row 2's assignment: `PATCH /admin/users/<id>` with
+   `{"role":"maker","plants":["NAG","PUN","KOL"]}`.
+
+Step 2 before step 1 is harmless but leaves nobody able to perform step 3 until row 1 signs in.
+
+## 5. Gate results — everything re-run
+
+| Gate | Result |
+|---|---|
+| pgTAP `tests.run_all()` | **145 / 145** (127 → +10 MP, +8 from the corrected B-4 path and MP loop) |
+| Backend caller-context | **25 / 25** |
+| Backend route conversion | **23 / 23** |
+| Backend first-sign-in | **28 / 28** |
+| Backend multi-plant assignment (new) | **28 / 28** |
+| Direct anon REST/RPC probes | **20 / 20 refused** |
+| FE build / costing / blanket / draft / both audits | pass |
+| FE `npx eslint src` | **66 / 0** — ceiling holds |
+| Security advisors | **1** — pre-existing Auth setting only |
+| Performance advisors | legacy `profiles` only, plus `0005` INFO |
+| Uncovered foreign keys | **none** |
+| G-A local ⇄ remote | **39 local ⇄ 39 remote**, 35 byte-exact, 4 S0c repair rows with no remote body |
+| Live data after all runs | 2 profiles rows untouched (`updated_at` still 2026-08-24), 0 `app_users`, 0 grants, 3 plants, **2 open invitations**, no fixture residue |
+| G-B fresh replay | **NOT RUN** — unchanged from revision 3 §6 |
+
+### 5.1 Two more self-caught failures
+
+- **MP-9's insert named four columns and supplied three.** Caught by the first `run_all()`.
+- **B-4 asserted the wrong invariant.** It checked `count(open invitations) = 1`, using the literal
+  `1` as a proxy for "the first-admin invitation was not consumed". Adding row 2's invitation made it
+  fail at 2 — correctly, by its own wording, and wrongly by its intent, since nothing was consumed.
+  Rewritten as a before/after comparison, which is the property it was always meant to assert.
+
+## 6. S3(c) — revision 4
+
+### VERDICT: still **BLOCKED**, on execution rather than on decision
+
+Every **decision** is now made. What remains is that the decisions have not yet been *carried out*,
+and S3(c) must not run until they have.
+
+| Row | Successor | Governed path | Remaining |
+|---|---|---|---|
+| 1 | none yet | open admin invitation; route now works | **must actually sign in** |
+| 2 | none yet | open Maker invitation; route now works | **must sign in, then be granted NAG/PUN/KOL by the administrator** |
+
+**S3(c) preconditions still open:**
+
+1. Both identities hold a **persistent** `app_users` successor. Today `app_users` is empty; the
+   invitations are a path, not a successor.
+2. Row 2's access matrix proven **on the real identity** — `MP-1…MP-10` prove the matrix against a
+   fixture identity, not against row 2.
+3. **G-B** decided and run (revision 3 §6).
+4. G-B's assertion that replay reconstructs `profiles` retired **with** the removal.
+5. `quote-gen-fe/CLAUDE.md:22` corrected.
+
+Removing `profiles` today would still strand both identities, because neither has consumed its
+invitation yet.
+
+### 6.1 One thing to know before running the suite after sign-in
+
+`tests.__fixture_auth_uid()` now refuses to run the destructive fixtures against an auth account
+that owns an `app_users` row. There are exactly **two** auth accounts. Once **both** legacy
+identities have bootstrapped, no free account remains and `tests.run_all()` will **fail by design**
+with a directive error rather than mutate a real identity.
+
+**A dedicated fixture auth account is therefore required before the suite can run again after step
+2.** That is a Product Owner provisioning decision, flagged here rather than inferred.
