@@ -1641,3 +1641,281 @@ administration are therefore unaffected.
 
 One thing: **a decision on remediation option A, B or C for legacy row 2** (and confirmation
 for row 1, whose invitation already exists). Everything else in this packet is proven.
+
+---
+
+# P2-7 / P2-8 — recovery, two caught defects, and S3(c) revision 3
+
+**Date:** 2026-09-05. **Performed by:** SR DEV. **Status: BLOCKED** — see §8.
+
+## 0. Recovery check — what the interruption actually left
+
+The prior session's closing narration was wrong in one direction only: it under-reported
+itself. Nothing was half-written.
+
+| Question | Finding |
+|---|---|
+| Branches | Both repos on `data-model/s0-provenance`; neither has an upstream. BE is 8 commits ahead of `origin/main`, FE 8 ahead |
+| BE working tree | **Clean.** `9e56a5d` (P2-6) is committed in full — both migrations and the C-9 test additions |
+| FE working tree | Two entries, **neither belonging to this programme** — see §7 |
+| Interrupted work | **Fully written and committed.** The "revised S3(c) packet was attempted but not completed" claim is false: revision 2 is complete, sections 1–10, committed at `f1173fb` |
+| Migration alignment | 29 local files ⇄ 29 remote rows, names identical |
+| Live change without a local migration | **None** |
+| Malformed S3(c) packet | **None.** The file ends cleanly at its own §10 |
+
+**Correction to the P2-6 commit message and to revision 2 §9.** Both state "G-A aligned across 29
+migrations, every one byte-exact". Only **25** of the 29 could be compared: the four oldest rows
+were written by `supabase migration repair` during S0c and carry `statements = NULL`, so there is
+no remote body to hash. Those four are aligned by name and version only. The 25 with bodies were,
+and remain, byte-exact. This is a reporting overstatement, not a defect.
+
+## 1. Defect 1 (P2-7) — anon could reach the legacy `profiles` table
+
+Found by widening the direct anonymous REST sweep from 10 probes to 15. Every Family A and B
+table refuses anon with `42501`. `profiles` returned **HTTP 200 and `[]`**.
+
+| Probe as anon | Before | After |
+|---|---|---|
+| `GET /rest/v1/profiles` | **200 `[]`** | 401 `42501` |
+| `GET .../profiles?select=count` | **200 `[{"count":0}]`** | 401 `42501` |
+| `PATCH` / `DELETE` all rows | **200 `[]`** (0 rows affected) | 401 `42501` |
+| `POST` (insert) | 401 `42501` (RLS) | 401 `42501` (privilege) |
+
+**No row ever leaked and nothing was written** — all three policies are scoped to `authenticated`,
+so RLS filtered everything, and the two live rows were verified unchanged after the probe
+(`updated_at` still 2026-08-24). The exposure was posture, not data: `profiles` alone still carried
+the Supabase default grant of ALL to `anon`, `authenticated` and `service_role`.
+
+The part RLS **cannot** contain is `TRUNCATE`: it is not row-filtered, so a role holding it empties
+the table whatever the policies say. `anon` and `authenticated` both held it. Not reachable through
+PostgREST, which has no TRUNCATE verb, and `anon` has no direct login — an inert grant of exactly
+the class S0b and P2-6 already revoked twice, revoked here for the third and last time.
+
+**Why no gate caught it.** `N-7` enumerated the seven Family A tables by name; Family B got its own
+`F-2` loop; `profiles` was in neither list. An enumeration can only ever prove what it lists.
+`P-6` now replaces it with a catalogue sweep over **every** table in `public`, and `P-7` covers
+TRUNCATE for both API-reachable roles. A future table carrying the default grant fails the moment
+it is created.
+
+`authenticated` keeps SELECT and UPDATE — the two privileges the existing policies gate.
+INSERT/DELETE/TRUNCATE/REFERENCES/TRIGGER are revoked; no policy permitted those actions, so only
+the error code changes. **The table, its three policies and its trigger all remain** — this is a
+grant correction, not the S3(c) removal.
+
+## 2. Defect 2 (P2-8) — the first-sign-in path did not exist in the running application
+
+**Reported by the Product Owner from live use, not by any gate here.** Localhost login returned
+403 "Account is not active" for the real administrator.
+
+**Confirmed in source.** `/auth/login` resolved the caller and gave up
+(`server.py:493` before the fix). The documented recovery — "recovers by claiming the pending
+invitation" in revision 2 §2 — had **no route into the running system**:
+`app_private.bootstrap_app_user()` is private, and PostgREST can only route to `public`. The
+anonymous probe proves it: `rpc/bootstrap_app_user` returned **404 `PGRST202`**.
+
+**Revision 2 §2 was therefore wrong.** It described row 1's governed path as existing. It did not.
+
+**The fix is the P2-6 shape, unchanged, applied to one more function.**
+
+| Layer | Object | Properties |
+|---|---|---|
+| Routing | `public.bootstrap_app_user()` | **SECURITY INVOKER**, `search_path=''`, no owner privilege, reads nothing, decides nothing. `authenticated` only; `PUBLIC` and `anon` revoked |
+| Implementation | `app_private.bootstrap_app_user()` | **unchanged** — SECURITY DEFINER, `search_path=''`, outside every exposed schema |
+
+No new authority exists. The shim runs as the caller, so reaching the implementation still needs
+`USAGE` on `app_private` plus `EXECUTE`, which `authenticated` already held for `has_group_cap`.
+
+The private implementation was **not modified**. It already binds the invitation to the caller's
+verified `auth.jwt() ->> 'email'` — a GoTrue-issued top-level claim, **not** user-editable
+`user_metadata` — validates `auth.uid()`, takes `FOR UPDATE` on the invitation, consumes it once,
+creates one `app_users` row, grants only `administer_users`, and seeds the attributed
+`edit_lock_stale_seconds` baseline.
+
+**Route change.** `/auth/login` now makes **one** bootstrap attempt, with the caller's own token,
+**only** when they resolved to nothing, and then **re-resolves and trusts only that**. It never uses
+the service-role client, never supplies an identity, email or role, and never special-cases anyone.
+Re-resolving is what makes three cases correct at once: a deactivated user gets their existing id
+back from bootstrap and is still refused; a concurrent caller that loses the race resolves the
+identity the winner created; and `uk_app_users_auth` makes a second identity impossible regardless.
+
+`/auth/refresh` deliberately does **not** bootstrap — it follows an identity already established.
+
+Every refusal returns the same `{"error": "Account is not active"}`, byte-identical whether the
+cause is no invitation, a wrong email or a deactivated account.
+
+| Probe as anon | Before | After |
+|---|---|---|
+| `rpc/bootstrap_app_user` | **404 `PGRST202`** — no route existed | **401 `42501`** — route exists, anon refused |
+
+## 3. Defect 3 (P2-8) — running the test suite would have stranded the administrator
+
+Caught while fixing defect 2, and **created live by that fix**.
+
+`tests.__fixture_auth_uid()` returned `select id from auth.users order by created_at limit 1` —
+the oldest auth account, which is the real administrator. Harmless only while `app_users` held no
+persistent rows, which is the state every prior run saw.
+
+The moment the administrator actually bootstraps, `fixtures_matrix` calls `bootstrap_app_user()`
+with that uid, receives the **real** identity id instead of creating a fixture one, and then runs
+`update public.app_users set status='deactivated', auth_user_id=null` against it.
+`__cleanup_fixtures` only deletes rows whose `display_name` is like `__p2%`, so the real row would
+be left **deactivated with its auth link nulled** — permanently locked out, invitation already
+consumed, and no second administrator in existence to issue another.
+
+The fixture now takes an auth account owning **no** `app_users` row and raises a directive error if
+none is free. A loudly failing gate is the correct outcome; silently mutating a real identity is
+not. **Known consequence:** once both auth accounts are real identities this will fail by design.
+The remedy is a dedicated fixture auth account — a Product Owner provisioning decision, recorded
+here rather than inferred.
+
+## 4. Two self-inflicted regressions, caught and fixed
+
+Recorded because both were introduced in this session and both were caught by the gates rather
+than by review.
+
+1. **`0011` advisor fired on `tests.definer_placement`.** `create or replace function` does not
+   carry function attributes across a replace, so the P-6/P-7 rewrite silently dropped the pinned
+   `search_path`. Fixed at `20260905071509`.
+2. **`set search_path = 'extensions, pg_catalog'` is not a two-schema path.** The quotes make it
+   one identifier — a schema of that literal name, which does not exist — so the pgTAP assertions
+   stopped resolving and `tests.run_all()` died with `function no_plan() does not exist`.
+   **Advisor 0011 was satisfied either way**, because it only checks that `proconfig` is set, not
+   that the value names real schemas. A passing advisor is not a working `search_path`. Three
+   functions took the bad value; all fixed at `20260905072111` with the unquoted list.
+
+## 5. Gate results — all re-run after every change
+
+| Gate | Result |
+|---|---|
+| pgTAP `tests.run_all()` | **127 / 127** (was 106; +2 P-6/P-7, +19 BR-1…BR-19) |
+| Backend caller-context | **25 / 25** |
+| Backend route conversion | **23 / 23** |
+| Backend first-sign-in (new) | **28 / 28** |
+| Direct anon REST/RPC probes | **20 / 20 refused** (15-probe sweep + 5 profiles read/write) |
+| FE `npm run build` | pass |
+| FE `npx eslint src` | **66 / 0** — ceiling holds, has not risen |
+| FE `test:costing` / `test:blanket` / `test:draft` | pass / pass / pass |
+| FE `audit-doc-sections.py` / `audit-setcode.py` | pass / pass |
+| Security advisors | **1** — pre-existing `auth_leaked_password_protection` only. Both `0029` gone; the `0011` I caused is gone |
+| Performance advisors | `0003` + `0006` on legacy `profiles` only; `0005` INFO ×6 on untrafficked indexes |
+| Uncovered foreign keys | **none** in `public`/`app_private`/`ref_private`/`tests` |
+| Secret / identifier leakage | **none** — every fixture address uses the reserved `.invalid` TLD, every fixture UUID is synthetic, no key material in tracked files, `.env` git-ignored |
+| G-A local ⇄ remote | **35 local files ⇄ 35 remote rows.** 31 byte-exact; 4 S0c repair rows have no remote body to compare |
+| G-B fresh replay | **NOT RUN — see §6** |
+
+## 6. G-B fresh replay — deliberately not run, and why
+
+The recorded method is **option E: drop the application objects in the live project and replay**,
+selected in S1 because Docker/WSL are unavailable and preview branches are billed. Re-checked
+today: `docker` not installed, `wsl --status` still reports WSL absent. Nothing has changed.
+
+**Option E is no longer safe.** It issues `drop schema app_private cascade`, which now contains
+`pending_invitations` — **the single open invitation that is the only governed way the
+administrator can obtain an application identity**. Running it would destroy the mechanism this
+session just repaired, and would strand the very identity the S3(c) blocker exists to protect.
+It would also execute the destructive part of S3(c) without authorisation.
+
+The prior authorisation covered a database of 4 migrations and 1 application table. It is not
+transferable to one of 35 migrations, 15 application tables, three schemas and a live invitation.
+
+**Replay is therefore reported as open, and needs a Product Owner decision** — not run under an
+authorisation given for materially different state.
+
+## 7. Frontend — untouched, and one attribution note
+
+**`BatchProfileBar.jsx` was not touched by this session.** It does carry an uncommitted working-tree
+change — an 8-line CSS edit pinning three grid columns to 52px to match `BatchContextBar.jsx:161`.
+It is a Costing/Batch presentation change with no connection to the data model, and on the working
+agreement's parallel-window rule it belongs to another window. **Left exactly as found.**
+
+`docs/commercial-intelligence-decisions.md` is present but untracked, dated 2026-09-01, with no
+commit in this repo's history. Commercial Intelligence is out of scope. **Left exactly as found.**
+
+No frontend file was created, edited or deleted by this session.
+
+## 8. S3(c) — revision 3
+
+### VERDICT: **BLOCKED**
+
+The privileged-function work is complete and the routing defect is fixed. The blocker is unchanged
+in kind and **narrower in scope than revision 2 stated**.
+
+### 8.1 Non-identifying reconciliation
+
+| Measure | Value |
+|---|---|
+| `public.profiles` rows | 2 |
+| persistent `app_users` rows | 0 |
+| capability grants | 0 group / 0 plant |
+| `auth.users` accounts | 2 |
+| open invitations | 1 |
+
+| | Row 1 | Row 2 |
+|---|---|---|
+| Legacy role | admin | maker |
+| Legacy plant | `Group` | `Group` |
+| Is that a valid plant code? | **No** — seeded codes are `NAG`, `PUN`, `KOL` | **No** |
+| Legacy active flag | active | active |
+| Authentication account | exists, email confirmed | exists, email confirmed |
+| Has signed in | yes | yes |
+| Last sign-in | **2026-09-05 (today)** | **2026-09-04 (yesterday)** |
+| Persistent `app_users` successor | **NO** | **NO** |
+| Valid pending invitation | **YES**, grants admin | **NO** |
+| Approved retirement | — | **NO** |
+| Next sign-in after `profiles` is dropped | Authenticates, resolves to nothing, **bootstraps from the invitation**, becomes an active administrator. **Governed path exists and — since P2-8 — actually works** | Authenticates, resolves to nothing, no invitation to claim → **403, permanently** |
+| Would removal strand a legitimate user? | **No** | **YES** |
+
+**Both identities are in current use.** Neither is dormant test data; both signed in within the last
+two days. That is measured, not assumed.
+
+### 8.2 What P2-8 changed about this picture
+
+Revision 2 asserted row 1 had a governed path. That was true of the design and false of the
+running application. **It is now true of both.** Row 1's blocker is closed.
+
+Row 2's is not, and one previously-offered remedy has to be withdrawn.
+
+### 8.3 Correction: option B does not work for row 2
+
+Revision 2 offered "bootstrap row 1, then have that administrator create row 2 through
+`/admin/users`". Checking the route rather than assuming it: `POST /admin/users` **always creates a
+new authentication account** via `auth_admin_create_user`. Row 2 **already has one**, so the call
+fails on the duplicate email and returns 400. There is no path in the application that attaches an
+application identity to an *existing* authentication account.
+
+### 8.4 Remediation options for row 2 — the real ones
+
+| # | Option | Consequence |
+|---|---|---|
+| **A** | Issue a second invitation bound to row 2's existing email, then have the administrator set role and plant through `PATCH /admin/users/<id>` | Uses only approved mechanisms and keeps their existing account and sign-in. Bootstrap grants **nothing** unless `grant_admin`, so they arrive with an active identity and zero capabilities until the administrator grants them. **Requires the intended role and plant — a product decision** |
+| **B′** | Administrator creates row 2 afresh under a **different** email | Works today with no change, but abandons their existing authentication account and sign-in history |
+| **C** | Explicitly approve retiring row 2 | Valid only if that identity is genuinely disposable. It is currently `active` and signed in yesterday |
+
+No invitation has been issued. Doing so grants future access and implies a role and plant there is
+no approved basis to choose.
+
+### 8.5 The legacy `plant` value cannot be migrated mechanically
+
+Both rows carry `plant = 'Group'`, which matches no seeded plant code. Whatever access it was meant
+to convey must be **restated** as a capability grant. That is a product decision.
+
+### 8.6 What the two canonical rulings do and do not cover
+
+They authorise losing application **data**. They do not authorise **stranding an identity**. Only
+the first applies here, and it is cited rather than stretched.
+
+### 8.7 Outstanding S3(c) prerequisite unrelated to identity
+
+`quote-gen-fe/CLAUDE.md:22` still asserts "As of 2026-08-25 the Supabase project has one table:
+`public.profiles`". That is current-state documentation naming a removal target, and it is already
+factually wrong — there are 15 application tables. Flagged, **not edited**: `CLAUDE.md` is
+owner-maintained guidance.
+
+### 8.8 To reach READY
+
+1. A decision on **A, B′ or C** for legacy row 2 — and for A, the intended role and plant.
+2. A decision on how to run **G-B** (§6).
+3. Retire G-B's assertion that replay reconstructs `profiles` and its policies, **with** the removal.
+4. Correct `CLAUDE.md:22`.
+
+Everything else in this packet is proven.
