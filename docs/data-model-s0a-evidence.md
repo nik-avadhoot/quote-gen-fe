@@ -3591,3 +3591,101 @@ will confirm separately; no billable resource was created, no system software in
 data altered in this pass. Future frontend scope is **not** assigned here — it is left to its own
 scope approval. `BatchProfileBar.jsx` and the Commercial Intelligence record remain untouched, and
 nothing is pushed.
+
+---
+
+# S4 — STATUS: IMPLEMENTATION COMPLETE, PENDING G-B
+
+**Read this before the sections above.** S4 is **implementation complete and NOT accepted as
+finished**. One required gate is still open:
+
+> **G-B — fresh replay from zero: NOT RUN.** No isolated replay target has been selected. The
+> accepted Phase 2 method is a destructive drop-and-replay on the live project and was deliberately
+> not performed. Until an isolated target is chosen, the replay executed, and its result reviewed,
+> **S4 is not closed.**
+
+Everything else in S4 is complete and green at **389/389**. Held at S4: nothing pushed, no billable
+resource created, no system software installed, no live data altered for replay.
+
+---
+
+# S4-5 — two qualifications to the evidence above
+
+Raised on Product Owner review of the S4-5 record. **Documentation qualifications only.** No code,
+policy, gate or configuration changed, and no re-implementation was performed. They correct two
+statements that claimed more than the evidence supports.
+
+## Q-1 — what `app_private.construction_is_proposed` actually discloses
+
+The S4-5 section says the helper *"exposes no name, no code and no row, and it cannot enumerate."*
+That is too strong and is qualified here.
+
+**What is accurate.** The helper returns **proposed-status information for any id the caller
+supplies**: `true` when that id names a Construction whose status is `proposed`, `false` otherwise.
+A `true` answer therefore confirms both the existence of that Construction and its status, to any
+caller able to execute the function. `EXECUTE` is held by `authenticated` and `postgres` — that is,
+by **every authenticated user, including one holding no Family C capability at all** — not only by a
+Maker.
+
+What remains true as stated:
+
+- it returns **no attribute** — no name, no code, no layer, no lineage, only the boolean;
+- `false` does **not** distinguish "no such id" from "exists but is published or merged", so it
+  confirms nothing about non-proposed ids;
+- it takes a single id and returns a single boolean, so it cannot **list** or range-scan. It can,
+  however, be **probed id by id**, which is enumeration by repetition. "Cannot enumerate" was the
+  wrong word; "cannot list" is the right one.
+
+**Reachability, stated as the routing fact it is.** The helper is not callable through the REST paths
+this evidence reports: `PGRST202` from `public` (no such function there) and `PGRST106 Invalid
+schema: app_private` from the private schema, both re-confirmed after the change. That is a
+consequence of **schema exposure and routing**, not of the function withholding information. A
+caller who could execute arbitrary SQL as `authenticated` — which the deployed architecture does not
+give them, since PostgREST is the only path — could call it directly and probe the id space one bit
+at a time.
+
+**Why this is accepted rather than tightened.** The disclosure is one bit per supplied id, about
+Constructions only, with no attribute attached, reachable through no exposed route. That is the
+minimum the WITH CHECK needs in order to work at all, and it is strictly less than
+`read_construction_library` already grants. It is recorded here so the boundary is stated accurately
+rather than overstated.
+
+## Q-2 — what FA-2 does and does not prove
+
+The S4-5 section presents FA-2 as tying the helper to a known-good baseline. That is what it does;
+it is **not** an independent proof of a secure search path, and the record should not be read as one.
+
+**FA-2 proves consistency, not security.** It asserts that `construction_is_proposed` carries the
+same `proconfig` as `app_private.has_plant_cap`, an accepted Phase 2 definer. If `has_plant_cap`'s
+configuration were ever weakened or removed, FA-2 would pass on the matching weakened value — and on
+two nulls. Consistency with an accepted helper is a useful property, and it is the only property
+FA-2 establishes.
+
+**The independent proof already exists, and it is not FA-2.** Gate **P-2** in
+`tests.definer_placement()` — accepted in Phase 2, unchanged since — asserts against an absolute
+literal, universally:
+
+```
+P-2 every private definer pins search_path to empty
+   count of definers in app_private/ref_private whose proconfig <> 'search_path=""'  must be 0
+```
+
+Because P-2 is universal over those two schemas rather than a list of named functions, it picked up
+`construction_is_proposed` automatically the moment it was created. Verified at the time of writing:
+**31 private definers in scope, 0 failing**, and the helper's own `proconfig` is `search_path=""`.
+
+So the correct reading of the pair is: **P-2 proves the search path is pinned empty; FA-2 proves the
+new helper matches the accepted definer it was modelled on.** Neither substitutes for the other, and
+the earlier wording blurred them.
+
+---
+
+## Position at hold
+
+S4 implementation is complete at **389/389** with G-A at **75 ⇄ 75**, fingerprint
+`d3b32aae3fc9bc00e3196df7a57c4a18` identical on both sides, and advisors unchanged at the two
+accepted carry-forward items. **G-B remains the single open gate**, pending selection of an isolated
+replay target and review of the replay result.
+
+Held at S4. Nothing pushed. `BatchProfileBar.jsx` and `docs/commercial-intelligence-decisions.md`
+remain untouched, and Commercial Intelligence stays excluded.
