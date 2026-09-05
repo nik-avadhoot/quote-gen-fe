@@ -3689,3 +3689,143 @@ replay target and review of the replay result.
 
 Held at S4. Nothing pushed. `BatchProfileBar.jsx` and `docs/commercial-intelligence-decisions.md`
 remain untouched, and Commercial Intelligence stays excluded.
+
+---
+
+# G-B — fresh replay from zero: **PASSED**, and S4 CLOSED
+
+**Date:** 2026-09-05. **Performed by:** SR DEV, under explicit Product Owner authorisation of a
+destructive drop-and-replay on the experimental project, with loss of experimental data expressly
+accepted.
+
+**This supersedes the pending-status block above.** G-B is no longer open.
+
+## 1. Pre-flight — what was enumerated before anything was destroyed
+
+| Check | Result |
+|---|---|
+| Application-owned objects enumerated individually | **21 `public` tables, 18 `public` functions, 3 schemas (`app_private`, `ref_private`, `tests`), 1 event trigger (`ensure_rls`)** |
+| Any Supabase-managed schema named in the drop? | **No.** `auth`, `storage`, `realtime`, `vault`, `graphql`, `graphql_public`, `extensions` and `supabase_migrations` appear nowhere in it |
+| Extension-owned functions | Excluded from the drop by a `pg_depend deptype='e'` test, so nothing belonging to an extension was touched |
+| Transactional? | **Yes** — the entire drop *and* replay ran as one `DO` block. Any failure, including a client timeout, rolls back to the untouched database |
+| `auth.users` guard | Counted before and after **inside** the transaction; any change aborts |
+| Non-transactional constructs in the migration set | **None** — no `CONCURRENTLY`, `VACUUM` or `ALTER SYSTEM`; every `DROP` uses `IF EXISTS` |
+| Recovery mapping | Captured **before** the drop into a scratch schema: 2 identities, 1 group grant, 12 plant grants, 1 setting, 1 invitation, 3 plants. Never printed |
+
+**Replay source, verified byte-exact before use.** The 71 recorded bodies were staged from
+`schema_migrations.statements`; the **4 dispositioned bodyless rows were staged from their local
+files** and each was checked against the file's own MD5 — `8dfd002b…`, `eccd19cf…`, `8fdc6f73…`,
+`53f6be9d…`, all four matching. This made the run a true **75/75**, not a 71/71.
+
+## 2. The clean-replay result — stated separately from the repairs
+
+**The replay itself was clean.** All **75 migrations applied in version order from a genuinely empty
+application state**, in one transaction, with nothing injected at any point.
+
+| Measure | After the replay |
+|---|---|
+| Migrations applied | **75 / 75** |
+| `auth.users` | **2 — untouched**, guard satisfied inside the transaction |
+| `public` tables rebuilt | **21** (Family A 7, B 7, C 7) |
+| Application schemas rebuilt | **3**, plus the `ensure_rls` event trigger |
+| `public.profiles` | **absent** — S3(c) is part of the set, so the replay creates it and then removes it |
+| Seeded reference data | 3 plants, 13 capabilities, 1 group — from S1, not application data |
+| Application data | **0 everywhere**: 0 identities, 0 grants, 0 settings, 0 invitations, 0 parties, 0 Family C rows |
+
+**Then the proof suite failed.** `tests.run_all()` aborted at the first S4 suite with `23502` on
+`constructions.created_by`. That failure is **not** a replay failure — the schema was reproduced
+exactly. It is a defect in the S4 suites that the replay exposed, and the distinction matters:
+
+> **Clean replay: PASSED.** The migration set reproduces the database from nothing.
+> **Proof suite on the clean replay: FAILED**, until two repair migrations were written.
+
+## 3. The repair — what G-B found that nothing else could
+
+All four S4 suites opened with:
+
+```sql
+select id into v_owner from public.app_users order by id limit 1;
+```
+
+and used that id as `created_by` for the master rows each suite sets up. Two governed identities have
+always existed on the live database, so the lookup always found one and **the dependency stayed
+invisible through 389/389, three review rounds and a full REST attack matrix.** Against zero
+identities it returns NULL and every S4 suite fails at its first insert.
+
+This is precisely the anti-pattern P2-10 removed from the Phase 2 fixtures — *"an identity chosen
+from the population is somebody's"*. The S4 suites reintroduced it for the **owner** actor while
+correctly minting their **persona** actors.
+
+**The fix restores the principle, not the symptom.** Provisioning an identity inside `run_all()`
+would have turned the replay green while leaving the fixtures still borrowing — and on a populated
+database still attributing throwaway rows to a real administrator. Instead `tests.__fixture_owner()`
+mints a marked identity through the existing synthetic-auth fixture, which refuses to return a uuid
+it cannot prove it created. `__cleanup_fixtures()` and `__sweep_synthetic_auth()` already collect it,
+so SF-1 and SF-2 still hold and nothing is left behind (verified: 0 fixture owners remain).
+
+The owner actor is **kept** rather than replaced by the persona, because FA-10 and FA-13…16 depend on
+it being someone *other* than the caller.
+
+| Repair | Migration |
+|---|---|
+| `tests.__fixture_owner()` — mints, never selects from the population | `20260905192219` |
+| Point all four suites at it — a guarded transformation, not four restatements | `20260905192332` |
+
+The second is a transformation because re-pasting ~60KB of otherwise-identical bodies to change one
+line in each would bury the change and risk a silent mis-transcription. It requires exactly four
+target functions, the removed line present exactly once in each, and re-reads every rewritten
+definition to confirm the old line is gone and the new call present — any drift aborts. Its
+trade-off is stated in the migration rather than hidden: `prosrc` becomes `pg_get_functiondef`'s
+normalisation, so a later restatement must be written from migration history.
+
+## 4. Post-repair results
+
+| Evidence | Result |
+|---|---|
+| `tests.run_all()` **on the replayed database, with ZERO application identities** | **389 / 389, zero failures** |
+| `tests.run_all()` after the accepted identities were restored | **389 / 389, zero failures** — CL 35, PS 47, FA 23, PW 67 on the 217 baseline |
+| Backend acceptance suites | **171 pass** (25 / 23 / 28 / 29 / 66) |
+| Frontend engine goldens | `test:costing`, `test:blanket`, `test:draft` — all pass |
+| Direct REST/RPC probes | **36 / 36 refused** |
+| Backend service | `/health` ok; unauthenticated `/admin/users` → 401 |
+| Security advisors | **2 — the two accepted carry-forward items.** No new finding |
+| Performance advisors | 7 INFO `unused_index` on empty tables. **No unindexed-FK finding.** The 6 transient `no_primary_key` findings were the recovery scratch tables and cleared when that schema was dropped |
+| **G-A** | **77 local ⇄ 77 remote**, 73 bodied, 4 dispositioned bodyless. Fingerprint `6021ecf6dc91dbbc8ac98a5b61381207`, **identical on both sides** |
+
+## 5. Restoration of the governed identities and access configuration
+
+Restored in one transaction from the pre-drop capture, refusing to run if `app_users` was not empty.
+Grants were resolved by `plant_code` and `capability_key` rather than by id, because both were
+re-seeded by the replay.
+
+| | Restored |
+|---|---|
+| `NikunjRL` | active — `administer_users`; NAG/PUN/KOL × (`make_quote`, `plant_access`) |
+| `ClaudeCode` | active — NAG/PUN/KOL × (`make_quote`, `plant_access`) |
+| Operational baseline | `edit_lock_stale_seconds = 900`, in the exact shape `bootstrap_app_user` seeds it |
+| Invitation | 1, consumed, `consumed_by` remapped through the Auth identity |
+| Integrity | 0 orphaned identities, 0 synthetic identities left, `auth.users` still 2 |
+
+**Two fidelity limitations, declared rather than glossed:**
+
+1. **`granted_by` was not captured** before the drop and is restored as the administrator identity.
+   That is the accurate account of who grants capabilities in this system, but it is a restoration
+   choice, not the original recorded value.
+2. **Internal `app_users.id` values differ** (the identity sequence restarted). The Auth linkage,
+   display names, statuses and creation instants are preserved, and nothing outside the database
+   keys on those ids — the backend resolves callers by `auth_user_id`.
+
+## 6. Commits
+
+| Commit | Contents |
+|---|---|
+| `878f871` **S4-6** | `tests.__fixture_owner()` and the guarded transformation pointing all four suites at it |
+
+## 7. S4 — CLOSED
+
+Every required S4 gate is now met, G-B included. S4 is **implementation complete and evidenced**.
+**S5 is not begun and requires separate approval.**
+
+Nothing pushed — both repositories remain local-only. `BatchProfileBar.jsx` and
+`docs/commercial-intelligence-decisions.md` were never touched, staged or committed at any point, and
+Commercial Intelligence remains excluded.
