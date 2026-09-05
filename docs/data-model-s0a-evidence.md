@@ -2531,3 +2531,128 @@ Master, and every Family A/B table.
 
 - The `rls_enabled_no_policy` INFO and the private-table consistency question (§4).
 - `auth_leaked_password_protection` — a project Auth setting.
+
+---
+
+# P2-13 — runtime acceptance failure, atomic creation, and a correction to the replay claim
+
+**Date:** 2026-09-05. **Performed by:** SR DEV.
+
+## 1. Visible acceptance failed — diagnosed in the running system, not the build
+
+The Product Owner reported that the Users screen showed no Plant Master records, no plant-selection
+control and no email control. **The build and test results were not treated as proof**; the running
+system was measured.
+
+**The frontend was NOT at fault.** It was serving the current source all along:
+
+| Check | Measurement |
+|---|---|
+| Frontend URL / process | `http://localhost:5173`, Vite dev server PID 20212, started 12:31:02 |
+| Serving Vite source or a stale bundle? | **Vite source.** `GET http://localhost:5173/src/tabs/UserManagementTab.jsx` → `200`, 71,835 bytes, containing `Plant Master` ×3, `PlantPicker` ×5, `Change email` ×2 |
+| Stale `dist/`? | `dist/` exists but is a build artifact from `npm run build`; the dev server transforms modules on request and does not serve it |
+| Service worker / browser cache | Not implicated — the served module already contained the new code, and the screenshot showed the new panel rendering |
+
+The screenshot itself confirmed this: "Plant Master — 0 active", the read-only note, "No active
+plants" and "A maker needs at least one plant" exist **only** in the new component. The UI was
+correct; it was faithfully rendering an empty list.
+
+**The backend was the fault, and it was the same stale-process failure as the login defect.**
+
+| Check | Measurement |
+|---|---|
+| Backend process | `python server.py`, PID 24312, started **14:14:10** |
+| `server.py` last modified | **15:01:26** — 47 minutes later |
+| Reloader | none: `app.run(debug=False)` |
+| `GET /masters/plants` | **404** |
+| `GET /auth/me/email` | **404** |
+| `GET /admin/users` | 401 (route existed before this work) |
+
+So `/masters/plants` 404'd, the frontend's `pResp.ok` check produced `{plants: []}`, and every
+downstream symptom followed from that single fact. `Failed to fetch` came from the `/admin/users`
+call in the same `Promise.all`.
+
+**After restarting the backend (PID 19780):**
+
+| Route | Before | After |
+|---|---|---|
+| `/masters/plants` | 404 | **401** — exists, requires auth |
+| `/auth/me/email` | 404 | **405** — exists, POST-only |
+| `/admin/users` | 401 | 401 |
+
+**A second, independent reason the screen was empty:** the live reconstruction (§3) cleared
+`app_users`, so the session no longer resolved to an active identity and every authenticated route
+refused. Signing in again is required regardless of the backend restart, and it re-bootstraps the
+administrator from the regenerated invitation.
+
+**No hard refresh is needed for the bundle** — it was never stale. An ordinary page reload is needed
+only to re-run the fetches after signing in.
+
+## 2. Atomic multi-plant creation
+
+The previous flow created the identity with the first plant through the RPC and applied the rest
+afterwards, logging a warning on failure. **That was a partial-assignment defect wearing a comment:**
+a failure between the steps left a real, active identity holding part of the requested access while
+the route still answered 201.
+
+The whole set now lands in **one RPC**, which PostgREST runs in a single transaction — every grant
+commits or none does. An inactive or unknown plant anywhere in the list aborts the entire creation.
+The route compensates completely on failure by deleting the Auth account, and if that compensation
+itself fails it returns **500 with an explicit cleanup warning** rather than any form of success.
+
+| Proof | |
+|---|---|
+| `TX-1`…`TX-3` | a non-assignable **second** plant aborts everything; no identity survives |
+| `TX-4`…`TX-6` | a non-assignable **third** plant likewise — NAG and PUN are not left behind, and not one grant survives |
+| `TX-7`/`TX-8` | an unknown plant code behaves identically |
+| `TX-9`…`TX-12` | NAG + PUN + KOL together create one identity with all six grants and no group capability |
+| `TX-13` | `uk_app_users_auth` still forbids a second identity for one Auth account |
+| `T-1`…`T-5` | the route makes exactly **one** create call carrying the whole set |
+| `T-6`…`T-9` | on failure: truthful 400, no plant list reported, Auth account deleted, **no follow-up grant call attempted** |
+| `T-10`/`T-10a` | a failed compensation returns 500 and says the account needs manual cleanup |
+
+`P-3` was corrected in passing: it assumed a single `admin_create_app_user` and broke on the new
+overload. It now counts definer overloads, which is both correct for any number of signatures and a
+stronger claim than the original.
+
+## 3. Correction — the two replays are NOT the same thing
+
+Revision 6 §1 described the live exercise in a way that could be read as an untouched
+empty-environment replay. **It was not, and the distinction matters.**
+
+| | **PGlite replay** | **Live reconstruction** |
+|---|---|---|
+| Environment | Disposable PostgreSQL 17 (WASM), in-process, no network path to the project | The live Supabase project |
+| Starting point | **Genuinely empty.** No rows of any kind | Existing project, application objects dropped |
+| Data injected during the replay | **None** | **Yes — the 2 backed-up legacy `profiles` rows**, re-inserted mid-sequence, immediately after migration `20260823111434` creates the table |
+| Why | — | Two later migrations derive the invitations *from those rows*; without them the replay produces no invitations and locks both accounts out |
+| pgTAP assertions | **Not run** — pgtap is not installable in PGlite | **200 / 200** |
+| Supabase Auth, roles, default ACLs | Stubbed by a hand-written preamble | Genuine |
+| What it proves | The 49 migrations apply cleanly from **zero** and reproduce the structure | The migration set **plus a legacy data injection** reproduces this project's structure, posture and assertions |
+
+**Neither alone is a complete G-B, and the honest statement is the conjunction:** the empty-start
+property is proved only by PGlite (without assertions), and the Supabase-fidelity property only by
+the live run (which was **data-assisted, not empty-start**). The live run must not be described as an
+untouched empty-environment replay, and the phrase "46/46 replayed from zero" in revision 6 is
+withdrawn in favour of "46/46 replayed in version order **with the two legacy `profiles` rows
+re-injected mid-sequence**".
+
+A genuinely empty-start replay *in Supabase* — no injection — would produce a working schema with
+**no invitations at all**. That is the correct greenfield outcome and is exactly what §6.2 of
+revision 6 already warns must be handled at S3(c).
+
+## 4. Gate results
+
+| Gate | Result |
+|---|---|
+| pgTAP `tests.run_all()` | **200 / 200** (186 → +13 TX, +1 P-3a) |
+| Backend caller-context / routes / first-sign-in / multi-plant / email+plants | **25 / 23 / 28 / 29 / 50** |
+| FE build, costing, blanket, draft, both audits | pass |
+| FE `npx eslint src` | **66 / 0** |
+| G-A | **49 local ⇄ 49 remote**, 45 byte-exact, 4 repair rows dispositioned |
+| Runtime | backend restarted (PID 19780) and serving all new routes; Vite serving current source |
+
+## 5. Still not authorised
+
+S3(c) is not executed. Nothing is pushed. Phase 3 is not begun. Phase 2 remains open pending the
+Product Owner's visible acceptance test.
