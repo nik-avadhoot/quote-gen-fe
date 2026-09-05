@@ -3257,3 +3257,62 @@ an empty table and inserted nothing, exactly as designed.
 
 **CLOSED.** S3(c) executed and proved. Phase 3 not begun. Nothing pushed.
 `BatchProfileBar.jsx` untouched throughout; Commercial Intelligence excluded throughout.
+
+---
+
+# PHASE 2 ACCEPTED — carry-forward register
+
+**Date:** 2026-09-05. **Accepted by:** Product Owner, on the reported evidence.
+
+Accepted: S3(c), identity continuity, caller-context isolation, secure bootstrap, multi-plant access,
+Plant Master visibility, email management, orphan recovery, migration recoverability and the proof
+gates.
+
+## G-A — final recorded figure
+
+**58 aligned versions: 54 byte-exact bodies plus the four previously dispositioned bodyless repair
+rows.**
+
+Verified as a single comparison rather than by accumulation. Each side produced one fingerprint over
+the whole bodied set — the concatenation of `version || md5(body)` in version order:
+
+| | |
+|---|---|
+| Total versions (local files ⇄ remote rows) | **58 ⇄ 58** |
+| Versions carrying a body | **54** |
+| Bodyless repair rows | **4** — `20260823111400`, `20260823111434`, `20260823111457`, `20260904114045` |
+| Local body-set fingerprint | `ab40deb4598ba4cbd852389e9dcfaaa0` |
+| Remote body-set fingerprint | `ab40deb4598ba4cbd852389e9dcfaaa0` |
+
+The four bodyless rows carry `created_by IS NULL` — the signature of `supabase migration repair`,
+which records version and name to establish ordering for out-of-band changes and never had a body to
+store. Their local files were audited against the live objects they create, and the fresh replay
+reconstructs all four from those files. Their disposition is settled and is not revisited.
+
+## Carried forward — NOT implemented in Phase 2
+
+Recorded here as accepted deferrals, each with its current mitigation. None is a defect in the
+delivered work; each is deliberately out of Phase 2 scope.
+
+| # | Item | Status and mitigation | Owner phase |
+|---|---|---|---|
+| 1 | **Leaked-password protection is disabled** (`auth_leaked_password_protection`, WARN) | A project Auth setting, not code — a dashboard change. No mitigation in the application; the exposure is that a user may choose a known-compromised password | **Before beta** |
+| 2 | **`rls_enabled_no_policy` INFO on `app_private.email_change_audit`** | **Deliberate.** RLS enabled *and forced* with zero policies and every privilege revoked *is* the deny-all posture; the advisor describes the intended state. It leaves that table stricter than `pending_invitations` and `reference_sequences`, which rely on revoked grants alone. The disposition is retained as-is | **Later consistency review** |
+| 3 | **No broader administrative action log** | Today: grants carry `granted_by` and `granted_at`; identities carry `created_at`; `email_change_audit` covers email changes with actor, target, reason and one-way address fingerprints. What is missing is a single log across *all* administrative actions | **Approved infrastructure / audit phase** |
+| 4a | **Session revocation reaches into `auth.refresh_tokens` / `auth.sessions`** | `gotrue 2.12.3` exposes `sign_out(jwt)` only — revocation by token, and an administrator holds no other user's token. Scoped to one resolved user behind `administer_users`. Replace when Supabase ships revoke-by-id | **Retained limitation** |
+| 4b | **An issued access token stays valid until it expires** | Inherent to stateless JWTs; a global sign-out has the same bound. Mitigated by `resolve_caller` refusing any non-active identity on the very next request, so a deactivated user is stopped at the application boundary regardless of token validity | **Retained limitation** |
+| 4c | **Auth account and database identity cannot form one transaction** | The database half is atomic (one RPC, all grants or none). The pair is not, and cannot be. Compensation deletes the Auth account on failure; a failed compensation leaves a harmless orphan that is **detectable** (`GET /admin/auth-orphans`) and **recoverable** (`POST /admin/users/adopt`), and is logged with a non-reversible reference rather than an identifier | **Retained limitation** |
+
+## Scope boundaries preserved throughout
+
+- `quote-gen-fe/src/tabs/batch/BatchProfileBar.jsx` — **never touched.** It carries an uncommitted
+  working-tree change belonging to a parallel window and was left exactly as found from the first
+  recovery check to the last commit.
+- **Commercial Intelligence excluded throughout.** `docs/commercial-intelligence-decisions.md`
+  remains untracked and unmodified.
+
+## Position at acceptance
+
+Phase 2 is **closed and accepted**. No further Phase 2 work is to be performed in this chat, nothing
+is pushed, and Phase 3 is not begun. Both repositories remain committed locally only, so the entire
+programme is still reviewable, amendable or discardable before it reaches `origin`.
