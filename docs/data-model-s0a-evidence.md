@@ -2787,3 +2787,134 @@ unavailable.
 
 S3(c) is **not** executed. Nothing is pushed. Phase 3 is not begun. Phase 2 remains open pending a
 G-B decision from §4.
+
+---
+
+# P2-15 / P2-16 — G-B from a genuinely empty application state (Option C)
+
+**Date:** 2026-09-05. **Performed by:** SR DEV, under explicit Product Owner authorisation of a
+destructive replay on the current project. **G-B: PASSED, no gaps.**
+
+## 1. Pre-flight
+
+| Check | Result |
+|---|---|
+| Exact objects enumerated before removal | **29**: 15 tables, 3 schemas, 10 `public` functions, 1 event trigger — all application-owned, each named individually |
+| Any Supabase-managed schema named? | **No.** `auth`, `storage`, `realtime`, `vault`, `graphql`, `extensions` and the `supabase_migrations` schema itself appear nowhere in the drop block |
+| Transactional? | **Yes** — the entire drop + replay is one `DO` block. Any failure at any point rolls back to the untouched database |
+| Rollback position | The 55 recorded bodies were copied to `gb2_scratch.mig` first, so the set could be re-applied even if the transaction had been lost mid-flight |
+| Recovery mapping | Captured **non-disclosed** into `gb2_scratch.recovery`: 2 rows, 1 admin / 1 maker, both complete. Never printed, never injected into the replay |
+| Auth guard | `auth.users` counted before and after inside the transaction; any change aborts |
+
+## 2. The replay — genuinely empty, nothing injected
+
+**55 migrations applied in version order from an empty application state.** The four S0c repair rows
+carry no recorded body, so their local files were staged into the replay set, making this a true
+55/55 rather than 51/51.
+
+**No data of any kind was injected at any point.** The result:
+
+| Measure | After the replay |
+|---|---|
+| Migrations recorded | **55** (4 still bodyless, by design) |
+| `public.profiles` rows | **0** |
+| `app_users` | **0** |
+| Pending invitations | **0** |
+| Group / plant grants | **0 / 0** |
+| `operational_settings` | **0** |
+| `plants` | **3** — seeded reference data from S1, not application data |
+| `auth.users` | **2 — untouched** |
+
+**The two legacy-derived invitation migrations (`20260904143300`, `20260905075709`) inserted nothing,
+and that is correct.** They are guarded `insert … select` statements sourced from `public.profiles`;
+against an empty table they legitimately produce no rows. This is **not** a replay failure — it is
+the greenfield behaviour, and it is exactly the deficiency recorded in §5.
+
+## 3. Proof suite against the clean result
+
+| Gate | Result |
+|---|---|
+| pgTAP `tests.run_all()` | **217 / 217** |
+| Backend caller-context / routes / first-sign-in / multi-plant / email+plants | **25 / 23 / 28 / 29 / 66** |
+| Direct anon REST/RPC probes | **20 / 20 refused** |
+| Security advisors | **2** — the pre-existing Auth setting and the deliberate deny-all INFO. **Identical to pre-replay** |
+| Uncovered foreign keys | **none** |
+| G-A | **55 local ⇄ 55 remote**, 51 byte-exact, 4 repair rows dispositioned |
+
+**The suite provisioned and removed its own synthetic identities throughout and depended on no real
+invitation, no `profiles` row and no existing Auth account.** That is now demonstrated rather than
+asserted: it ran to 217/217 against a database in which none of those things existed.
+
+### 3.1 One assertion corrected, and one guard deliberately not weakened
+
+`SF-5` asserted `profiles = 2` — a literal standing in for "the suite did not touch the legacy
+table", true only of the pre-replay world. It now records the count on entry and compares against
+it, so it is correct at 2 rows, at 0 rows, and after S3(c) removes the table entirely. Same defect
+class as `B-4`, `B-5`, `D-1` and `S-4`.
+
+That fix then tripped `D-1`, because `run_all()` had begun naming `public.profiles`. The tempting
+repair — adding `run_all` to `D-1`'s exemption list — would have blunted the guard at the suite's own
+entry point, which is the worst place to lose it. **The literal was removed instead**, so `D-1` keeps
+its full reach and nothing is exempt that was not already.
+
+## 4. Post-replay environment provisioning — NOT part of the replay
+
+Recorded separately and honestly: this is environment provisioning performed **after** G-B evidence
+was captured. It is not part of the empty migration replay and none of it is required for the replay
+to pass.
+
+1. **First-administrator invitation created** through `app_private.provision_pending_invitation`
+   (P2-15), using the non-disclosed recovery mapping. No legacy row was restored; `public.profiles`
+   remains at **0 rows** and is not an application dependency.
+2. **Row 2's invitation was refused, by design.** The procedure will not create an ordinary
+   invitation while no administrator exists, so it cannot be used to open a way into an empty
+   system. It therefore follows the administrator's first sign-in rather than preceding it. The
+   guard holding is reported as a pass, not a problem.
+3. Backend restarted.
+4. Administrator sign-in and bootstrap verification: **pending with the Product Owner.**
+5. Row 2's intended end state is unchanged and still to be applied after their bootstrap: **Maker at
+   NAG, PUN and KOL, with no Checker and no administrator capability.**
+
+`gb2_scratch` is retained **only** until row 2's invitation is created, because it holds that
+recovery mapping. It is revoked from `public`, `anon`, `authenticated` and `service_role`, sits in an
+unexposed schema, and will be dropped as soon as step 5 completes.
+
+## 5. Greenfield-bootstrap deficiency — recorded and closed
+
+**The deficiency.** A clean replay produces a correct, fully-secured database that **nobody can get
+into**. The first-administrator invitation is seeded by `20260904143300`, which derives it from
+`public.profiles` — the S3(c) removal target. On any genuinely empty deployment that migration
+inserts nothing, leaving no administrator, no invitation and no route to create either.
+
+**The procedure that closes it** — `app_private.provision_pending_invitation(email, display_name,
+grant_admin)`:
+
+| Property | How |
+|---|---|
+| Does not depend on `public.profiles` | It reads only `app_users`, the grant tables and `auth.users` |
+| No real email or UUID in version control | The address is a **parameter**, supplied at the moment of use. `GP-3` asserts no address is embedded in the body |
+| Cannot remain an unrestricted registration route | It has **no public shim** (`GP-1`) and EXECUTE is granted to **no API role, not even `service_role`** (`GP-2`). Only a direct privileged database connection can reach it |
+| One-shot for the first administrator | Refused once an active administrator exists (`GP-5`) — the guard is the state of the system, so there is no switch to leave on |
+| Cannot open a way into an empty system | An **ordinary** invitation is refused unless an administrator already exists — demonstrated live in §4.2 |
+| Repeatable and idempotent | Re-running returns `unchanged` rather than stacking duplicates (`GP-8`/`GP-9`); refuses an address that already holds an identity (`GP-10`) |
+
+## 6. Carried-over requirements
+
+**Compensation-log redaction.** The orphan log line no longer carries a raw Auth uuid or address. It
+records a **truncated, non-reversible SHA-256 reference**, and `GET /admin/auth-orphans` reports the
+same `ref` on each row, so a log line can still be matched to an account without the log itself
+carrying an identifier.
+
+**Orphan and adoption routes re-verified:**
+
+| Property | Evidence |
+|---|---|
+| Capability-checked | Both routes are `@require_role("admin")`; adoption additionally passes through `admin_create_app_user`, which checks `administer_users` in the database. `OD-3` proves an ordinary caller is refused at the RPC itself |
+| Non-enumerating | `admin_emails_with_open_invitation` answers only about addresses the caller already supplied; `OD-6` proves an empty request returns nothing |
+| Attributed | Every grant adoption produces carries `granted_by` (the acting administrator) and `granted_at`; the identity carries `created_at`. **Honest limitation:** there is no dedicated administrative action log — attribution for identity creation is via the grants it produces, not a separate audit row. Flagged, not claimed |
+
+## 7. Status
+
+S3(c) is **not** executed. Nothing is pushed. Phase 3 is not begun. G-B is now complete with no
+outstanding gap; what remains before Phase 2 closes is the Product Owner's sign-in verification and
+row 2's provisioning.
