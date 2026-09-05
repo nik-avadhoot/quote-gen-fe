@@ -3460,3 +3460,134 @@ The Phase 2 items 1, 2, 3, 4a, 4b and 4c stand unchanged and un-mitigated by S4.
 - **Commercial Intelligence excluded throughout.** `docs/commercial-intelligence-decisions.md`
   remains untracked and unmodified.
 - Nothing pushed. Both repositories remain local-only.
+
+---
+
+# S4-5 — review correction: the dead Maker route on `construction_versions`
+
+**Date:** 2026-09-05. **Performed by:** SR DEV, on Product Owner review direction.
+**Disposition:** implementation correction under the existing S4 approval. No commercial decision
+was taken and no scope was added.
+
+## 1. What the review asked, and what it found
+
+The review asked for pointers to existing evidence for Maker authority, plant isolation and the
+proposed-versus-authoritative relationship, and for **any actual uncovered outcome** — explicitly not
+for tests that repeat evidence already present.
+
+Probing the branches no gate exercised found one, and it was a defect rather than a coverage gap.
+
+## 2. The defect
+
+`construction_versions_insert`, as shipped in S4-1, bounded its Maker branch with an inline
+subquery:
+
+```sql
+and exists (select 1 from public.constructions k
+             where k.id = construction_id and k.status = 'proposed')
+```
+
+A `WITH CHECK` expression is evaluated **as the caller**. That subquery was therefore itself subject
+to `constructions_select`, which requires `read_construction_library` — a capability a Maker does not
+hold. The subquery returned no row, the branch could never be true, and **the route was dead policy
+text promising an authority it could not grant.**
+
+Isolated by changing exactly one variable and nothing else:
+
+| Probe | Result |
+|---|---|
+| Maker can `SELECT` its own proposed parent | **0 rows** |
+| version `INSERT` without `read_construction_library` | **DENIED** |
+| …after granting `read_construction_library` alone, parent visible | **1 row** |
+| the identical `INSERT`, only read visibility changed | **ALLOWED** |
+
+**It failed closed, so it was never a security hole**, and the approved workflow was unaffected —
+`propose_construction` is `SECURITY DEFINER` and writes version 1 in the same call, which is why
+PW-2/PW-2d were genuine. The defect was confined to the direct-table route §7.5 approves.
+
+**It was the only policy with this shape.** Every other Family C branch, and Family B's
+`parties_insert`, reads either the row's own columns or `plant_capability_grants` / `capabilities`,
+both of which the caller can see — which is why the equivalent SKU branch worked.
+
+## 3. The correction
+
+The mechanism §7.2 already established for exactly this problem: a `SECURITY DEFINER` helper outside
+every exposed schema.
+
+```sql
+app_private.construction_is_proposed(bigint) returns boolean
+  language sql stable security definer set search_path = ''
+```
+
+Deliberately narrow — one bigint in, one boolean out. It exposes no name, no code and no row, and it
+**cannot enumerate**: an unknown id and a published id both answer false. `EXECUTE` is revoked from
+`public` and `anon` and granted only to `authenticated`, matching `has_plant_cap`.
+
+Every approved condition is preserved: the master-capability branch is untouched, and the proposal
+branch still requires the caller's own attribution, an active `make_quote` grant and a `proposed`
+parent. One condition was made **explicit** rather than incidental — `approved_by is null` now sits
+beside `approved_at is null`, so a pre-approved insert is refused **by the policy** (`42501`) instead
+of by `ck_cv_approval_pair` (`23514`).
+
+**Making the parent visible to the check did not broaden Maker authority**, and that is asserted
+rather than assumed: FA-5 and FA-6 show the Maker still reads zero Constructions and cannot read back
+the version they just wrote.
+
+## 4. Coverage added — `tests.family_c_authority()`, 23 gates
+
+In its own suite, so the three accepted suites are left exactly as they were.
+
+**Every denial asserts the SQLSTATE, not merely that the write failed.** A gate that records only
+"rejected" cannot distinguish an authority check from a neighbouring restriction, so a broken policy
+can hide behind a not-null, a foreign key or a check constraint and still look green. These gates
+require `42501` — the row-level security refusal — so a `23502`, `23503` or `23514` **fails** the
+gate even though the write was still refused.
+
+| Gate | Outcome proved |
+|---|---|
+| FA-1/2/3 | The helper is a definer in `app_private`, configured **identically to `has_plant_cap`** (compared against an accepted definer, not against a spelling), and unreachable by `anon` |
+| **FA-4 / FA-4a** | The repaired route: a Maker writes version 1 of the Construction they proposed, **and the row is actually present** — it does not merely fail to raise |
+| **FA-5 / FA-6** | Read authority unchanged: still zero Constructions, and the version just written is unreadable |
+| FA-7 / FA-8 | Rejected under a **published** and a **merged** parent — `42501` |
+| FA-9 / FA-9a | Rejected for **pre-approved** and **`approved_by`-only** combinations — `42501`, by the policy, before the check constraint is reached |
+| FA-10 | Rejected when attributed to another user — `42501` |
+| FA-11 | Rejected for a caller with neither `make_quote` nor the library capability — `42501` |
+| FA-12 | **The master route still works** — a library manager may still version a published Construction |
+| FA-13…16 | Creator anti-spoofing on all four Maker branches — `constructions`, `skus`, `sku_versions`, `sku_location_applicabilities` |
+| FA-17…20 | Wrong-plant invisibility on all four child tables — `sku_versions`, `sku_external_references`, `sku_location_applicabilities`, `plant_construction_adoptions` |
+| **FA-21** | Positive control: the Maker's own plant **is** visible, so the four zeroes above are isolation and not emptiness |
+
+Two smaller gaps the review named are closed by the same suite: creator anti-spoofing (FA-13…16) and
+child-table plant isolation (FA-17…21). Before this, only `skus` had its SELECT policy exercised from
+a wrong-plant session.
+
+## 5. Re-run results
+
+| Evidence | Result |
+|---|---|
+| `tests.run_all()` | **389 / 389, zero failures** — 217 accepted, CL 35, PS 47, **FA 23**, PW 67 |
+| The original failing probe, re-run | `U1` **DENIED → ALLOWED**; every other outcome unchanged, including read authority at 0 rows |
+| Backend acceptance suites | **171 pass** (25 / 23 / 28 / 29 / 66) — unchanged |
+| Frontend engine goldens | `test:costing`, `test:blanket`, `test:draft` — unchanged |
+| Direct REST/RPC probes | **36 / 36 refused**, unchanged. The new helper is unreachable at both layers: `PGRST202` from `public`, `PGRST106` from `app_private` |
+| Security advisors | **2 — unchanged.** No new finding |
+| G-A | **75 local ⇄ 75 remote**, 71 bodied, 4 dispositioned bodyless. Fingerprint `d3b32aae3fc9bc00e3196df7a57c4a18`, identical on both sides |
+
+## 6. Commit
+
+| Commit | Migrations | Contents |
+|---|---|---|
+| `b28266b` **S4-5** | 3 | The helper and the repaired policy; `tests.family_c_authority()`; the FA-2 literal fix plus registration in `run_all()` |
+
+One fix is kept rather than squashed: FA-2 compared `proconfig` against the literal `search_path=`
+when PostgreSQL stores `search_path=""`. The gate now compares against `has_plant_cap` instead, so it
+cannot drift on a spelling. Same class as the earlier fixture-literal defects, caught the same way —
+the assertion was right and the literal was wrong.
+
+## 7. Position
+
+S4 stands at **389/389**. G-B remains open pending an isolated replay target, which the Product Owner
+will confirm separately; no billable resource was created, no system software installed and no live
+data altered in this pass. Future frontend scope is **not** assigned here — it is left to its own
+scope approval. `BatchProfileBar.jsx` and the Commercial Intelligence record remain untouched, and
+nothing is pushed.
