@@ -2054,3 +2054,247 @@ with a directive error rather than mutate a real identity.
 
 **A dedicated fixture auth account is therefore required before the suite can run again after step
 2.** That is a Product Owner provisioning decision, flagged here rather than inferred.
+
+---
+
+# P2-10 — continuity proved without `profiles`, self-contained fixtures, G-A and G-B
+
+**Date:** 2026-09-05. **Performed by:** SR DEV. **Status: one authorization request open** — see §6.
+
+## 1. Live-login acceptance result — **PASSED**
+
+The real administrator signed in against the restarted localhost application.
+
+| Measured after sign-in | Value |
+|---|---|
+| `app_users` rows | **1**, status `active` |
+| Group capability grants | **1** — `administer_users`, and nothing else |
+| Plant capability grants | 0 |
+| `operational_settings` | **1** — `edit_lock_stale_seconds = 900`, attributed to that administrator |
+| Invitations consumed | **1** |
+| Invitations still open | **1** — legacy row 2's |
+
+**Root cause of the earlier failure: a stale process, not code.** The backend had been running since
+12:29:09; `caller_context.py` changed at 12:54:08 and `server.py` at 13:26:45, and it runs
+`app.run(debug=False)`, so there is no reloader and Python had already imported the pre-fix modules.
+The 14:11 attempt authenticated successfully (`last_sign_in_at` recorded) and was then refused by the
+old `resolve → 403` route. Nothing in the database or the credentials was ever wrong.
+
+## 2. Invitation-based continuity — my earlier claim was wrong, and is now disproved by test
+
+Revision 3 and 4 both asserted that **both** identities had to bootstrap before `profiles` could be
+removed. That was wrong. Continuity does not require an `app_users` row to already exist; it requires
+the bootstrap path to be reachable and its **inputs** to survive removal. Those inputs are
+`auth.users` and `app_private.pending_invitations`. **Neither is a removal target.** An unconsumed
+invitation *is* the approved continuity mechanism, so demanding a sign-in to manufacture a row was me
+asking for evidence the design does not need.
+
+`tests.continuity_without_profiles()` makes this a test rather than an argument. `public.profiles` is
+**renamed out of existence**, the full invited-bootstrap path runs against a database where the table
+genuinely is not there, and the table is renamed back. DDL is transactional, so an abort restores it
+at any point; the exception handler restores it on a caught failure; and CN-7…CN-9 prove the
+restoration afterwards.
+
+| Assertion | Result |
+|---|---|
+| CN-1 no function on the sign-in or administration path references profiles | **ok** |
+| CN-2 `public.profiles` is genuinely ABSENT for the rest of the test | **ok** |
+| CN-3 an invited identity completes first sign-in with profiles REMOVED | **ok** |
+| CN-4 the resulting identity is active — no successor row was needed beforehand | **ok** |
+| CN-5 the caller resolves to that identity with profiles removed | **ok** |
+| CN-6 and holds no capability it was not granted | **ok** |
+| CN-7 the table is restored — the test leaves live state unchanged | **ok** |
+| CN-8 its three policies survived | **ok** |
+| CN-9 its updated_at trigger survived | **ok** |
+
+**Per-identity disposition, non-identifying:**
+
+| | Row 1 | Row 2 |
+|---|---|---|
+| Auth account | retained | retained, sign-in history intact |
+| Successor | **persistent `app_users` row, active** | not yet — **and not required** |
+| Continuity mechanism | consumed invitation → administrator | **unconsumed invitation, retained until consumed** |
+| Effect of removing `profiles` | none | **none** — CN-3 proves the path works with the table absent |
+| Stranded by removal? | **No** | **No** |
+
+## 3. Self-contained synthetic fixture — no permanent account created
+
+`tests.__fixture_auth_uid()` previously **selected** an existing `auth.users` row: first by age
+(which picked the real administrator), then by availability. Both are wrong for the same reason — the
+fixtures are destructive and an identity chosen from the population is somebody's. Availability also
+invented a failure mode of its own: the suite would have stopped working once every account was in
+use.
+
+It now **mints** its own identity per call and can prove it owns it:
+
+- `pg_catalog.gen_random_uuid()`, with the uuid embedded in the address as
+  `p2-synthetic-<hex>@fixture.invalid` — unique by construction.
+- **Ownership proof before use.** The row it just wrote is re-read and must carry the marker, or the
+  function raises `55000` instead of returning a uuid that might belong to someone.
+- **Marker-gated removal.** `__drop_synthetic_auth()` refuses any uuid that is not synthetic, so a
+  stale or mistyped variable cannot delete a real account.
+- **A sweep** that can only ever match marker rows runs at the start of `run_all()` and again at the
+  end, so an aborted run leaves nothing behind.
+- It **never** reads, ranks, orders or selects an existing account. There is nothing to collide with,
+  and **no permanent "free" account exists or is needed.**
+
+| Assertion | Result |
+|---|---|
+| SF-1 no synthetic fixture identity survives the suite | **ok** |
+| SF-2 no application identity is left attached to one | **ok** |
+| SF-3 the fixture refuses to remove a non-synthetic identity (`55000`) | **ok** |
+| SF-4 exactly the two real authentication accounts remain, untouched | **ok** |
+| SF-5 the two legacy `profiles` rows are untouched by the whole suite | **ok** |
+
+The P2-8 warning that the suite would fail once both identities bootstrapped is **withdrawn** — the
+condition that caused it no longer exists.
+
+## 4. Final multi-plant proof
+
+`MP-1…MP-10` now run entirely on a synthetic identity. They prove, in order: the invited Maker
+bootstraps **active with zero capabilities** (MP-1…MP-3 — the temporary zero-capability state, which
+is what makes every grant an administrator's act), Maker authority at NAG, PUN **and** KOL
+(MP-4/MP-5 ×3), no Checker anywhere (MP-6 ×3), no `administer_users`, no group master-write and
+**no group read** (MP-7/7a/7b — group visibility is a separate explicit grant, never inferred from
+the legacy `Group` value), a plant created **later** is not included (MP-8, the accepted deferral),
+an explicit administrator grant is what admits it (MP-9), and eight grants across four plants
+(MP-10 — per-plant, never collapsed).
+
+The administrator's assignment route is `PATCH /admin/users/<id>` with
+`{"role":"maker","plants":["NAG","PUN","KOL"]}`, proved on the write side by `MPB-1…MPB-11`
+(28 backend assertions), including that re-applying the same set is a no-op and that adding a plant
+never drops another.
+
+## 5. G-A — exact disposition of the four repair rows
+
+`supabase_migrations.schema_migrations` carries a `created_by` column, and it separates the two
+groups exactly:
+
+| Group | Rows | `created_by` | `statements` |
+|---|---|---|---|
+| Applied through the Management API | **39** | `pgp16.…` (a real actor) | present, all **byte-exact** against the local files |
+| Recorded by `supabase migration repair` during S0c | **4** | **NULL** | **NULL** |
+
+The four are `20260823111400`, `20260823111434`, `20260823111457`, `20260904114045`.
+
+**Why they differ, and why that is canonical.** `migration repair` exists to mark history for changes
+that were applied out of band — here, the pre-programme state plus the S0b revoke. It records
+version and name to establish ordering. It does not store a body, because there was no body passing
+through it. `created_by IS NULL` on exactly those four and on no others is that command's signature.
+Nothing was deleted or altered: there is no body to compare because none was ever recorded remotely.
+
+**They are not unauditable.** Each local file's claims were checked against the live objects:
+
+| Migration | Claim | Live |
+|---|---|---|
+| `…111400` | `public.rls_auto_enable()` SECURITY DEFINER, `search_path=pg_catalog`; event trigger `ensure_rls` | both present, exactly so |
+| `…111434` | `public.profiles` table; 3 policies; `app_private.is_admin`; 1 trigger | all present, counts match |
+| `…111457` | pins `set_updated_at` search_path | `search_path=public` |
+| `…114045` | revokes EXECUTE on `rls_auto_enable` from PUBLIC/anon/authenticated/service_role | ACL is `postgres=X/postgres` only |
+
+And **G-B independently reconstructs all four from the local files** (§6), so their bodies are
+verified by replay as well as by inspection.
+
+**Correct statement of G-A: 43 local files ⇄ 43 remote rows; 39 byte-exact; 4 history-repair rows
+carry no remote body by design, and their bodies are verified against live objects and by replay.**
+
+## 6. G-B — replayed in a disposable database, with two declared gaps
+
+**Not run against the live project. No schema was dropped anywhere.**
+
+Docker, WSL and any local PostgreSQL are all still absent. The disposable option that does exist is
+**PGlite** — real PostgreSQL 17 compiled to WebAssembly, running in-process against a temporary
+directory, with no network path to the live project. It cannot touch live invitations or data.
+
+**Result: 43 / 43 migrations applied from zero, in order.**
+
+The replayed database was then compared with live on five structural dimensions:
+
+| Dimension | Replay | Live | |
+|---|---|---|---|
+| Tables in `public`/`app_private`/`ref_private`/`tests` | 17 | 17 | **identical list** |
+| Functions in those schemas | 40 | 40 | **match** |
+| Policies | 36 | 36 | **match** |
+| SECURITY DEFINER functions in `public` | `{rls_auto_enable}` | `{rls_auto_enable}` | **match** |
+| Tables in `public` reachable by `anon` | **none** | **none** | **match** |
+
+The last row matters independently: it shows the P2-7 revoke is *reproduced by the migration set*,
+not merely applied once to the live database.
+
+### 6.1 What this does NOT prove — stated, not glossed
+
+1. **pgtap is not installable in PGlite.** The single statement
+   `create extension if not exists pgtap` was substituted with function stubs, recorded in the run
+   output. So the 159 pgTAP assertions were **not executed** against the replayed database.
+2. **PGlite is not Supabase.** The `auth` schema, `auth.uid()`/`auth.jwt()`, the three roles and the
+   default privileges on `public` were supplied by a preamble I wrote. They are faithful enough for
+   the migrations to mean what they mean, but they are **approximations of the platform**, so the
+   replay cannot prove that a fresh *Supabase* project reproduces Supabase's own default ACLs.
+
+### 6.2 Authorization request — one item
+
+To close both gaps, G-B needs one run on a **temporary Supabase preview branch**: apply the 43
+migrations to a genuinely fresh Supabase environment, execute `tests.run_all()` there, compare, and
+delete the branch.
+
+| | |
+|---|---|
+| Compute | Micro, **$0.01344 per hour**, no fixed fee |
+| Expected duration | well under 1 hour ⇒ **under $0.05** |
+| Disk | within the 8 GB included in the plan ⇒ $0 |
+| Egress | negligible (schema only, no data copied) |
+| Scope | a new isolated environment; the live project's data, invitations and identities are **not** touched |
+| Caveats | Preview branches are **not** covered by the Spend Cap, and Compute Credits do **not** apply to branching compute. Branching requires a paid plan |
+
+**G-B is NOT marked passed.** It is recorded as *passed in a disposable database with two declared
+gaps*, pending that authorization.
+
+## 7. Gate results
+
+| Gate | Result |
+|---|---|
+| pgTAP `tests.run_all()` | **159 / 159** |
+| Backend caller-context / routes / first-sign-in / multi-plant | **25 / 23 / 28 / 28**, all pass |
+| Direct anon REST/RPC probes | **20 / 20 refused** |
+| FE build, costing, blanket, draft, both audits | pass |
+| FE `npx eslint src` | **66 / 0** — ceiling holds |
+| Security advisors | **1** — pre-existing Auth setting only |
+| G-A | 43 ⇄ 43, 39 byte-exact, 4 repair rows dispositioned (§5) |
+| G-B | 43/43 in a disposable database, 5/5 structural dimensions match live, 2 declared gaps (§6) |
+| Live state after the full suite | 2 auth accounts, **0 synthetic left**, 2 profiles rows untouched since 2026-08-24, 1 `app_users`, 3 plants, 1 open invitation |
+
+### 7.1 Four assertions corrected, all the same defect
+
+`D-1`, `B-5` and `S-4` failed the moment a real administrator existed — like `B-4` before them, each
+used a **global** count as a proxy for a **local** invariant, true only while the system was empty.
+`D-1` additionally fired on the two new tests whose subject *is* `profiles`; they are added to its
+explicit name-by-name exclusion list rather than exempting the `tests` schema wholesale. The first
+real bootstrap is not a regression, so the assertions were corrected, not the behaviour.
+
+## 8. S3(c) — revision 5
+
+### VERDICT: **READY, pending one authorization**
+
+| Precondition | State |
+|---|---|
+| Every legitimate identity has a proven successor **or** an approved continuity mechanism | **MET** — row 1 has a persistent active successor; row 2 has a retained unconsumed invitation, and CN-3 proves it works with `profiles` absent |
+| No runtime, test, trigger, policy or current-state doc depends on the legacy objects | **MET** for runtime/tests/policies (D-1…D-5, CN-1). **One doc outstanding:** `quote-gen-fe/CLAUDE.md:22` |
+| Exact destructive targets and data consequence documented | **MET** — revision 2 §7 and below |
+| Rollback and backup evidence | **MET** — five dated backup files in the repository root; the removal is DDL-only and the migration set reconstructs `profiles` up to the removal point |
+| Fresh replay | **Disposable replay passed**; full-fidelity branch run awaiting authorization (§6.2) |
+| Product Owner authorizes S3(c) | **NOT GIVEN** |
+
+**Destructive targets:** `public.profiles` (2 rows), its three policies, `profiles_set_updated_at`,
+`public.set_updated_at()`, `app_private.is_admin()`. **Untouched:** `auth.users`, `app_users`,
+every grant, and both pending invitations.
+
+**Two things must land WITH the removal, not after:**
+
+1. G-B's assertion that replay reconstructs `profiles` and its policies must be retired in the same
+   change, or it starts failing against a correct database.
+2. `20260905075709` (row 2's invitation) selects **from** `public.profiles`. On replay it runs before
+   the removal so it is safe, but the S3(c) migration must be ordered after it, and that ordering is
+   now load-bearing.
+
+**Outstanding before execution:** the G-B branch authorization (§6.2), and correcting
+`CLAUDE.md:22`, which still says the project has one table, `public.profiles`.
