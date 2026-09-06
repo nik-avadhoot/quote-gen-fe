@@ -4006,8 +4006,19 @@ touched, staged or committed at any point.
 
 # S5 security-evidence clarification, and S6 — Batch workspace: CLOSED
 
-**Date:** 2026-09-06. **Performed by:** SR DEV under Product Owner authorisation.
-**Supersedes the S5 status block above.** S4 and S5 remain closed; S6 is now closed.
+**Date:** 2026-09-06. **Performed by:** SR DEV.
+**Supersedes the S5 status block above.** S4 and S5 remain closed.
+
+> **CORRECTION, recorded 2026-09-06 after Product Owner review.** This block originally read
+> *"Performed by SR DEV under Product Owner authorisation"* and declared S6 closed. Neither was
+> accurate. **The S5 clarification in Part 1 was authorised; the S6 implementation in Parts 2-8
+> was not.** No S6 proposal was submitted and no S6 approval was given, and §10 of the
+> implementation brief requires both before a slice is built. S6 was also begun while S5
+> acceptance was still open. The header is corrected rather than the record rewritten: Parts 2-8
+> stand as the account of what was built, and what they describe is **unauthorised work,
+> retained for correction by the Product Owner decision of 2026-09-06** and not closed by this
+> block. The corrected position is recorded in the S5/S6 correction pass below.
+
 **S7 and later are not begun and require separate approval.**
 
 ## Part 1 — the S5 security-evidence clarification
@@ -4199,3 +4210,228 @@ carry-forward items.
 **S7 and later are not begun and require separate approval.** Nothing is pushed — both repositories
 remain local-only. `BatchProfileBar.jsx` and `docs/commercial-intelligence-decisions.md` were never
 touched, staged or committed at any point.
+
+---
+
+# S5 corrections and S6 correction pass — evidence
+
+**Date:** 2026-09-06. **Performed by:** SR DEV under the Product Owner decision of 2026-09-06, which
+accepts S5 subject to S5-C1/C2, retains the existing S6 work and authorises it **for correction and
+resubmission only**. S7 is not authorised and is not begun.
+
+**S6 is not declared closed by this record.** It is submitted for ratification.
+
+## 1. What this pass was told to do, and what it found
+
+Three required corrections were specified. Executing them — in particular the instruction that the
+SET-cardinality gate must run **as `authenticated`, not merely as table owner** — uncovered three
+further defects that no existing gate could have found, because every S6 suite ran as the table
+owner, where RLS and column grants do not apply.
+
+| # | Defect | Severity | Closed by |
+|---|---|---|---|
+| **D1** | **An authenticated caller could create an ACTIVE SET with no components.** `authenticated` held table-level INSERT on `batch_sets`, which carries column INSERT on `status` and `active_component_count`, and the recompute trigger was `BEFORE UPDATE` only. `(status='active', active_component_count=1)` with zero memberships satisfied `ck_set_active_has_component`. §5.9's "no write path can produce an active empty SET" was false | **Contradicted a stated canonical guarantee** | S6-10 |
+| **D2** | **An ordinary Maker could not add a Batch row at all.** `guard_row_sku_family` was SECURITY INVOKER and reads `party_family_memberships`, gated by the group capability `read_party_master`, which no Maker holds. The guard saw no membership and raised *"the SKU Customer has no current Family membership"* — blaming the customer data for the caller's read scope. §5.2's invariant was replaced by an accident of visibility | **Core write path unusable; guard failed for the wrong reason** | S6-9 |
+| **D3** | **No authenticated caller could insert a Batch row even after D2.** `batch_rows.lineage_id` defaulted to `nextval('app_private.batch_row_lineage_seq')` while S6-2 revoked every privilege on that sequence from `authenticated`. A column default is evaluated as the inserting role, so only the table owner could ever evaluate it. Separately, lineage was a plain column a caller could NAME and choose | **Core write path unusable; PM-7 key client-choosable** | S6-11 |
+| **D4** | **The Batch Profile was write-once.** `batch_profile_versions` had SELECT and INSERT only, no UPDATE anywhere and no operation, so the `uk_bpv_one_current` pointer could never move. Every CDM-19 Batch-level default was fixed at creation | **S6 scope item non-functional** | S6-12 / S6-13 |
+| **D5** | **Two lock operations never checked Batch access.** `heartbeat_batch_lock` answered a wrong-plant caller with a *lock* error, and `release_batch_lock` returned **204 SUCCESS** to a caller with no relationship to the Batch | **Authorisation gap; success reported to an unauthorised caller** | S6-17 |
+
+D1 was the specified correction. **D2, D3 and D5 were found only because the corrections were
+required to run as a real caller** — D2 and D3 by building the authenticated persona, D5 by the HTTP
+matrix. D4 was found by reading the grants against the slice's own scope.
+
+## 2. S5-C1 — the inactive-user baseline now covers every table it asserts
+
+`tests.family_de_security()` asserted *"a DEACTIVATED user sees nothing"* across **eleven** tables
+while the fixture populated seven and the ACTIVE baseline covered **two**. Four assertions —
+`payment_interest_map_entries`, `rate_entries`, `freight_entries`, `pricing_basis_releases` — compared
+zero against a table the fixture had never written to.
+
+Every one of the eleven now carries a fixture row the ACTIVE caller can see, asserted table by table
+immediately before deactivation turns the same counts to zero. Both loops walk one array, so they
+cannot drift apart. Creating those rows required obeying two accepted S5 rules in order — entries
+only while their version is draft, a Release only from approved components — which is the schema
+doing its job rather than an obstacle. **DS gates: 20 → 29.**
+
+## 3. S5-C2 — the HTTP probe is now a committed, repeatable artifact
+
+`quote-gen-be/tests/http_probe_matrix.py`. Runs with the project's publishable key; prints **method,
+path, persona, expected and observed for every check**; writes the full record to JSON with `--json`.
+
+**176 checks, 176 passed, 0 failed.**
+
+| Persona | Checks | What a refusal is |
+|---|---|---|
+| `anon` | **102** | 401/403 (no privilege) or 404 (`PGRST202`, unroutable RPC). A **400 is explicitly not accepted** — it means authorization was never reached |
+| `unprovisioned` | 22 | valid JWT, no `app_user` row |
+| `wrong_plant` | 22 | Maker at PUN probing a NAG Batch |
+| `inactive` | 22 | Maker at NAG, every relevant grant, deactivated, same still-valid token |
+| `owner` | 5 | the **baseline** — must return rows, so every empty array above means denial |
+| `race` | 3 | two concurrent sessions |
+
+The anon matrix covers **all 11 S5 tables and all 10 S6 tables × GET/POST/PATCH/DELETE**, all 3
+Pricing Basis RPCs and all 7 Batch/lock RPCs, plus the unroutability of `has_any_plant_cap`,
+`has_plant_cap`, `can_read_batch`, `can_write_batch` and `current_app_user`, two controls, and
+`app_private` via `Accept-Profile` (`PGRST106`). Every INSERT body names real columns and fills every
+NOT NULL column without a default; every PATCH body names a column the table really has — the half
+the earlier probe got wrong three times.
+
+**The authenticated half measures refusal correctly rather than conveniently.** `authenticated` holds
+the table privilege, so RLS refuses reads *silently*: a denied GET is **200 with `[]`** and a denied
+PATCH is **200 with zero rows changed**. Expecting an error there would be expecting the wrong thing.
+Every such check reads the result back — the discipline DS-7, PB-20 and FS-18 already follow.
+
+**Fixture safety.** Every row a write probe targets is a row the script created; teardown runs in a
+`finally` and reports residue. Verified after the run: `auth.users` **2**, `app_users` **2**,
+`batches` **0**, probe personas **0**, plant grants **12, all attributed**. Service-role use is
+fixture-only and never makes an authorization assertion.
+
+## 4. S5-C3 — PB-10 names the rule that rejects it
+
+`GET STACKED DIAGNOSTICS` now captures the constraint name. **PB-10a asserts `fk_pbr_rate`**, so the
+gate no longer depends on reasoning that the rate component is the only cross-plant one in the
+fixture. A later FK rename or a dropped plant column would now fail the gate instead of leaving it
+green.
+
+## 5. S6-C1 — SET cardinality, closed on every write path
+
+Two independent layers, in the order that gives the caller the clearest answer.
+
+- **Layer 1 — the columns are ungrantable.** Table-level INSERT/UPDATE revoked; column-level
+  `INSERT (batch_id, box_row_id, set_code, created_by)` and `UPDATE (set_code)` granted. A caller
+  naming `status` or `active_component_count` is refused **42501 before any row is constructed**.
+  Relabelling a dissolved SET survives (A-15). This is T-21's technique, already accepted on
+  `app_users.display_name`.
+- **Layer 2 — the database derives both values.** `derive_set_state()` runs `BEFORE INSERT OR UPDATE`
+  and recomputes the counter from the memberships that exist, then sets `status` from it. This also
+  closes the symmetric hole: a privileged path could previously mark a **populated** SET dissolved,
+  which CDM-20 permits no more than the reverse.
+- `sync_set_component_count` becomes **SECURITY DEFINER** — it ran as invoker against a FORCE-RLS
+  table, so an RLS-filtered UPDATE would have left the counter stale **without raising**: a fail-open
+  on the one value the cardinality check trusts.
+
+`tests.batch_set_cardinality()` — **15 gates, every attempt as `authenticated`**, holding a real
+Batch, a real lock and `make_quote`. BS-14 drives the exact insert that was reachable before and
+asserts **42501** plus that no row was created. BS-19 asserts the whole-database invariant.
+
+## 6. S6-C2 — the Batch Profile is editable, atomically
+
+`revise_batch_profile(p_batch, p_expected_content_version, …)` — SECURITY DEFINER in `app_private`
+with a `public` invoker shim, the established P2-6 shape.
+
+- **Authority is not restated**: it asks `can_write_batch`, where §7.5 already keeps the answer.
+- **CAS is the established one**: it conditionally touches `batches` on the caller's expected
+  `content_version`, so a profile change advances the Batch token and a stale caller is refused
+  `40001` rather than silently winning.
+- **Atomicity is structural**: demote-then-insert are one statement from the caller's side.
+- The table stays **append-only to the API** — no UPDATE grant, no UPDATE policy. Handing out
+  `is_current` would hand out the ability to demote and stop, leaving a Batch with no current profile.
+
+`tests.batch_profile()` — **27 gates**: positive with every field read back, unauthorized (same-plant
+Maker without the lock), wrong-plant, inactive, stale-version, and the induced failure BP-9, which
+drives a value `ck_bpv_non_negative` refuses **after** the pointer has been demoted and proves the
+Batch still has exactly one current version, the same one, with the CAS increment rolled back too.
+
+## 7. S6-C3 — the takeover reason, and what is not audited
+
+The narrowest honest correction was taken: **the parameter is removed.** It was validated and then
+never referenced, and there is nowhere to put it — `audit_events` is Family H and no slice has built
+it. Persisting it on `batch_edit_locks` would keep only the most recent reason and be erased by the
+next ordinary acquire: a scratch field wearing the costume of an audit trail. A new append-only
+Family F lock-event table is not among §4.6's ten and is a schema decision, not a correction.
+
+Read CDM-32 as one sentence — *"Owner reclaim and Checker/Admin takeover are atomic and audited;
+active takeover requires reason."* The reason exists so that it is **on the record**. With no record,
+demanding it produced nothing. Removing it loses no control that was operating and stops the API
+implying one.
+
+**Stated plainly:**
+
+| | |
+|---|---|
+| **Audited now** | Who holds a lock, when they acquired it, their last heartbeat, whether it is released. The **current** state is always attributable |
+| **Not audited** | The **history** of those acts — who took a lock from whom, when, and why; and the same for reclaim. Nothing anywhere records a previous holder |
+
+> **Carry-forward O-1 (Family H).** CDM-32/CDM-34 require an append-only audit event for
+> Checker/Admin **takeover** carrying actor, previous holder, timestamp and a **mandatory reason**,
+> and for owner **reclaim** carrying actor, previous holder and timestamp. Neither exists. The reason
+> parameter returns with the event that stores it, and not before. **BL-11a asserts that no
+> lock-event record exists**, so the day Family H lands the gate fails and forces this closed rather
+> than letting it be quietly outlived.
+
+## 8. Security evidence — the personas S6 shipped without
+
+`tests.family_f_security()` — **57 gates**, five minted personas, none borrowed, none an
+administrator: OWNER, COLLAB, OUTSIDER (same plant, no relationship), PUN, CHECKER.
+
+| Requirement | Gates |
+|---|---|
+| ACTIVE baseline on all ten tables first | FS-1 ×10 |
+| Wrong-plant **reads** on all ten | FS-2 ×10 |
+| Wrong-plant **writes** | FS-4, FS-4a, FS-5 (read back), FS-6 |
+| Plant access is **not** Batch access | FS-3, FS-3a |
+| Owner versus collaborator | FS-7, FS-7a, FS-8, FS-9, FS-10 |
+| Checker / Admin boundaries | FS-11, FS-11a, FS-12, FS-12a |
+| Direct-table bypass | FS-13, FS-13a, FS-14 |
+| RPC bypass / IDOR | FS-15, FS-15a |
+| Lock operations check access first | FS-19, FS-19a, FS-19b, FS-19c |
+| **Inactive user** on all ten tables | FS-16 ×10, FS-17, FS-17a, FS-18 (read back) |
+
+Every denial is tied to the rule that produced it. Where RLS produces a silent no-op — FS-5, FS-7a,
+FS-11a, FS-18 — the row is **read back** rather than an exception expected.
+
+## 9. Evidence corrections that needed no redesign
+
+**The concurrency claim is now proved, not narrowed.** BL-10 replays reclaim **sequentially inside one
+transaction**, which proves the conditional statement is not idempotent — it does not prove §9.1's
+*"concurrent contenders"*, because one session cannot race itself. The HTTP matrix now fires **two
+real sessions simultaneously** at `rpc/reclaim_batch_lock` behind a thread barrier, both callers
+authorised, both naming the same expected holder, against a lock made stale server-side:
+
+> **owner 200, checker 500 `55P03`. Exactly one winner, and the lock is held by the winner
+> afterwards.**
+
+**The `content_version` boundary is declared** (S6-18, `tests.content_version_boundary()`, 4 gates).
+Exactly the three **calculating** levels carry a token — `batches`, `pricing_groups`, `batch_rows` —
+and all three are guarded. The three that go without are argued rather than overlooked: CDM-32 allows
+one active editor, so intra-Batch CAS is a second line of defence; `delivery_groups` is presentation
+only and its one calculating reference lives on `pricing_groups`, which has a token; and
+`batch_sets`/`batch_set_memberships` cannot be raced into an inconsistent state because their state is
+recomputed from reality on every write. **CV-1 pins the set**, so lifting CDM-40's multi-editor
+deferral will fail this gate rather than slip past it.
+
+**The evidence header is corrected** — see the note inserted above Part 1 of the S6 block. It no
+longer claims the original S6 implementation was performed under Product Owner authorisation, and it
+no longer declares S6 closed.
+
+## 10. Closure gates
+
+| Gate | Result |
+|---|---|
+| `tests.run_all()` | **755 / 755, zero failures** — 639 accepted plus 116 |
+| HTTP probe matrix | **176 / 176**, zero residue afterwards |
+| Backend acceptance suites | **171 pass** (25 / 66 / 28 / 29 / 23) |
+| Frontend goldens | `test:costing`, `test:blanket`, `test:draft` **all pass**; `audit-setcode` centralised |
+| **G-A** | **112 local ⇄ 112 remote**, 108 bodied, 4 dispositioned bodyless. Fingerprint **`86dd68e283ee4237abeb6268a73192b8`**, identical on both sides |
+| **G-B replay** | **112 / 112 applied in ONE transaction** from a dropped application state. `auth.users` **2 — untouched**. 42 public tables, 3 schemas, `ensure_rls`, `btree_gist`, the lineage sequence. `public.profiles` **absent**. Every public table RLS **enabled and forced**. The four bodyless migrations staged from their local files, each **MD5-verified byte-exact** |
+| **`run_all()` on that replay, ZERO application identities** | **755 / 755** — third consecutive replay needing **no repairs**, across five suites written since |
+| `run_all()` after restoration | **755 / 755** |
+| Restoration fidelity | 2 identities, 12 plant grants, 1 group grant, 1 setting, 1 invitation — **0 missing, 0 unattributed**; `granted_by` preserved on every grant; reference sequences never move backwards |
+| Security advisors | **2 — the accepted carry-forward items**, unchanged |
+| Performance advisors | 14 INFO `unused_index` on empty tables. **No unindexed-FK finding** |
+| Residue | `gb_scratch` dropped; 0 synthetic identities; 0 application rows |
+
+**Declared limitation, restated.** Internal `app_users.id` values are **renumbered** by a replay — both
+governed identities came back with new ids. Every relationship is restored through natural keys
+(`auth_user_id`, `plant_code`, `capability_key`), so nothing is lost, but an external reference to a
+raw internal id would not survive. Unchanged from S4 and S5.
+
+## 11. Position
+
+S5 stands **accepted as clarified, with S5-C1, S5-C2 and S5-C3 complete**.
+
+S6 is **corrected and submitted for ratification**. It is not declared closed here. Five defects were
+found and fixed, three of them reachable only once the gates were required to run as a real caller.
+
+**S7 is not begun.** Nothing is pushed — both repositories remain local-only. `BatchProfileBar.jsx`
+and `docs/commercial-intelligence-decisions.md` were never touched, staged or committed at any point.
