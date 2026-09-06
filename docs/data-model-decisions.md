@@ -109,9 +109,14 @@ no temporary pseudo-code is manufactured.
 ## CDM-10 — SKU change rules
 
 Dimension, Construction or strength change creates a new SKU. Printing/artwork/name-only change may
-be a new version of the same SKU or a separate SKU according to how the customer orders it. Number
-of colours is not a mechanical threshold and is not added to the model. Open Batches remain pinned
-to their selected non-price-driving SKU version until Maker adopts a newer version.
+be a new version of the same SKU or a separate SKU according to how the customer orders it. Printing
+Technology, number of colours and descriptive colour detail are captured as specification data on the
+immutable SKU specification version, not on global Construction (Amendment 01, A-06). Number of
+colours does not by itself create a mechanical pricing rule and does not mechanically determine
+whether a new SKU identity is required; these fields become calculation-driving only when an approved
+rate mechanism explicitly consumes them, and no pricing formula may be inferred from them. Open
+Batches remain pinned to their selected non-price-driving SKU version until Maker adopts a newer
+version.
 
 ## CDM-11 — Proposed and discontinued SKUs
 
@@ -167,15 +172,41 @@ descriptive.
 
 ## CDM-18 — Payment Terms and Interest
 
+**Amended by Amendment 01, A-01 to A-04 (Product Owner, 2026-09-06). Replaces the previous fixed
+Payment-Terms mapping in full.**
+
 Pricing Group owns structured/descriptive Payment Terms and Interest. Interest resolves:
 
-`explicit Pricing Group override → approved Payment Terms mapping → versioned system fallback`.
+`explicit Pricing Group override → derived from the approved annual interest rate → versioned system fallback`.
 
-Blank inherits; zero is explicit zero. Initial map is 30d→0.5%, 45d→0.75%, 60d→1.0%, 90d→1.5%.
-These four values are the closed list of structured calculating terms. Other wording may be retained
-as descriptive free text but does not calculate. A map miss resolves to the independent initial
-fallback of 0.5%, never to 1.5%. Mapping/default versions are snapshotted. Payment Terms change
-stales rows only when Interest inherits; with an explicit override it requires fresh Send only.
+One approved annual interest percentage is the single calculating authority. The effective
+percentage is derived as `annual_interest_pct × payment_terms_days ÷ day_count_basis`. The approved
+day-count basis is **360, and 360 only**; no alternative basis may be stored, configured or
+selected, and a change of convention requires an explicit canonical amendment and its own migration.
+The initial approved annual rate is **6.000% per annum**, which reproduces every previously approved
+value exactly: 30d→0.5%, 45d→0.75%, 60d→1.0%, 90d→1.5%.
+
+The annual rate is calculation-driving: versioned, second-person approved, attributable, and
+immutable once approved. A change is a new approved version, never an edit.
+
+The structured calculating Payment Terms remain the closed list of 30, 45, 60 and 90 days, carried
+as a closed input domain on the Pricing Group. Other wording may be retained as descriptive free
+text but does not calculate. An unresolved structured Payment Term — including a null — resolves to
+the independent versioned fallback of 0.5%, never to 1.5%.
+
+Separately maintained fixed effective-interest percentages per Payment Term are withdrawn, together
+with their customer-behaviour reading. No second interest authority may exist. The obsolete
+structure is not removed while any deployable build still reads it or substitutes a hard-coded
+percentage; the approved removal order is stated in Amendment 01, A-03.
+
+The explicit Pricing Group override is retained. Blank inherits and the derivation applies; zero is
+an explicit zero; a non-null override takes precedence over the derivation. Where the override
+differs from the derived percentage a reason is mandatory, and the actor, time, derived percentage
+and overridden percentage are all preserved.
+
+The annual rate, its version, the day-count basis, the selected days and the derived percentage are
+snapshotted. Payment Terms change stales rows only when Interest inherits; with an explicit override
+it requires fresh Send only.
 
 ## CDM-19 — Waste, Conversion and Margin
 
@@ -205,8 +236,12 @@ historical branches are prohibited.
 
 Each Batch row has stable lineage; each revision’s Quote Item has a new immutable identity directly
 linked to that row (PM-7). Send freezes inputs, results, effective values and sources, selected
-versions, Pricing Basis, engine/rounding version, user and timestamp. Historical view/re-export reads
-stored results and never reruns current logic.
+versions, Pricing Basis, engine/rounding version, user and timestamp. For Interest this means the
+approved annual rate and its version, the day-count basis, the selected Payment Terms days and the
+derived percentage — not the derived number alone, which is otherwise unverifiable once the rate is
+superseded. Send also freezes the effective supplier paper-credit cost, its source and the Rate Set
+version it came from (CDM-41). Historical view/re-export reads stored results and never reruns
+current logic.
 
 ## CDM-23 — Divergence signals
 
@@ -236,7 +271,9 @@ A Pricing Basis Release is an internal, immutable, plant-specific approved bundl
 Sector defaults and Calculation Defaults—not customer confirmation. One automatic default applies
 per plant/date; approved alternatives may coexist. Releases may be retrospective or future-effective.
 Corrections create replacements; withdrawal never rewrites history. Amend may reuse a withdrawn
-historical Release; new Quote/Reprice may not.
+historical Release; new Quote/Reprice may not. The approved annual interest basis travels in the
+Release through its Calculation Defaults component and is not a separate component; the supplier
+paper-credit cost travels through the Rate component (CDM-41).
 
 ## CDM-27 — Pricing Basis selection and approval
 
@@ -330,9 +367,41 @@ CalcGate, Send, submit, approval and issuance are blocked rather than recorded l
 ## CDM-40 — Explicit deferrals
 
 Deferred: route profitability; cost/margin intelligence; risk-premium calculation; order/tax/invoice
-workflows; colour-count rules; live spreadsheet synchronisation; multi-editor mode; final workbook
+workflows; colour-count *pricing* rules; live spreadsheet synchronisation; multi-editor mode; final workbook
 formats; later permission routes; Pricing Group validity overrides; and the separate Commercial
 Intelligence workstream.
+
+## CDM-41 — Supplier paper-credit cost
+
+**Added by Amendment 01, A-05 (Product Owner, 2026-09-06).**
+
+Rate Master Credit Cost is the cost of credit taken from the paper supplier. It is an input cost
+entering the Effective Paper Rate, and it is **not** customer Payment-Terms Interest (CDM-18). It is
+never derived from customer Payment Terms and never from the annual customer-interest basis.
+
+The initial blanket supplier Credit Cost is 1.500%. It is a versioned, approved, plant-owned value
+on the Rate Set version. A per-grade value is retained only as an explicit exception: blank inherits
+the Rate Set version value, and explicit zero remains zero. The effective value, its source and the
+Rate Set version are frozen at Send (CDM-22).
+
+Application labels and calculation-result labels must distinguish customer credit-period interest
+from supplier paper-credit cost so that the two cannot be read as one.
+
+## CDM-42 — Plant flute profiles and take-up factors
+
+**Added by Amendment 01, A-07 (Product Owner, 2026-09-06). Approved in principle; not implemented.**
+
+Flute take-up factors are governed, plant-owned, versioned values, not code constants. No flat
+factor list is approved for migration: the sources conflict, and Nagpur C is 1.45 in the Operations
+Master against 1.47 in the quotation template and the current application.
+
+The package is prepared after S8 and must carry plant-specific profile identity, approved immutable
+versions, strictly positive factors, an absent reference for "no flute" rather than a zero
+multiplier, no silent fallback of an unknown or malformed flute code to 1.0, controlled
+normalisation of case and whitespace, and calculation and snapshot provenance. A plant-by-plant
+reconciliation table and a named operational owner per value are required before authorisation.
+Machine, station, process-route, scheduling, capacity, shop-floor, QC and procurement scope remain
+outside this and every current slice.
 
 ---
 
