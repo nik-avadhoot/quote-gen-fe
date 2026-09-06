@@ -3829,3 +3829,175 @@ Every required S4 gate is now met, G-B included. S4 is **implementation complete
 Nothing pushed — both repositories remain local-only. `BatchProfileBar.jsx` and
 `docs/commercial-intelligence-decisions.md` were never touched, staged or committed at any point, and
 Commercial Intelligence remains excluded.
+
+---
+
+# S5 — Commercial masters and Pricing Basis: CLOSED
+
+**Date:** 2026-09-05/06. **Performed by:** SR DEV under Product Owner authorisation to proceed
+through canonical S5, including authorised destructive replay on the experimental project.
+
+**This section supersedes the S4 status block above.** S4 remains closed; S5 is now closed too.
+**S6 and later are not begun and require separate approval.**
+
+## 1. Pre-flight
+
+| Check | Result |
+|---|---|
+| Backend / frontend | `878f871` clean, 22 unpushed / `5ceba1e`, 22 unpushed with the two preserved items |
+| G-A on entry | 77 ⇄ 77, fingerprint `6021ecf6dc91dbbc8ac98a5b61381207` identical |
+| Regression on entry | **389 / 389** |
+| Live structure | 21 public tables, 2 active governed identities, `btree_gist` **not** installed |
+| Backend process | started after every `.py` mtime — running application matches source |
+
+## 2. Scope delivered
+
+**Family D — five master families in one shape** (§4.4): a set row for identity, an immutable
+version row as the approvable unit, entry rows where needed. Group-wide: `sectors`,
+`sector_versions`, `calculation_default_versions`, `payment_interest_map_entries`. Plant-owned:
+`rate_sets`, `rate_set_versions`, `rate_entries`, `freight_sets`, `freight_set_versions`,
+`freight_entries`.
+
+**Family E** — `pricing_basis_releases`, plus `btree_gist` and the three workflow operations.
+
+**Eleven tables, one extension, 32 public tables in total.**
+
+## 3. The rules made structural rather than documented
+
+| Rule | How | Gate |
+|---|---|---|
+| **The transition matrix** | A `BEFORE` trigger, not policies. A policy checks `USING` against the old row and `WITH CHECK` against the new one independently, so their conjunction is the cartesian product of allowed old and new states and **can never express a transition**. A trigger sees `OLD` and `NEW` together and fires for every role, including the BYPASSRLS ones no policy reaches | MD-12…19, MR-10…15a, PB-16…20 |
+| **CDM-18 closed list** | `ck_pime_closed_list` restricts `credit_days` to 30/45/60/90. A value outside the approved list **cannot be stored at all**. No band column, no `is_open_ended`: lookup is exact match, and a miss falls to `interest_fallback_pct` = 0.500, never 1.500 | MD-9…10b |
+| **CDM-17 silent zero** | `freight_entries.rate` is `not null` with **no default**, so a missing origin/destination pair is **absent**, not zero. Closed by omission, which is stronger than closing it by convention | MR-6/6a |
+| **Sector Margin ruling** | `margin_pct not null` — there is no "sector without a margin" state to represent — while waste and conversion stay nullable because null there means *inherit* | MD-6/6a |
+| **CDM-26 default exclusivity** | A **partial exclusion constraint** over `btree_gist`: approved alternatives may overlap freely, approved defaults may not. Chosen over an RPC check because §2 requires enforcement rather than documentation | PB-14/15/15a |
+| **Approval attribution** | Written by the trigger from the session; a client-supplied `approved_by` is overwritten, and an edit may not set the approval fields at all | MD-12a/14a, MR-11a, PB-13a |
+| **Second-person approval** | `propose_commercial_master` never confers approval, at group or plant scope | MD-13, MR-10, PB-12 (N-P1) |
+
+## 4. Two decisions taken inside the slice
+
+**V-3 resolved, the stronger way.** §17.3 left open whether *"all Release components must already be
+approved"* could rest on the approval RPC plus a pgtap pairing, or needed a trigger. It cannot be a
+`CHECK` — no subqueries. An RPC-only check is bypassed by any later write path that forgets it and by
+every BYPASSRLS role. **S5 adds the trigger**, and PB-9a proves it by refusing the same write made
+**as the table owner**, where an RPC check would never have been consulted.
+
+**Amendment 3 applied and strengthened.** The polymorphic components table with no foreign key is
+replaced by four typed `not null` FKs, which also enforces CDM-26's arity. Beyond §4.5, the two
+plant-owned components take **composite** FKs binding the Release's own `plant_id`, so a NAG Release
+citing a PUN rate version is structurally impossible (PB-10) rather than merely checked. This is the
+same §5 technique and the same declared deviation accepted in S4.
+
+**CDM-27 self-approval** is permitted but never silent: propose-only cannot approve (PB-12); holding
+both may, and the row records `self_approved` (PB-21/N-P8). The `audit_events` row §7.5 also
+describes belongs to Family H and is **carried forward to the audit phase**.
+
+## 5. Defects found by the suites and fixed in-slice
+
+Both recorded rather than squashed, because each is a lesson.
+
+1. **A DELETE-covering guard contradicted the S4-1 standard.** The Payment Terms map guard fired on
+   `DELETE`, which S4-1 had explicitly ruled out: DELETE is governed by grant and policy absence, not
+   by triggers. It also broke the §4.9 cascade, and the fixture could not tear itself down — which is
+   how it surfaced. Narrowed to INSERT/UPDATE; MD-19 and MD-3/3a still hold.
+
+2. **Three Pricing Basis assertions were not measuring what they claimed.** PB-6a matched a literal
+   the planner renders with doubled parentheses. **PB-10 would have passed for the wrong reason** —
+   the PUN component it cited was draft, so the component guard rejected it before the composite FK
+   was ever reached, proving nothing about plant binding; the component is now approved first. PB-20
+   expected an error where correct behaviour is *silence*, because an RLS-filtered `UPDATE` is not an
+   error; it now reads the row back, and PB-20a adds the table-owner case.
+
+   This is the failure mode the S4-5 review named: **a denial is worthless as evidence unless you
+   know which rule produced it.** Every denial gate in S5 asserts its SQLSTATE, and distinguishes
+   42501 (capability) from 23514 (illegal move) deliberately.
+
+3. **A property worth recording, found by a fixture failure:** *you cannot approve what you cannot
+   read.* PostgreSQL applies SELECT policies to an `UPDATE … WHERE` as well as the UPDATE policy's
+   own `USING`, so an approver with no read capability matches no row on the read-gated group masters
+   and **silently changes nothing**. Least privilege on the read side constrains the write side too.
+
+## 6. G-B — replayed again, and this time with NO repairs
+
+Authorised destructive drop-and-replay on the experimental project, same method as S4.
+
+**Pre-flight:** application objects enumerated individually (32 tables, 3 schemas, 1 event trigger);
+no Supabase-managed schema named; extension-owned functions excluded via `pg_depend deptype='e'`;
+drop *and* replay in **one transaction**; `auth.users` counted before and after **inside** it. The
+four dispositioned bodyless migrations were staged from their local files and each **MD5-verified
+against the file** first, so this was a true **88/88**, not an 84/84.
+
+| Measure | After the replay |
+|---|---|
+| Migrations applied | **88 / 88** |
+| `auth.users` | **2 — untouched**, guard satisfied inside the transaction |
+| Public tables rebuilt | **32**; 3 schemas; `ensure_rls`; `btree_gist`; the exclusion constraint present |
+| `public.profiles` | **absent** — S3(c) is in the set |
+| Application data | **0 everywhere** |
+| **`tests.run_all()` on that clean replay** | **516 / 516, zero failures** |
+
+> **The clean replay needed no repairs.** S4's G-B found four suites that borrowed an identity; the
+> S4-6 rule — *fixtures mint, never borrow* — was applied to all three S5 suites from the outset, and
+> they ran to 516/516 against a database containing **zero application identities**. The rule earned
+> its keep on the first slice written after it.
+
+## 7. Post-replay results
+
+| Evidence | Result |
+|---|---|
+| `tests.run_all()` after restoration | **516 / 516, zero failures** |
+| Backend acceptance suites | **171 pass** (25 / 23 / 28 / 29 / 66) |
+| Frontend engine goldens | all three pass |
+| Direct REST/RPC probes | **36 / 36 refused**; backend `/health` ok, unauthenticated `/admin/users` → 401 |
+| Security advisors | **2 — the accepted carry-forward items.** No new finding |
+| Performance advisors | 8 INFO `unused_index` on empty tables. **No unindexed-FK finding** |
+| **G-A** | **88 local ⇄ 88 remote**, 84 bodied, 4 dispositioned bodyless. Fingerprint `072a4291ff1df481e5660d4f4a1e9009`, **identical on both sides** |
+
+## 8. Restoration — with last round's fidelity gap closed
+
+Restored in one transaction, refusing to run if `app_users` was not empty. Grants resolved by
+`plant_code` and `capability_key`, since ids were re-seeded.
+
+| | Restored |
+|---|---|
+| `NikunjRL` | active — `administer_users`; NAG/PUN/KOL × (`make_quote`, `plant_access`) |
+| `ClaudeCode` | active — NAG/PUN/KOL × (`make_quote`, `plant_access`) |
+| **`granted_by`** | **captured and restored this time** — 6/6 plant grants attributed for each identity. S4's declared gap is closed |
+| Operational baseline | `edit_lock_stale_seconds = 900`, `scope_type = 'group'` |
+| Invitation | 1, consumed, relinked |
+| Integrity | 0 orphans, 0 synthetic identities, `auth.users` still 2, scratch schema dropped |
+
+**One limitation remains, unchanged and declared:** internal `app_users.id` values differ because the
+identity sequence restarted. Auth linkage, display names, statuses and creation instants are
+preserved, and the backend resolves callers by `auth_user_id`.
+
+**One interruption, recorded honestly:** the restore statement returned a network error. The write had
+committed; state was verified before anything further was done, and the restore's own
+"refusing to restore over existing identities" guard would have made a blind retry safe.
+
+## 9. Scope boundaries observed
+
+- **Seeding is S11, not S5.** `DEFAULT_SECTORS_DATA` and the initial Payment Terms map values are
+  import-map work. S5 creates the schema and the closed-list constraint; the four approved rates are
+  proved through fixtures (MD-9/9a/9b), not written as production rows.
+- **Amend/Reprice Release reuse (CDM-25)** needs `quote_revisions` and belongs to **S9**. S5 enforces
+  what is decidable now: a withdrawn Release is terminal and is no longer any plant's automatic
+  default (PB-19b/PB-20).
+- **`audit_events` for self-approval** belongs to Family H and the approved audit phase.
+- **Commercial Intelligence** remains entirely excluded.
+
+## 10. Commits
+
+| Commit | Migrations | Contents |
+|---|---|---|
+| `699b2a7` **S5** | 11 | Family D group masters + tests + guard fix; Family D plant masters + tests; Family E + RPCs + tests + two fix migrations; suite registration |
+
+## 11. Position
+
+**S5 is closed.** 516/516 both on the replayed database with zero identities and again after
+restoration; G-A 88 ⇄ 88 with one fingerprint identical on both sides; advisors at the two accepted
+carry-forward items.
+
+**S6 and later are not begun and require separate approval.** Nothing is pushed — both repositories
+remain local-only. `BatchProfileBar.jsx` and `docs/commercial-intelligence-decisions.md` were never
+touched, staged or committed at any point.
