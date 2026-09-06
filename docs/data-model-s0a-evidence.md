@@ -4001,3 +4001,201 @@ carry-forward items.
 **S6 and later are not begun and require separate approval.** Nothing is pushed — both repositories
 remain local-only. `BatchProfileBar.jsx` and `docs/commercial-intelligence-decisions.md` were never
 touched, staged or committed at any point.
+
+---
+
+# S5 security-evidence clarification, and S6 — Batch workspace: CLOSED
+
+**Date:** 2026-09-06. **Performed by:** SR DEV under Product Owner authorisation.
+**Supersedes the S5 status block above.** S4 and S5 remain closed; S6 is now closed.
+**S7 and later are not begun and require separate approval.**
+
+## Part 1 — the S5 security-evidence clarification
+
+The S5 authorisation requires evidence for **anonymous, inactive, missing-capability and
+wrong-plant** denial. Auditing the S5 gate inventory against that list found two gaps, and it is
+worth naming what my own closure got wrong:
+
+| Persona | Evidence at S5 closure |
+|---|---|
+| Anonymous | 12 catalogue-level gates (`has_table_privilege`) |
+| Missing capability | MD-11, MR-10, PB-12 and others |
+| Wrong plant | MR-8 ×6, PB-22/23 |
+| **Inactive** | **nothing — zero gates** |
+| **Direct HTTP attack** | **none touching any S5 table or operation** |
+
+My S5 closure reported *"36/36 REST probes refused"*. That was true, and it was the **S4** matrix —
+it exercised no Family D or E table and none of the three Pricing Basis operations. The number was
+accurate and the claim it appeared to support was not.
+
+**Both were evidence gaps, not defects.** Behaviour was probed before any gate was written: a
+deactivated caller already saw zero rows on all eleven tables, could not create or approve a master,
+and could not reach the RPCs. Twenty **DS** gates now hold it permanently, with an ACTIVE baseline
+first so every zero is denial rather than emptiness, and with the caller granted every relevant
+capability at NAG so **deactivation is the only thing that can be doing the denying**.
+
+**A 52-check HTTP probe now covers the S5 surface** — anon GET/POST/PATCH/DELETE on all eleven
+tables, anon RPC on all three operations, and unroutability of the helper and private
+implementations. **52/52 refused.**
+
+**It found a defect in itself, and that is the part worth keeping.** Three PATCH probes returned
+`400` rather than `401`, because the body named a `status` column those three tables do not have.
+PostgREST rejected the malformed request **before evaluating authorization** — so a looser regex
+would have scored them as refusals and proved nothing. The probe now sends a column each table
+actually has. This is the same failure mode the S4-5 review named and S5's own PB-10 repeated.
+
+**`has_any_plant_cap` disclosure, qualified rather than overstated:** one boolean about the **caller
+only**, naming no plant and exposing no grant row, unreachable through the exposed API — but it does
+tell an authenticated caller their own capability shape one bit at a time, which is strictly less
+than the capability vocabulary and their own grants already give them.
+
+## Part 2 — S6 scope, confirmed from the canonical documents
+
+§16.2: *"S6 — batch core | 3 — (a) family F tables + RLS + composite FKs; (b) SET triggers + counter;
+(c) locks + CAS RPCs | Every §5 composite FK rejects its negative case; active empty SET impossible;
+racing reclaims yield one winner; heartbeat leaves content_version untouched."*
+
+Ten tables: `batches`, `batch_collaborators`, `batch_profile_versions`, `batch_edit_locks`,
+`pricing_groups`, `delivery_groups`, `batch_rows`, `batch_sets`, `batch_set_memberships`,
+`batch_calculations`. **42 public tables in total.**
+
+## Part 3 — what S6 makes structural
+
+**Five §5 invariants become composite foreign keys.** `fk_row_batch_plant` and `fk_row_sku_plant`
+both bind `batch_rows.plant_id`, so a SKU's plant and its Batch's plant are not *compared* but
+**equal**. Each has a gate exercising its negative with an asserted SQLSTATE, so no composite FK is
+credited for a rejection some other constraint produced.
+
+| Invariant | Mechanism | Gate |
+|---|---|---|
+| 5.1 SKU plant == Batch plant | two FKs binding one column | BF-8 |
+| 5.3 Row and Group in one Batch | `fk_row_pg (pricing_group_id, batch_id)` | BF-9 |
+| 5.4 Basis in the same Group | `fk_pg_freight_basis (basis_id, id)` | BF-14/14a |
+| 5.8 Version belongs to the SKU | `fk_row_sku_version (sku_version_id, sku_id)` | BF-10 |
+| 5.6 SET parent is a Box | `fk_set_box_is_box (box_row_id, box_row_type)` | BS-3 |
+| 5.5 Components in one Batch | `fk_bsm_row (row_id, batch_id)` | BS-5 |
+| A-11 Basis is undeletable | `on delete restrict` | BF-15 |
+
+**Two deliberately are not, and §5 argues both.** §5.2 — the SKU's Customer must be in the Batch's
+Family **at row addition** — cannot be a composite FK, because it would enforce *continuously* and
+make an effective-dated Family reassignment either fail or cascade, destroying work CDM-06 protects.
+**BF-13 proves the point directly: the reassignment succeeds AND the existing row survives**, which a
+composite FK would have made impossible. §5.7 likewise — **BF-17** publishes the Construction and
+shows the open row still pinned, the exact case a cascading denormalised status would have broken.
+
+**SET cardinality (§5.9/CDM-20).** An active empty SET is impossible (BS-1). A SET is born dissolved,
+promoted by its first component, dissolved on losing its last — always **on the same row**, so
+identity and label survive reactivation (BS-7a/BS-9a). The counter is recomputed by the database and
+a client-supplied value discarded (BS-6). A-16's normalised unconditional index means a dissolved SET
+keeps reserving its code case-insensitively (BS-8).
+
+**A-23 is structural.** `batch_edit_locks` has **no `content_version` column at all**, so "the
+heartbeat does not advance content_version" is not a discipline that could be forgotten — BL-1
+asserts the absence, BL-3 the behaviour. A-24: staleness is computed server-side, so a skewed client
+clock cannot manufacture it (BL-8a).
+
+**Reclaim is one conditional statement, and BL-10 proves one winner:** the replayed reclaim names the
+same expected holder, is authorised, and still loses; BL-10a confirms the first winner still holds it.
+
+## Part 4 — two things stated honestly rather than overclaimed
+
+**`content_version` is not a complete CAS on its own.** The trigger refuses a client-set value and
+always increments, so the token is trustworthy. What it **cannot** do is distinguish "the client sent
+the version it read" from "the client sent nothing" — both leave `NEW = OLD`. So CAS is the
+**caller's filter**, PostgREST-style (`?id=eq.1&content_version=eq.3`), and BL-7/BL-7a test both
+halves: the stale write changing nothing, the fresh one succeeding.
+
+**Declared deviation.** §4.6 gives `batch_sets` `status default 'active'` alongside
+`active_component_count default 0` — but those two defaults violate `ck_set_active_has_component`
+immediately, so such a row could never be inserted at all. The check encodes CDM-20 and is the
+authority; the default is what gives. `status` defaults to `'dissolved'`, which is also the truthful
+state of a componentless SET.
+
+## Part 5 — one divergence found and corrected in-slice
+
+`reclaim_batch_lock` first gated on `can_read_batch`, which would have let a **plain collaborator**
+take a stale lock. CDM-32 names two acts and only two: *"Owner reclaim and Checker/Admin takeover."*
+A collaborator reclaim is not among them.
+
+Following the working rule — flag divergence rather than diverge — the narrower reading ships:
+reclaim requires the **owner**, or the authority that may also take over (`check_quote` at that
+plant, or `administer_users`).
+
+> **For the Product Owner, not decided here:** whether an authorised **collaborator** should also be
+> able to reclaim a stale lock is a real question — without it, work stalls when an owner goes away
+> mid-edit. It is a product decision and CDM-32 does not grant it.
+
+## Part 6 — three fixture defects, all caught by accepted rules
+
+Recorded rather than squashed, because in each case an existing rule caught a later slice's fixture
+and **the fixture moved, not the rule**:
+
+1. `ref_private.allocate_reference` refused a caller with no application identity — a permanent
+   reference must be attributable (CDM-34). The fixture adopted a real identity.
+2. `reassign_party_family` refused a caller without `manage_customer_master`. The fixture was granted
+   it, rather than reaching around the RPC — going around would have proved the trigger tolerates a
+   membership change but not that the **approved path** still works.
+3. `guard_construction_permanence` refused to un-publish a Construction. The revert was removed; a
+   permanent code is never released and published is terminal.
+
+## Part 7 — G-B, replayed again with NO repairs
+
+Same authorised destructive method. Application objects enumerated individually (42 tables,
+3 schemas, 1 event trigger); no Supabase-managed schema named; extension-owned functions excluded;
+drop *and* replay in **one transaction**; `auth.users` guarded inside it. The four dispositioned
+bodyless migrations were staged from their local files and each **MD5-verified against the file**,
+making this a true **100/100**.
+
+| Measure | After the replay |
+|---|---|
+| Migrations applied | **100 / 100** |
+| `auth.users` | **2 — untouched** |
+| Public tables rebuilt | **42**; 3 schemas; `ensure_rls`; `btree_gist`; the lineage sequence |
+| `public.profiles` | **absent** |
+| Application data | **0 everywhere** |
+| **`tests.run_all()` on that clean replay** | **639 / 639, zero failures** |
+
+> **Second consecutive replay needing no repairs.** The mint-never-borrow rule from S4-6 held again,
+> across three new suites written after it.
+
+## Part 8 — results
+
+| Evidence | Result |
+|---|---|
+| `tests.run_all()` after restoration | **639 / 639** — 536 accepted plus BF 63, BS 15, BL 25 |
+| Backend acceptance suites | **171 pass** (25 / 23 / 28 / 29 / 66) |
+| Frontend engine goldens | all three pass |
+| REST/RPC probes | **36/36** (S4) and **52/52** (S5) refused; backend `/health` ok, unauthenticated `/admin/users` → 401 |
+| Security advisors | **2 — the accepted carry-forward items** |
+| Performance advisors | 14 INFO `unused_index` on empty tables. **No unindexed-FK finding** |
+| **G-A** | **100 local ⇄ 100 remote**, 96 bodied, 4 dispositioned bodyless. Fingerprint `50b7a8f93e4bf88de6425cef0591a41c`, **identical on both sides** |
+| Residue | 0 orphans, 0 synthetic identities, scratch schema dropped |
+
+**Restoration:** both governed identities active with their exact grants, all 12 plant grants
+attributed. The id-renumbering limitation remains as declared in S5.
+
+## Part 9 — scope boundaries observed
+
+- **Batch calculation writes are S7.** `batch_calculations` ships read-only: no write policy and no
+  write grant, so it is unwritable by every role reaching it through the API today.
+- **Quote Items and snapshots are S9**; `uk_row_lineage` exists as the legal FK target they need.
+- **The resolver and engine changes are S7/S8** and are untouched — the three engine goldens are
+  unchanged.
+- **Commercial Intelligence** remains entirely excluded.
+
+## Part 10 — commits
+
+| Commit | Migrations | Contents |
+|---|---|---|
+| `5131462` **S5-5** | 1 | The inactive persona and helper hygiene for Family D/E |
+| `a2b735d` **S6** | 11 | Family F, SET counter, locks and concurrency, plus the reclaim correction |
+
+## Part 11 — position
+
+**S6 is closed.** 639/639 both on the replayed database with zero identities and again after
+restoration; G-A 100 ⇄ 100 with one fingerprint identical on both sides; advisors at the two accepted
+carry-forward items.
+
+**S7 and later are not begun and require separate approval.** Nothing is pushed — both repositories
+remain local-only. `BatchProfileBar.jsx` and `docs/commercial-intelligence-decisions.md` were never
+touched, staged or committed at any point.
