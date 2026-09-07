@@ -12,6 +12,7 @@
     "test:draft": "node scripts/draft-fixtures.mjs",
     "test:resolver": "node scripts/resolver-fixtures.mjs",
     "test:capabilities": "node scripts/capabilities-fixtures.mjs",
+    "test:family-actions": "node scripts/customer-family-actions-fixtures.mjs",
     "preview": "vite preview",
     "ref:case4": "node scripts/case4-reference.mjs"
   },

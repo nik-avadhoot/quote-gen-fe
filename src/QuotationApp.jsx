@@ -66,7 +66,7 @@ function QuotationApp(){
           {tab==="freight"&&<FreightTab/>}
           {tab==="users"&&role==="admin"&&<UserManagementTab showToast={showToast}/>}
           {tab==="plants"&&isFeatureEnabled("u1_producing_plants")&&<ProducingPlantsScreen/>}
-          {tab==="families"&&isFeatureEnabled("u1_customer_families")&&hasCapability(profile,"read_party_master")&&<CustomerFamiliesScreen/>}
+          {tab==="families"&&isFeatureEnabled("u1_customer_families")&&hasCapability(profile,"read_party_master")&&<CustomerFamiliesScreen showToast={showToast}/>}
         </div>
       </div>
     </div>
