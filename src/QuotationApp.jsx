@@ -10,6 +10,7 @@ import QuoteItemsTab from "./tabs/QuoteItemsTab.jsx";
 import CostingTab from "./tabs/costing/CostingTab.jsx";
 import BatchEntryTab from "./tabs/batch/BatchEntryTab.jsx";
 import UserManagementTab from "./tabs/UserManagementTab.jsx";
+import ProducingPlantsScreen from "./tabs/ProducingPlantsScreen.jsx";
 
 // ── Shell chrome (Phase 8 refactor) ──────────────────────────────────────
 import Sidebar from "./ui/Sidebar.jsx";
@@ -61,6 +62,7 @@ function QuotationApp(){
           {tab==="defaults"&&<DefaultsTab/>}
           {tab==="freight"&&<FreightTab/>}
           {tab==="users"&&role==="admin"&&<UserManagementTab showToast={showToast}/>}
+          {tab==="plants"&&<ProducingPlantsScreen/>}
         </div>
       </div>
     </div>

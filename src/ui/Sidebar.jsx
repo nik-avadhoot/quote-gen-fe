@@ -21,6 +21,7 @@ export default function Sidebar(){
     ["rates","💰","Rate Master"],
     ["freight","🚚","Freight Rates"],
     ["defaults","🛠","Defaults"],
+    ["plants","🏭","Producing Plants"],
     ...(role==="admin"?[["users","👥","Users"]]:[]),
   ];
   return(
