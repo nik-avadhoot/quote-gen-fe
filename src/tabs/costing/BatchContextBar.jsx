@@ -21,16 +21,23 @@
 // Sticky by structure: between the START/REVIEW strip and the panels, outside
 // both scroll containers, so it stays put while SKU inputs scroll.
 //
-// The Payment → Interest rule is Batch Entry's, unchanged: choosing a term
-// rewrites Interest from the same map. Interest has no independent editor in
-// either mode, and always shows the STORED value.
+// S7(c). The Payment → Interest rule is Batch Entry's, and it changed in both
+// places at once: choosing a term no longer rewrites Interest from a map. The
+// term is the INPUT and the percentage is a RESOLVED OUTPUT, derived from the
+// approved annual rate. Interest still has no independent editor here; what it
+// shows is now the RESOLVED value and its source, not a stored literal.
 // ═══════════════════════════════════════════════════════════════════════════
 import { PLANTS } from "../../data/defaults.js";
+import { resolveField, resolveInterest } from "../../engine/resolveAuthority.js";
 import { useAppState } from "../../state/AppStateContext.js";
 import { C } from "../../theme.js";
 
-const PAY_INTEREST={"30":0.5,"45":0.75,"60":1.0,"90":1.5};
-const PAY_OPTS=[["30","≤30d · 0.5%"],["45","≤45d · 0.75%"],["60","≤60d · 1.0%"],["90","≤90d · 1.5%"]];
+// S7(c) SITE 5. PAY_INTEREST is gone: it was the second copy of the withdrawn
+// map, and the `|| 1.5` beside it was the forbidden fallback CDM-18 names
+// explicitly. The options no longer quote a percentage either, because the
+// percentage is not a property of the term any more - it is derived, and the
+// read-out shows it once, resolved, with its source.
+const PAY_OPTS=[["30","≤30d"],["45","≤45d"],["60","≤60d"],["90","≤90d"]];
 const CUST_OPTS=[["existing","Existing"],["new","New"],["strategic","Strategic"],["spot","Spot"]];
 const PRICE_OPTS=[["unknown","Unknown"],["sensitive","Sensitive"],["premium","Premium"],["tender","Tender"]];
 
@@ -67,17 +74,25 @@ export default function BatchContextBar(){
   const editable=profileDraft!==null&&!activeBatchRowId;
   const v=contextValues||{};
 
-  // Override marking, identical rule to BatchProfileBar:139 — compare against
-  // the sector master resolved from THIS mode's sector. Margin is not
-  // sector-derived, so it compares against the literal 8 and says "Default".
+  // Override marking, identical rule to BatchProfileBar — and identical BECAUSE
+  // both now ask the same resolver instead of each restating the chain. This
+  // block used to spell out `sector ?? literal` by hand and to note that "margin
+  // is not sector-derived, so it compares against the literal 8"; margin has a
+  // Sector tier in CDM-19 and now goes through it, which resolves to the same 8
+  // today because the browser-local Sector master carries no margin column.
   const sd=sectors.find(x=>x.code===v.sector);
-  const def={convRate:sd?sd.convBox:7,waste:sd?sd.wasteCBB:5,
-    convRatePP:sd?sd.convPP:12.5,wastePP:sd?sd.wastePP:5,margin:8,marginPP:8};
-  const isOvr=k=>{const x=v[k];return x!==undefined&&x!==null&&x!==''&&+x!==+def[k];};
-  const sectorial=k=>k!=="margin"&&k!=="marginPP";
+  const _inh=(field,isPP)=>resolveField(field,
+    {rowOverride:'',batchProfile:{},sector:sd,isPP}).value;
+  const def={convRate:_inh('convRate',false),waste:_inh('waste',false),
+    convRatePP:_inh('convRate',true),wastePP:_inh('waste',true),
+    margin:_inh('margin',false),marginPP:_inh('margin',true)};
+  // Any stored value is an override, even one that equals the inherited number:
+  // it is still a value someone typed and it still survives a Sector change.
+  // Same rule as BatchProfileBar, for the same reason.
+  const isOvr=k=>{const x=v[k];return x!==undefined&&x!==null&&x!=='';};
   const tip=k=>isOvr(k)
-    ?`Overriding ${sectorial(k)?"sector default":"default"} (${def[k]})`
-    :`${sectorial(k)?"Sector default":"Default"}: ${def[k]}`;
+    ?`Override — stored on this Batch. Clear it to inherit ${def[k]}`
+    :`Inherited: ${def[k]}. Nothing is stored on this Batch for this field`;
 
   const matrixFr=freight?.[v.plant]?.[v.delivery]??0;
   const frOvr=v.freightOverride!==''&&v.freightOverride!==undefined&&v.freightOverride!==null;
@@ -86,12 +101,10 @@ export default function BatchContextBar(){
   // ── writers (new-batch only) ────────────────────────────────────────────
   // Each is ONE action: the batch value moves, and the SKU value follows only
   // while it was still tracking the old default.
-  const pickSector=code=>{
-    const n=sectors.find(x=>x.code===code);
-    applyContextCascade({sector:code,waste:n?n.wasteCBB:5,convRate:n?n.convBox:7,
-      wastePP:n?n.wastePP:5,convRatePP:n?n.convPP:12.5},
-      {waste:"waste",convRate:"convRate",wastePP:"wastePP",convRatePP:"convRatePP"});
-  };
+  // S7(c) SITE 3. The mirror of Batch Entry's Sector select: it stamped the same
+  // four numbers into the context cascade. It now moves the Sector alone and lets
+  // the resolver answer, which is also what makes the two surfaces agree.
+  const pickSector=code=>applyContextCascade({sector:code});
   const pickPlace=(key,val)=>{
     const plant=key==="plant"?val:v.plant, deliv=key==="delivery"?val:v.delivery;
     const fr=freight?.[plant]?.[deliv];
@@ -100,8 +113,9 @@ export default function BatchContextBar(){
     applyContextCascade(fr===undefined?{[key]:val}:{[key]:val,freightOverride:fr});
   };
   // C7a: no skuMap for interest, for the same reason as freight above.
-  const pickPayment=code=>applyContextCascade(
-    {paymentDisc:code,interest:PAY_INTEREST[code]||1.5});
+  // S7(c) SITE 5. Writes the TERM only. An explicit Interest override survives a
+  // Payment Terms change (CDM-18), so this must not touch it.
+  const pickPayment=code=>applyContextCascade({paymentDisc:code});
 
   // Plain FUNCTIONS, not components: a component declared inside render gets a
   // new identity every render, so React would remount the input on every
@@ -185,14 +199,27 @@ export default function BatchContextBar(){
             {/* the unit is written ONCE, as Batch Entry writes it */}
             <span style={{fontSize:8,color:C.slateL}}>Rs/kg</span>
           </div>
-          <span style={rowLbl} title="Payment Terms → auto-sets Interest %">PT · Int</span>
-          {editable
-            ?<select value={v.paymentDisc||"30"} onChange={e=>pickPayment(e.target.value)}
-               style={{...inp(false,"100%"),cursor:"pointer"}}>
-               {PAY_OPTS.map(o=><option key={o[0]} value={o[0]}>{o[1]}</option>)}
-             </select>
-            :<span style={chip(false)} title="Interest is set by Payment Terms">
-               {v.paymentDisc?`≤${v.paymentDisc}d`:"—"} · {v.interest===''||v.interest==null?"—":`${v.interest}%`}</span>}
+          <span style={rowLbl} title="Payment Terms is the input; customer interest is derived">PT · Int</span>
+          {(()=>{
+            const r=resolveInterest({pricingGroup:{
+              paymentTermsDays:v.paymentDisc, interestOverridePct:v.interest}});
+            const ovr=r.source==="pricing_group";
+            const note=ovr
+              ? `Customer interest ${r.value}% — OVERRIDE stored on this Batch`
+              : `Customer interest ${r.value}% — derived from ${r.annualInterestPct}% p.a. `
+                + `on a ${r.dayCountBasis}-day year`;
+            return editable
+              ?<div style={{display:"flex",alignItems:"center",gap:4,minWidth:0}}>
+                 <select value={v.paymentDisc||"30"} onChange={e=>pickPayment(e.target.value)}
+                   title={note} style={{...inp(false,"100%"),cursor:"pointer"}}>
+                   {PAY_OPTS.map(o=><option key={o[0]} value={o[0]}>{o[1]}</option>)}
+                 </select>
+                 <span style={{fontSize:9,fontWeight:700,whiteSpace:"nowrap",
+                   color:ovr?C.amberD:C.slateL}}>{r.value}%</span>
+               </div>
+              :<span style={chip(false)} title={note}>
+                 {v.paymentDisc?`≤${v.paymentDisc}d`:"—"} · {r.value}%{ovr?" ovr":""}</span>;
+          })()}
         </div>
       </div>
 

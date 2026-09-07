@@ -175,7 +175,7 @@ export default function OutputPanel(){
                         .map(([k,l])=>`${l} ₹${(+spec[k]).toFixed(2)}`);
                       return active.length?" ("+active.join("·")+")":"";
                     })()}`,r.addOns],
-                  ["Interest",r.intC],
+                  ["Customer Interest",r.intC],
                   [`Freight (${r.frRate} Rs/kg)`,r.fr],
                   ["Margin ("+spec.margin+"%)",r.marginAmt]].filter(Boolean).map(([l,v])=>(
                   <tr key={l} style={{borderBottom:`1px solid ${C.border}`}}>

@@ -14,6 +14,7 @@
 // byte-identical to the monolith; only the surrounding closure changed.
 // ═══════════════════════════════════════════════════════════════════════════
 import { buildSpecFromRow, calcCosting, checkSpecCompliance } from "../engine/costing.js";
+import { resolveField, resolveInterest } from "../engine/resolveAuthority.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
 import { findDuplicate } from "../lib/constructionIdentity.js";
 import { parseImportedExcel } from "../export/importExcel.js";
@@ -218,17 +219,37 @@ export function useQuoteActions(st){
     const dimRow=autoCalcPPDims(row);
     const isPP=isPPType(dimRow.itemType); // R-2
     // Unified waste/conv: single column interpreted by row type
-    const rowWaste=row.wasteConv_waste; // blank = inherit profile
+    const rowWaste=row.wasteConv_waste; // blank = inherit
     const rowConv=row.wasteConv_conv;
-    const profWaste=isPP?(batchProfile.wastePP??5):(batchProfile.waste??5);
-    const profConv=isPP?(batchProfile.convRatePP??12.5):(batchProfile.convRate??7);
-    const effWaste=rowWaste!==""&&rowWaste!=null?+rowWaste:profWaste;
-    const effConv=rowConv!==""&&rowConv!=null?+rowConv:profConv;
+    // ── S7: THE ONE RESOLVER, AND THE TIER THIS SURFACE NEVER HAD ──────────
+    // These lines used to read `row ?? profile ?? literal`. Costing read
+    // `batch ?? sector ?? literal`. The Sector was missing HERE - at the sole
+    // CalcGate, the gate that actually produces a Quote - so a Batch with a
+    // blank profile field costed one way on screen and another way at Send.
+    // Both surfaces now call resolveField and the disagreement is closed (B-1).
+    const _sector=sectors.find(x=>x.code===batchProfile.sector);
+    const _ctx={batchProfile,sector:_sector,isPP};
+    const effWaste=resolveField('waste',{..._ctx,rowOverride:rowWaste}).value;
+    const effConv =resolveField('convRate',{..._ctx,rowOverride:rowConv}).value;
     const sp=buildSpecFromRow(dimRow,constEntry,batchProfile);
     if(!sp)return null;
-    // Apply row-level overrides on top of buildSpecFromRow output
+    // Apply the resolved values on top of buildSpecFromRow output
     sp.waste=isPP?sp.waste:effWaste; sp.convRate=isPP?sp.convRate:effConv;
     sp.wastePP=isPP?effWaste:sp.wastePP; sp.convRatePP=isPP?effConv:sp.convRatePP;
+    // Margin and Interest come from the same resolver rather than from
+    // buildSpecFromRow's own defaults, so there is exactly one answer per field.
+    //
+    // ⚠️ ONE DELIBERATE BEHAVIOUR CHANGE, flagged rather than slipped in.
+    // buildSpecFromRow resolves a PP row's margin as `marginPP ?? margin ?? 8` -
+    // an undocumented fourth tier. CDM-19 gives `row → Batch Box|PP → Sector →
+    // system`, with no fall-through from the PP default to the Box one. The
+    // resolver implements the canonical chain. It was unreachable before, because
+    // the profile always carried a marginPP; clearing a field now stores null, so
+    // it becomes reachable and had to be settled rather than left ambiguous.
+    sp.margin=resolveField('margin',{..._ctx,rowOverride:row.marginOverride}).value;
+    sp.interest=resolveInterest({pricingGroup:{
+      paymentTermsDays:batchProfile.paymentDisc,
+      interestOverridePct:batchProfile.interest}}).value;
     // WAVE 3: no row-level Interest/Freight override. sp already carries the
     // canonical Batch figures from buildSpecFromRow, and calcCosting resolves
     // freight as override-else-matrix (getFreightRate, engine/costing.js:29-32).

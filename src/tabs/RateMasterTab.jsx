@@ -106,21 +106,21 @@ export default function RateMasterTab(){
 
           <div style={{width:1,height:22,background:"#6A9FD4",flexShrink:0}}/>
 
-          {/* Blanket Interest (credit cost %) */}
-          <span style={{fontSize:10,fontWeight:700,color:"#2E6094",whiteSpace:"nowrap"}}>Credit%</span>
+          {/* Blanket SUPPLIER paper-credit cost (CDM-41). NOT customer interest. */}
+          <span style={{fontSize:10,fontWeight:700,color:"#2E6094",whiteSpace:"nowrap"}}>Paper Credit%</span>
           <input type="number" step="0.25" value={blanketInterest} disabled={role!=="admin"}
             onChange={e=>setBlanketInterest(+e.target.value)}
             style={{width:44,padding:"3px 4px",border:`1px solid ${C.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:mono}}/>
           {role==="admin"&&<button onClick={()=>{
             // D-8b: as above — every grade, one click, no confirmation.
-            const _c=buildBlanketConfirm({kind:"set",label:"Credit%",
+            const _c=buildBlanketConfirm({kind:"set",label:"Paper Credit%",
               valueText:`${(+blanketInterest).toFixed(2)}%`,
               affected:rates.length,total:rates.length,
               currentValues:rates.map(r=>({text:`${r.desc||r.code} ${(+r.interest||0).toFixed(2)}%`,value:+r.interest||0}))});
             if(!_c.actionable){showToast(_c.text,'info',5000);return;}
             if(!window.confirm(_c.text))return;
             setRates(prev=>prev.map(r=>({...r,interest:blanketInterest})));
-            touchRateDate();showToast(`Credit ${blanketInterest}% → all grades`,'info');
+            touchRateDate();showToast(`Paper credit ${blanketInterest}% → all grades`,'info');
           }} style={{padding:"2px 7px",borderRadius:4,border:`1px solid ${C.border}`,
             background:C.white,color:C.slateM,fontSize:9,fontWeight:600,cursor:"pointer"}}>All</button>}
         </div>
@@ -166,7 +166,7 @@ export default function RateMasterTab(){
         }} style={{padding:"4px 14px",borderRadius:5,border:"none",background:C.green,
           color:C.white,fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
           Add Grade</button>
-        <span style={{fontSize:9,color:C.slateL,marginLeft:4}}>Eff Rate = Price + Credit% − Disc + Freight</span>
+        <span style={{fontSize:9,color:C.slateL,marginLeft:4}}>Eff Rate = Price + Paper Credit% − Disc + Freight</span>
       </div>}
 
       {/* ── Rate Master table ─────────────────────────────────────────────── */}
@@ -179,9 +179,9 @@ export default function RateMasterTab(){
       </div>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
         <thead><tr style={{background:C.slateM}}>
-          {["Grade","Description","Paper Price","Credit %","Discount","Freight","Eff Rate",...(role==="admin"?[""]:[])].map(h=>(
+          {["Grade","Description","Paper Price","Paper Credit %","Discount","Freight","Eff Rate",...(role==="admin"?[""]:[])].map(h=>(
             <th key={h} style={{padding:"6px 8px",color:C.white,fontSize:10,fontWeight:600,
-              textAlign:["Paper Price","Credit %","Discount","Freight","Eff Rate"].includes(h)?"center":"left"}}>{h}</th>))}
+              textAlign:["Paper Price","Paper Credit %","Discount","Freight","Eff Rate"].includes(h)?"center":"left"}}>{h}</th>))}
         </tr></thead>
         <tbody>{rates.map((row,i)=>{
           const gCreditPct=(row.interest!=null&&row.interest!=='')?+row.interest/100:CREDIT_PCT;
@@ -203,7 +203,7 @@ export default function RateMasterTab(){
                 ?<input value={row.interest??1.5} type="number" step="0.25" min="0" max="5"
                    onChange={e=>{setRates(prev=>prev.map((r,j)=>j===i?{...r,interest:+e.target.value}:r));touchRateDate();}}
                    style={{width:46,padding:"3px 4px",border:`1px solid ${C.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:mono}}
-                   title="Credit cost % for this grade"/>
+                   title="SUPPLIER paper-credit cost % for this grade — an exception to the Rate Set value. Blank inherits; 0 means cash terms. NOT customer Payment-Terms interest (CDM-41)"/>
                 :<span style={{fontFamily:mono,color:C.slateL,fontSize:11}}>{(row.interest??1.5).toFixed(2)}%</span>}
             </td>
             <td style={{padding:"4px 8px",textAlign:"center"}}>{fld("disc",55,0.25)}</td>

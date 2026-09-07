@@ -153,7 +153,7 @@ export default function QuoteItemsTab(){
       ["Conv Rs/kg",   findDivergence(rows.map(r=>({label:r.label,
         ...mk(r.isPP?"PP":"Box",r.isPP?r.it.spec?.convRatePP:r.it.spec?.convRate,
               r.isPP?(bp.convRatePP??12.5):(bp.convRate??7))})))],
-      ["Interest%",    findDivergence(rows.map(r=>({label:r.label,
+      ["Customer Interest%", findDivergence(rows.map(r=>({label:r.label,
         ...mk("",r.it.spec?.interest,bp.interest??0.5)})))],
       ["Freight Rs/kg",findDivergence(rows.map(r=>({label:r.label,
         ...mk("",r.it.spec?.freightOverride,bp.freightOverride??"")})))],

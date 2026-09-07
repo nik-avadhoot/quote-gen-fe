@@ -15,6 +15,7 @@
 // + New Batch, which is the destructive action. Recorded, deliberately unfixed.
 // ═══════════════════════════════════════════════════════════════════════════
 import { PLANTS } from "../../data/defaults.js";
+import { resolveField, resolveInterest } from "../../engine/resolveAuthority.js";
 import { C } from "../../theme.js";
 import { useAppState } from "../../state/AppStateContext.js";
 
@@ -65,12 +66,13 @@ export default function BatchProfileBar(){
               fontSize:10,background:C.white,color:C.slate,width:90,minWidth:0}}/>
           <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Sector</span>
           <select value={batchProfile.sector||""} onChange={e=>{
-              const v=e.target.value;
-              const sd=sectors.find(x=>x.code===v);
-              setBatchProfile(p=>({...p,sector:v,
-                waste:sd?sd.wasteCBB:5,convRate:sd?sd.convBox:7,
-                wastePP:sd?sd.wastePP:5,convRatePP:sd?sd.convPP:12.5,
-              }));
+              // S7(c) SITE 1. Choosing a Sector used to stamp its four numbers into
+              // the profile as literals. That made every one of them look like a
+              // deliberate override and froze the Batch to the Sector as it stood
+              // that day. The Sector is a RESOLUTION TIER now: the profile keeps its
+              // blanks, the resolver reads through them, and changing Sector moves
+              // the effective values immediately without any stored value moving.
+              setBatchProfile(p=>({...p,sector:e.target.value}));
             }} style={{padding:"2px 4px",borderRadius:3,border:`1px solid ${C.border}`,
               fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90}}>
             <option value="">— select —</option>
@@ -132,22 +134,40 @@ export default function BatchProfileBar(){
       {/* ── 2. COMMERCIALS — header row + 2 data rows ── */}
       {(()=>{
         const sd=sectors.find(x=>x.code===batchProfile.sector);
-        const defConvBox=sd?sd.convBox:7;
-        const defConvPP=sd?sd.convPP:12.5;
-        const defWstBox=sd?sd.wasteCBB:5;
-        const defWstPP=sd?sd.wastePP:5;
-        const isOvr=(key,def)=>{const v=batchProfile[key];return v!==undefined&&v!==null&&v!==''&&+v!==def;};
+        // S7(c). The greyed number a Maker sees is what the RESOLVER answers with
+        // the profile's own value taken out - so it is the number the CalcGate will
+        // actually use, not a literal restated here. With a Sector selected these
+        // are its values; with none, the versioned system fallbacks. Same numbers as
+        // before, one authority instead of five.
+        const inh=(field,isPP)=>resolveField(field,{rowOverride:'',batchProfile:{},sector:sd,isPP}).value;
+        const defConvBox=inh('convRate',false);
+        const defConvPP =inh('convRate',true);
+        const defWstBox =inh('waste',false);
+        const defWstPP  =inh('waste',true);
+        const defMgnBox =inh('margin',false);
+        const defMgnPP  =inh('margin',true);
+        // An override is now ANY stored value, not just one that differs from the
+        // inherited number. A value equal to the Sector's is still a value someone
+        // typed and still survives a Sector change, so showing it as "inherited"
+        // would be a lie - and a Maker who cannot see that would not know clearing
+        // the field changes the price. Blank is grey, stored is amber (CDM-19).
+        const isOvr=(key)=>{const v=batchProfile[key];return v!==undefined&&v!==null&&v!=='';};
         const numField=(key,_w,def,step)=>{
-          const ovr=isOvr(key,def);
+          const ovr=isOvr(key);
           return<input type="number" step={step||0.25} value={batchProfile[key]??""}
             onChange={e=>{
               const raw=e.target.value;
-              // Fix ②: blank on ANY numField (margin, waste, conv) must restore to sector default.
-              // Previously only margin/marginPP were guarded — waste/conv went to 0 when cleared.
-              if(raw===""||raw===null){setBatchProfile(p=>({...p,[key]:def}));return;}
+              // S7(c) SITE 2, and the one that matters most. Clearing a field is the
+              // ONLY gesture a Maker has for "inherit", and it used to write the
+              // sector default into the profile - manufacturing the override the
+              // user was trying to remove. It now stores null, and the resolver
+              // answers. An explicit 0 is still a 0 and is still stored.
+              if(raw===""||raw===null){setBatchProfile(p=>({...p,[key]:null}));return;}
               setBatchProfile(p=>({...p,[key]:+raw}));
             }}
-            title={ovr?`Overriding sector default (${def})`:`Sector default: ${def}`}
+            placeholder={def==null?"":String(def)}
+            title={ovr?`Override — stored on this Batch. Clear it to inherit ${def}`
+                      :`Inherited: ${def}. Nothing is stored on this Batch for this field`}
             style={{width:"100%",padding:"2px 3px",borderRadius:3,textAlign:"center",
               boxSizing:"border-box",minWidth:0,
               border:`1px solid ${ovr?C.amber:C.border}`,
@@ -174,12 +194,12 @@ export default function BatchProfileBar(){
             <div style={lbl}>Box</div>
             {numField("convRate",50,defConvBox)}
             {numField("waste",48,defWstBox)}
-            {numField("margin",46,8)}
+            {numField("margin",46,defMgnBox)}
             {/* PP row */}
             <div style={lbl}>PP</div>
             {numField("convRatePP",50,defConvPP)}
             {numField("wastePP",48,defWstPP)}
-            {numField("marginPP",46,8)}
+            {numField("marginPP",46,defMgnPP)}
           </div>
         </div>);
       })()}
@@ -189,7 +209,15 @@ export default function BatchProfileBar(){
         const _matrixFr=freight?.[batchProfile.plant]?.[batchProfile.delivery]??0;
         const _isOvr=batchProfile.freightOverride!==''&&batchProfile.freightOverride!==undefined;
         const _displayFr=_isOvr?batchProfile.freightOverride:_matrixFr;
-        const DISC_MAP={"30":"0.5%","45":"0.75%","60":"1.0%","90":"1.5%"};
+        // S7(c) SITE 4. The hard-coded map is withdrawn (Amendment 01 A-03). The
+        // effective percentage is RESOLVED: an explicit Pricing Group override if
+        // one is stored, otherwise derived from the approved annual rate, otherwise
+        // the versioned 0.5% fallback. `_int.source` is what lets the read-out say
+        // which - so an inherited value and a stored one never look the same.
+        const _int=resolveInterest({pricingGroup:{
+          paymentTermsDays:batchProfile.paymentDisc,
+          interestOverridePct:batchProfile.interest}});
+        const _intOvr=_int.source==="pricing_group";
         const lbl={fontSize:9,fontWeight:700,color:C.slateL,whiteSpace:"nowrap"};
         return(
         <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,
@@ -221,17 +249,31 @@ export default function BatchProfileBar(){
             <span style={lbl} title="Payment Terms → auto-sets Interest %">PT · Int</span>
             <select value={batchProfile.paymentDisc||"30"}
               onChange={e=>{
-                const m={"30":0.5,"45":0.75,"60":1.0,"90":1.5};
-                setBatchProfile(p=>({...p,paymentDisc:e.target.value,interest:m[e.target.value]||1.5}));
+                // Payment Terms is the INPUT; Interest is a resolved OUTPUT. This
+                // deliberately does NOT touch batchProfile.interest: CDM-18 keeps an
+                // explicit override across a Payment Terms change (fresh Send only),
+                // and clearing it here would silently discard a commercial decision.
+                setBatchProfile(p=>({...p,paymentDisc:e.target.value}));
               }}
               style={{padding:"2px 4px",borderRadius:3,border:`1px solid ${C.border}`,
                 fontSize:9,background:C.white,color:C.slate,cursor:"pointer"}}
-              title={`Interest auto-set: ${DISC_MAP[batchProfile.paymentDisc||"30"]}`}>
-              <option value="30">≤30d · 0.5%</option>
-              <option value="45">≤45d · 0.75%</option>
-              <option value="60">≤60d · 1.0%</option>
-              <option value="90">≤90d · 1.5%</option>
+              title={_intOvr
+                ? `Customer interest ${_int.value}% — OVERRIDE stored on this Batch. `
+                  + `Clear it to derive from ${_int.annualInterestPct}% p.a. / ${_int.dayCountBasis}`
+                : `Customer interest ${_int.value}% — derived from the approved `
+                  + `${_int.annualInterestPct}% p.a. on a ${_int.dayCountBasis}-day year`}>
+              <option value="30">≤30d</option>
+              <option value="45">≤45d</option>
+              <option value="60">≤60d</option>
+              <option value="90">≤90d</option>
             </select>
+            {/* The resolved percentage and its source, side by side with the term
+                that produced it. Amber = an override is stored; grey = inherited. */}
+            <span style={lbl}>Cust Int</span>
+            <span style={{fontSize:10,fontWeight:700,whiteSpace:"nowrap",
+              color:_intOvr?C.amberD:C.slateL}}>
+              {_int.value}%{_intOvr?" · override":" · derived"}
+            </span>
           </div>
         </div>);
       })()}

@@ -31,7 +31,9 @@
 //     const _ppItem=items.find(i=>isPPType(i.spec.rowType)) // R-2;
 // ═══════════════════════════════════════════════════════════════════════════
 import * as XLSX from "xlsx-js-style";
-import { CREDIT_PCT, TAKEUP, TRIM, PLANTS, LOCATIONS } from "../data/defaults.js";
+import { TAKEUP, TRIM, PLANTS, LOCATIONS } from "../data/defaults.js";
+import { CALC_DEFAULTS } from "../engine/calcDefaults.js";
+import { resolveSupplierCreditCost } from "../engine/resolveAuthority.js";
 import { getTrimD } from "../engine/costing.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
 import { apiFetch } from "../lib/apiClient.js";
@@ -47,7 +49,14 @@ const exportExcelFull=(items,rates,freight)=>{
     ["CFB QUOTATION MASTER — COSTING SHEET (CBB + PLATES & PARTITIONS)"],
     ["Client / Party:",firstSpec.client||"","","","Plant / Location:",firstSpec.plant||"","","","Date:",today,"","Ref:",items.map(i=>i.spec.material_code).filter(Boolean).join(", ")],
     ["Sector:",firstSpec.sector||"","","","Producing Plant:",firstSpec.plant||"","","","Default Freight Loc:",firstSpec.delivery||""],
-    ["Conv Rate Rs/kg (Box):",firstSpec.convRate||7,"","Conv Rate Rs/kg (Board):",10.5,"","Waste% (Box):",(firstSpec.waste||5)+"%","","Margin%:",(firstSpec.margin||8)+"%","","Interest%:",(firstSpec.interest||1.5)+"%"],
+    ["Conv Rate Rs/kg (Box):",firstSpec.convRate||7,"","Conv Rate Rs/kg (Board):",10.5,"","Waste% (Box):",(firstSpec.waste||5)+"%","","Margin%:",(firstSpec.margin||8)+"%","","Customer Interest%:",
+      // S7(c) / E-4. A sixth hard-coded 1.5, not in the original five, found while
+      // sweeping for them. `||` also discarded an explicit ZERO, so a Batch that
+      // deliberately charged no interest exported as 1.5%. Null-aware, and the
+      // fallback is CDM-18's 0.5 - the same one line 288 of this file already used,
+      // which means the two halves of one exporter disagreed with each other.
+      ((firstSpec.interest===''||firstSpec.interest==null||isNaN(+firstSpec.interest))
+        ? CALC_DEFAULTS.interestFallbackPct : +firstSpec.interest)+"%"],
     [],  // row 5 group headers — fill below
     // Row 6: field headers
     ["Sr No","Row Type","Mat Code","SKU / Description","Plant / Location",
@@ -131,8 +140,18 @@ const exportExcelFull=(items,rates,freight)=>{
   // ── RATE MASTER sheet ─────────────────────────────────────────────────────
   const rmRows=[
     ["PAPER RATE MASTER","","","","",""],
-    ["Grade Code","Grade Description","Paper Price (Rs/kg)","Credit Cost (Rs/kg)","Discount (Rs/kg)","Freight (Rs/kg)","Effective Rate (Rs/kg)"],
-    ...rates.map(r=>[r.code,r.desc,r.price,+(r.price*CREDIT_PCT).toFixed(2),r.disc,(r.freight||0),+(r.price+r.price*CREDIT_PCT-(r.disc||0)+(r.freight||0)).toFixed(2)]),
+    ["Grade Code","Grade Description","Paper Price (Rs/kg)","Paper Credit Cost (Rs/kg)","Discount (Rs/kg)","Freight (Rs/kg)","Effective Rate (Rs/kg)"],
+    // S7(c). This mirror applied CREDIT_PCT to EVERY grade and ignored the
+    // per-grade credit override that getEffectiveRate honours - so an exported
+    // Rate Master disagreed with the engine for any grade carrying an exception.
+    // A D-27-class divergence: two surfaces answering one question differently.
+    // It now resolves the same chain the engine does (CDM-41: blank inherits,
+    // explicit zero stays zero).
+    ...rates.map(r=>{
+      const cp=resolveSupplierCreditCost({rateEntry:r}).value/100;
+      return [r.code,r.desc,r.price,+(r.price*cp).toFixed(2),r.disc,(r.freight||0),
+              +(r.price+r.price*cp-(r.disc||0)+(r.freight||0)).toFixed(2)];
+    }),
     [""],["GSM SURCHARGE: <100 GSM=+4 | =100 GSM=+1.5 (FIXED) | >200 GSM=+1 | else 0"],
   ];
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rmRows),"RATE MASTER");

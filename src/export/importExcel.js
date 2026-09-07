@@ -42,7 +42,11 @@ export const parseImportedExcel=async(file,rates,freight,boxTrimData)=>{
       board_gsm:row[18]||"",spec_bs:row[20]||"",spec_bct:row[22]||"",spec_ect:row[23]||"",
       plant:row[4]||"Nagpur",delivery:rows[3]?.[9]||"Nagpur",
       waste:5,convRate:+(rows[3]?.[1])||7,freightOverride:"",
-      margin:+(row[63]||0.08)*100||8,interest:1.5,
+      // S7(c). A seventh hard-coded 1.5, in the re-import path. Left as an
+      // explicit blank so the resolver answers rather than a literal nobody
+      // approved - the importer knows the workbook's Payment Terms, not its
+      // interest, and inventing one here is exactly what CDM-18 forbids.
+      margin:+(row[63]||0.08)*100||8,interest:"",
       printing:+(row[49])||0,packing:+(row[50])||0,stitching:+(row[51])||0,
       handling:+(row[52])||0,coating:+(row[55])||0,other:+(row[56])||0,
       volume:"",salesMOQ:row[66]||"",customerType:"existing",priceContext:"unknown",isRepeat:false,

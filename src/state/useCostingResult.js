@@ -24,6 +24,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { useMemo } from "react";
 import { calcCosting, checkMissingInfo, checkSpecCompliance, estimateOverspecSaving, suggestMargin } from "../engine/costing.js";
+import { resolveField } from "../engine/resolveAuthority.js";
 import { isPPType } from "../engine/rowType.js";
 
 export function useCostingResult(st){
@@ -54,10 +55,23 @@ export function useCostingResult(st){
     // When the batch is empty, the sector master is the only authority.
     // This ensures Costing's display and Calculate All use the same effective value.
     const _hasCommittedBatch=_hasBD; // C5: batchDefaults!==null. Same meaning, one source
-    const _wasteDefBox =_hasCommittedBatch?(bdWaste??_sectorForCalc?.wasteCBB??5):(_sectorForCalc?.wasteCBB??5);
-    const _convDefBox  =_hasCommittedBatch?(bdConvRate??_sectorForCalc?.convBox??7):(_sectorForCalc?.convBox??7);
-    const _wasteDefPP  =_hasCommittedBatch?(bdWastePP??_sectorForCalc?.wastePP??5):(_sectorForCalc?.wastePP??5);
-    const _convDefPP   =_hasCommittedBatch?(bdConvRatePP??_sectorForCalc?.convPP??12.5):(_sectorForCalc?.convPP??12.5);
+    // S7. The four lines that used to sit here spelled out the chain by hand -
+    // batch ?? sector ?? literal - and Batch Entry spelled out a DIFFERENT one,
+    // with no Sector tier at all. Both now call the one resolver, which is the
+    // whole point of the slice: the number on this screen and the number the
+    // CalcGate freezes at Send can no longer disagree.
+    //
+    // C5's distinction is preserved exactly: with no committed Batch there is no
+    // Batch tier to consult, so an empty profile is passed and the Sector becomes
+    // the first tier that can answer.
+    const _bp=_hasCommittedBatch?{waste:bdWaste,convRate:bdConvRate,
+      wastePP:bdWastePP,convRatePP:bdConvRatePP}:{};
+    const _inh=(field,isPP)=>resolveField(field,
+      {rowOverride:'',batchProfile:_bp,sector:_sectorForCalc,isPP}).value;
+    const _wasteDefBox =_inh('waste',false);
+    const _convDefBox  =_inh('convRate',false);
+    const _wasteDefPP  =_inh('waste',true);
+    const _convDefPP   =_inh('convRate',true);
 
     const _calcSpec=(spec.wastePP===""||spec.wastePP==null||spec.convRatePP===""||spec.convRatePP==null
                    ||spec.waste===""||spec.waste==null||spec.convRate===""||spec.convRate==null)
