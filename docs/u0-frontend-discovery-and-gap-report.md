@@ -225,20 +225,36 @@ session actually flips a flag in a Vercel project setting.
 | U1 Customer Families — write (merge/reassign/retire) | Public wrapper RPC migration (reviewed separately) + route + UI actions | 1–2 sessions, **blocked on the migration being authorised as its own reviewable unit** |
 | U1 Customers/Prospects, Customer Locations | Out of this handover's authorised U1 subset (design plan lists them under U1 but the takeover brief's §9 only authorises Producing Plants + Customer Families) | not estimated here |
 
-## 13. Genuine Product Owner questions
+## 13. Genuine Product Owner questions — and two answered empirically since first draft
 
-1. **Capability key for Customer Family visibility.** This report assumes `read_party_master` gates
-   the Customer Families screen (it is the capability the existing `guard_row_sku_family` fix (S6-C1
-   D2) already treats as the Family-read boundary). Confirm, or name the correct key.
-2. **Customer Family merge/retire authorisation.** `app_private.merge_families` exists and is tested,
-   but no capability has yet been named as the one that should gate calling its public wrapper once
-   built. This needs a Product Owner decision before that migration is written, not after.
-3. **Navigation grouping.** Should Producing Plants and Customer Families sit under a new top-level
-   section now (as this report proposes, mirroring the design plan's `Administration`/`Customer
-   Masters` split at small scale), or stay flat in the existing sidebar list until more U1/U2 items
-   arrive? Either is a one-line change; asking to avoid a needless re-layout next session.
+1. ~~Capability key for Customer Family visibility~~ — **answered, not assumed.** `pg_policies` was
+   read directly: `customer_families_select`, `customer_family_aliases_select`,
+   `parties_select` and `party_family_memberships_select` are all gated by
+   `app_private.has_group_cap('read_party_master')`. No Product Owner decision needed; this was a
+   fact to look up, not a direction to set.
+2. ~~Customer Family merge/retire authorisation~~ — **answered the same way.** The `UPDATE` policy on
+   all four tables is gated by `has_group_cap('manage_customer_master')`. That is the capability the
+   future public-wrapper migration for `merge_families`/`reassign_party_family`/`graduate_party`
+   should require — recorded here so the next session does not have to re-derive it, but it is still
+   that session's decision whether to build the wrapper, not this report's.
+3. **Navigation grouping** (still open). Producing Plants and Customer Families were added flat to
+   the existing sidebar list for this pass rather than under a new top-level section, since a
+   two-item section reads oddly on its own. Revisit once U2/U3 add enough items to justify grouping.
+
+## 14. What this report cleared for implementation, and what was actually built
+
+After the discovery above, two screens were implemented in this same handover (separate commits,
+`quote-gen-fe`): **Producing Plants** (read-only, `/masters/plants`, no backend change) and
+**Customer Families** (read-only list/search/detail, `/masters/customer-families` — one new
+`quote-gen-be` route, mirroring `/masters/plants` exactly: plain caller-context `SELECT`s across the
+four RLS-gated tables, no new SQL, no new capability, `mutations: "not_yet_governed"` in its own
+response so the frontend never has to guess). Both backend acceptance suites (171) and the HTTP probe
+matrix (172) were re-run after the new route and pass unchanged. Merge, reassignment and
+Proposed-family review remain unbuilt, per §6/§13 above — the screen states this rather than offering
+a dead control.
 
 ---
 
-**Nothing in this report is implemented.** It is submitted as the required U0 deliverable before any
-U1 screen work begins.
+**Discovery and the two U1 screens it cleared are both delivered.** Product Masters, Commercial
+Masters, the Batch Workspace, Quote workflow and export/audit (U2–U6) remain out of scope for this
+handover and are not begun.
