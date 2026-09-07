@@ -87,23 +87,63 @@ Ten `public`-schema `SECURITY INVOKER`, `language sql`, `set search_path = ''` w
 wrapper is a single `select app_private.<fn>(...)` — no logic, no duplicated capability check. Source:
 same migration, §"public invoker wrappers".
 
-**Grants**, applied via a `do $$ ... $$` loop over exactly these ten public functions (not a manual
-per-function `grant`/`revoke`, to guarantee none is missed):
-- `revoke all ... from public` (covers `anon`/`service_role`'s default membership)
-- `revoke all ... from anon` (explicit, defense in depth)
-- `grant execute ... to authenticated` (the only role that can ever reach any of the ten)
+**Grants — corrected under U1-CF-C1.** The original `do $$ ... $$` loop (in
+`20260907065939_family_b_mutations_functions.sql`) revoked from `public` and `anon` and granted to
+`authenticated`, but never explicitly touched `service_role`. It was written to believe that clause
+was a complete revoke; it was not.
+
+~~"`revoke all ... from public` (covers `anon`/`service_role`'s default membership)" — superseded, see
+below: `REVOKE ALL FROM PUBLIC` does not remove a role's OWN separately-granted ACL entry, and
+`service_role` had one.~~
+
+**Catalog evidence, read directly (`pg_proc.proacl`, `pg_default_acl`), not assumed:** before the
+correction, every one of the ten wrappers' ACL read
+`{postgres=X/postgres, authenticated=X/postgres, service_role=X/postgres}` — a **direct** grant to
+`service_role`, not inherited from `PUBLIC` (`has_function_privilege('public', …)` was already
+`false`) and not owner/superuser-derived (`proowner = postgres`, an ordinary role, not a bypass).
+`pg_default_acl` showed the source: a platform default privilege — `ALTER DEFAULT PRIVILEGES FOR ROLE
+postgres IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role` — applied
+automatically to every new `public`-schema function `postgres` creates. The migration's explicit
+`revoke ... from public` and `revoke ... from anon` calls overrode that default for those two roles;
+`service_role` was simply never named, so its slice of the default stood untouched.
+
+**Fix (`20260907125813_family_b_mutations_revoke_service_role_execute.sql`):** explicit
+`revoke execute on function <sig> from service_role` on all ten, plus
+`alter default privileges for role postgres in schema public revoke execute on functions from
+service_role` — closing the gap for every function `postgres` creates in `public` from this point on
+(forward-only; `ALTER DEFAULT PRIVILEGES` never touches an existing object, so nothing already created
+was affected). Post-fix ACL on all ten: `{postgres=X/postgres, authenticated=X/postgres}` — confirmed
+directly via `has_function_privilege`, one row per wrapper, in the table below.
+
+| Wrapper | `anon` | `authenticated` | `service_role` | `PUBLIC` | ACL |
+|---|---|---|---|---|---|
+| `propose_customer_family` | false | true | **false** | false | `{postgres=X/postgres,authenticated=X/postgres}` |
+| `create_minimal_prospect` | false | true | **false** | false | same |
+| `update_customer_family` | false | true | **false** | false | same |
+| `approve_customer_family` | false | true | **false** | false | same |
+| `add_family_alias` | false | true | **false** | false | same |
+| `update_family_alias` | false | true | **false** | false | same |
+| `retire_family_alias` | false | true | **false** | false | same |
+| `merge_customer_families` | false | true | **false** | false | same |
+| `reassign_customer_family` | false | true | **false** | false | same |
+| `graduate_customer_party` | false | true | **false** | false | same |
 
 No table grant changes, no RLS changes — the wrappers don't touch RLS; `app_private.*` already runs
-`SECURITY DEFINER` and the capability gate is PL/pgSQL, not a policy. `tests.customer_family_
-mutations()` CFM-26/26a assert this grant posture directly (`has_function_privilege`) rather than
-assuming it holds.
+`SECURITY DEFINER` and the capability gate is PL/pgSQL, not a policy.
 
-**`service_role`** deliberately is **not** asserted to lack `EXECUTE` (an earlier test draft assumed
-it did and was corrected — see the `20260907071705` migration's header comment): `service_role`
-bypasses RLS and carries platform-level default privileges on this project regardless of a per-
-function revoke, so confinement of `service_role` is enforced as an *application-layer* discipline
-(Flask never uses the service-role client for these routes — see §5) rather than a DB-grant one. The
-established `revise_batch_profile` (S6-12) grant pattern makes the same choice.
+**Regression coverage, restored** (`20260907130316_family_b_mutations_restore_cfm26_service_role_check.sql`):
+CFM-26 had been narrowed to check `anon` only, in `20260907071705`, on the (now-corrected) belief that
+`service_role` holding `EXECUTE` was inherent platform behaviour rather than a missed revoke. It now
+asserts `has_function_privilege('service_role', …)` is false for all ten, alongside `anon`, in the
+same assertion. `tests.customer_family_mutations()` CFM-26/26a assert this grant posture directly
+rather than assuming it holds; the live HTTP probe matrix (§10) additionally proves it over real
+PostgREST calls, not only via catalog introspection.
+
+BYPASSRLS and function `EXECUTE` are different controls, and conflating them was the error the first
+draft of this section made — `service_role` holding `BYPASSRLS` says nothing about whether it can
+invoke a specific `SECURITY INVOKER` function; that is decided by the function's own ACL alone. Flask
+never constructs a service-role client for any of these ten routes regardless (verified — see §10),
+so this was defense-in-depth even before the fix, but it is no longer an *undefended* layer.
 
 ## 3. Caller and capability checks
 
@@ -130,24 +170,40 @@ No longer an open question (see the Amendment record above) — implemented as m
 argument CAS on every mutation of an existing row, verified by twelve distinct stale-version test
 cases in `tests.customer_family_mutations()` (CFM-9, 12, 15, 16, 23), each expecting `40001`.
 
-## 6. Stable HTTP error mapping (for the pending Flask routes)
+## 6. Stable HTTP error mapping — implemented, corrected under U1-CF-C2
 
-| Postgres condition | `errcode` | HTTP |
-|---|---|---|
-| No active session / caller not resolvable | `42501` | 401 (if literally unauthenticated) |
-| Capability check failed | `42501` | 403 |
-| Row not found (Family, Party, alias) | `P0002` | 404 |
-| Stale `content_version` | `40001` | 409 |
-| Forbidden state transition, self-merge, merge-cycle, double-retirement, retired target | `22023` | 422 |
-| Effective date precedes current membership | `22007` | 422 |
-| Missing/blank required field | `22023` (same code, different message) | 400 |
-| Anything else | — | 500, no Postgres text leaked to the client; log server-side only |
+**Corrected.** The first implementation's `_rpc_call()` returned `exc.message` — the Postgres
+exception's own text — for every mapped `errcode`, reasoned to be "safe... names no table or column"
+by manual inspection of the `RAISE` statements at the time they were written. That is exactly the
+fragile posture the binding instruction ruled out: safety would silently break the moment any
+`RAISE` message changed, with no code-level guard to catch it. Replaced with an application-owned
+`error_code` and a fixed message, defined once in `server.py`, that never varies with what the
+database happened to say:
 
-Distinguishing the 400-vs-422 `22023` cases requires matching on the message text server-side (never
-forwarding raw Postgres text to the client either way) or, preferably, giving the "required field"
-checks their own distinct `errcode` in a follow-up migration if the ambiguity proves troublesome in
-practice — not resolved here since it does not change the data model, only the HTTP mapping's
-internal implementation.
+| Postgres condition | `errcode` | `error_code` (this file's own constant) | HTTP |
+|---|---|---|---|
+| No active session / caller not resolvable | `42501` | — (`require_auth` refuses first) | 401 |
+| Capability check failed | `42501` | `CAPABILITY_REQUIRED` | 403 |
+| Row not found (Family, Party, alias) | `P0002` | `RECORD_NOT_FOUND` | 404 |
+| Stale `content_version` | `40001` | `STALE_VERSION` | 409 |
+| Forbidden state transition, self-merge, merge-cycle, double-retirement, retired target | `22023` | `TRANSITION_NOT_ALLOWED` | 422 |
+| Effective date precedes current membership | `22007` | `INVALID_EFFECTIVE_DATE` | 422 |
+| Missing/blank required field, caught by Flask before any RPC call | n/a — never reaches the DB | `INVALID_INPUT` | 400 |
+| Anything else (an unmapped `errcode`) | any | `INTERNAL_ERROR` | 500 |
+
+Every response from every one of the ten routes is `{"error_code": "<constant above>", "error":
+"<fixed text or a Flask-authored field-required message>"}` — never `exc.message`, never the raw
+`errcode`, never a table/column/function name. `server.py`'s own `_RPC_ERROR_MAP` and
+`_ERROR_MESSAGE` dicts are the single source of truth; the route tests
+(`test_customer_family_mutation_routes.py`) inject a Postgres message shaped like a real leak
+(schema-qualified table, column, function name, the SQLSTATE itself) for **every** mapped code, not
+only the unmapped case, and assert none of that text reaches the response body — 127/127.
+
+The 400-vs-422 ambiguity the first draft flagged for `22023` no longer exists: the "required field"
+checks are Flask-side validation that runs *before* any RPC call (so they never produce a `22023` at
+all in the routes as implemented — the DB's own `22023` "a Family name is required" style checks are
+unreachable defense-in-depth, since Flask already refused a blank field), and every DB-raised `22023`
+that does occur is uniformly `TRANSITION_NOT_ALLOWED` (422).
 
 ## 7. Permanent-code and lineage preservation
 
@@ -185,13 +241,13 @@ Each route: validate body shape (types only, not RLS's job), call the RPC once, 
 §6, return `{"ok": true}` for void RPCs or the RPC's return value (new id, minted code, or the
 `(party_id, family_id)` pair) for the others.
 
-## 9. Frontend actions — still pending
+## 9. Frontend actions — implemented
 
 Per the required mutation scope: propose/edit Family, approve, add/edit/retire alias, merge, reassign
 with effective dating, graduate a Prospect "where it belongs naturally on the Family surface" — i.e.
 as actions on `CustomerFamiliesScreen.jsx`'s existing read-only rows, not a new screen. The broader
-Customer/Prospect mutation UI stays out of scope, per the standing instruction, unless a small part
-proves strictly required by one of these nine actions (expected: it will not).
+Customer/Prospect mutation UI stays out of scope, per the standing instruction — see the follow-on
+authorisation packet for that work, requested and delivered separately after this slice's closure.
 
 - Every action's confirm/error flow goes through `CapabilityGate` (`manage_customer_master`, or for
   Propose/Prospect-create, `manage_customer_master` **or** `make_quote` at any plant — mirroring the
@@ -225,17 +281,23 @@ absence of `anon` execute on any of the ten wrappers and full `authenticated` co
 `tests.batch_workspace()` (BF-13) re-verified against the new required-CAS `reassign_party_family`
 signature.
 
-**Route — implemented.** `quote-gen-be/tests/test_customer_family_mutation_routes.py`, same hermetic
-fake-client convention as `test_customer_families_route.py` (77 checks): anonymous 401 on all ten
-routes; each route's well-formed success path calls exactly the expected RPC, with the caller's own
-token and the exact expected parameters (`reassign`'s optional `p_effective` included, both present
-and omitted); a missing/blank required field is refused 400 before any RPC is attempted; each mapped
-Postgres error code (`42501`→403, `P0002`→404, `40001`→409, `22023`/`22007`→422) is exercised via
-injected `APIError`s and an unmapped code falls back to 500 with nothing of the injected message
-forwarded to the client; no route uses the service-role client. (Wrong-plant/wrong-group/inactive-
-caller behaviour is proved once, at the authoritative layer, by `tests.customer_family_mutations()`
-above — a route-level fake cannot exercise RLS/capability grants meaningfully, only prove the route
-forwards the caller's own token and does not pre-empt the database's decision, which it does not.)
+**Route — implemented, strengthened under U1-CF-C2 (127 checks).**
+`quote-gen-be/tests/test_customer_family_mutation_routes.py`, same hermetic fake-client convention as
+`test_customer_families_route.py`: anonymous 401 on all ten routes; each route's well-formed success
+path calls exactly the expected RPC, with the caller's own token and the exact expected parameters
+(`reassign`'s optional `p_effective` included, both present and omitted); a missing/blank required
+field is refused 400 with `error_code: "INVALID_INPUT"` before any RPC is attempted; each mapped
+Postgres error code (`42501`/`P0002`/`40001`/`22023`/`22007`) is exercised by injecting a message
+**shaped like a real leak** — a schema-qualified table name, a column name, a function name, and the
+SQLSTATE itself — and asserting none of it, nor any fragment of it, reaches the response body, for
+every mapped code, not only the unmapped one; each response's `error_code` and message are asserted
+to equal `server.py`'s own fixed constants exactly (proving the response is backend-authored, not a
+passthrough that merely lacks today's leak strings); `server.py._RPC_ERROR_MAP`'s full key set is
+asserted to be exercised here, catching a code added to one dict and not the other; no route uses the
+service-role client. (Wrong-plant/wrong-group/inactive-caller behaviour is proved once, at the
+authoritative layer, by `tests.customer_family_mutations()` above — a route-level fake cannot
+exercise RLS/capability grants meaningfully, only prove the route forwards the caller's own token and
+does not pre-empt the database's decision, which it does not.)
 
 **Frontend — implemented.** `CustomerFamiliesScreen.jsx` now offers all nine actions on its existing
 rows; request-body shapes and confirm-dialog copy live in `src/lib/customerFamilyActions.js`, proven
@@ -247,11 +309,15 @@ browser (Vite HMR, zero console errors) after a stale backend dev server — fou
 pre-slice code — was restarted; no test credentials were available in this session to exercise the
 mutation flows interactively, so that rests on the DB/route/probe layers instead.
 
-**HTTP probe matrix — implemented and run live, twice.** `U1_FAMILY_B_RPCS` added to
+**HTTP probe matrix — implemented and run live, three times.** `U1_FAMILY_B_RPCS` added to
 `quote-gen-be/tests/http_probe_matrix.py`, one entry per newly exposed public RPC. First run
 (`--anon-only`, before the Flask routes existed): 108/108. Second run (full matrix, after G-B — see
 §12): **182/182** (172 pre-slice + 10 new RPCs), including the authenticated personas and the
-two-session lock-race test, teardown clean.
+two-session lock-race test, teardown clean. Third run, after U1-CF-C1 (§13), adds a `service_role`
+probe per wrapper — calling each RPC with the service-role key exactly the way fixture setup does,
+over real PostgREST, expecting the same refusal shape as `anon`: **118/118**, all ten `service_role`
+calls refused `403 {"code":"42501",...}`, direct HTTP-level confirmation on top of the catalog
+evidence in §13.
 
 ## 11. Rollback and migration treatment
 
@@ -275,6 +341,13 @@ added after G-B (§12) surfaced a genuine performance-advisor finding: `customer
 had no covering index, the one place this slice fell short of the standing discipline that every
 foreign key is index-covered (S6 Family F's `BF-5` asserts exactly this for its own tables). Additive
 only — one `CREATE INDEX IF NOT EXISTS`.
+
+A twelfth and thirteenth migration were added under the U1-CF review correction round (§13):
+`20260907125813` (`family_b_mutations_revoke_service_role_execute` — explicit `service_role` revoke
+on all ten wrappers plus a forward-only default-privilege fix) and `20260907130316`
+(`family_b_mutations_restore_cfm26_service_role_check` — CFM-26 restored to assert `service_role` has
+no `EXECUTE`, alongside `anon`, in the same assertion). Both additive/corrective only; no structural
+workflow function changed, so G-B was not re-run for this round (§13).
 
 Nothing in `app_private` from before this slice was altered except the two changed signatures noted
 above (both previously unreachable — no public wrapper existed for either, confirmed by the original
@@ -339,6 +412,95 @@ a clarification of the method, not a deviation from it):
 
 **No genuine defect was found in the replayed schema itself** — the one finding (the unindexed FK)
 was a real gap in this slice's own schema migration, not a replay defect, fixed in place per §11.
+
+## 13. U1-CF review correction round — U1-CF-C1 … U1-CF-C4
+
+The Product Owner's review of this slice's first closure report found two real defects the report's
+own claims did not survive catalog evidence, one mislabelled next-stage recommendation, and one
+implementation-process deviation worth a factual record. All four addressed before this slice is
+considered closed.
+
+### U1-CF-C1 — `service_role` held a real, direct `EXECUTE` grant
+
+The first closure report's §2 claimed the ten wrappers were "revoked from public/anon, granted only
+to authenticated." That was incomplete: `service_role` was never named in the original grant/revoke
+DO block at all, and catalog evidence (`pg_proc.proacl`, `pg_default_acl` — see §2's corrected text
+and table) showed it held a **direct** grant, sourced from a platform default privilege applied at
+`CREATE FUNCTION` time. Fixed with an explicit revoke on all ten wrappers plus a forward-only default-
+privilege correction (`20260907125813`), CFM-26 restored to assert it (`20260907130316`), and a new
+live HTTP probe per wrapper proving the refusal over real PostgREST (118/118, §10). BYPASSRLS and
+function `EXECUTE` are different controls — the first draft's §2 conflated them, and that conflation,
+not a documentation typo, is what let the gap stand unnoticed through the original closure.
+
+### U1-CF-C2 — raw Postgres exception text was reaching the client
+
+`_rpc_call()` returned `exc.message` for every mapped `errcode`. Fixed with an application-owned
+`{error_code, error}` shape backed by fixed, backend-authored text (§6, corrected); the database's own
+message and SQLSTATE are logged server-side only (`app.logger`), never returned. Proven for every
+mapped code, not only the unmapped case, by injecting a message shaped like a real leak and asserting
+none of it — table name, column name, function name, or the SQLSTATE itself — reaches the response
+(127 route checks, §10).
+
+### U1-CF-C3 — next-stage designation corrected
+
+The first closure report's recommendation named "U3: Construction/SKU master mutations" as the
+suggested next slice. The canonical sequence is **U2 — Product and Specification Masters, U3 —
+Commercial Masters and Pricing Basis, U4 — Durable Batch Workspace, U5 — Quote Workflow, U6 — Export
+and Audit** — Construction/SKU masters are U2, not U3. More materially, the recommendation should not
+have pointed at U2-series work at all: broader Customers/Prospects, Customer Locations, and their
+integration with Batch Entry are outstanding **U1** acceptance components, not a jump ahead to the
+next major stage. Neither error was written into this packet itself (§0–§12 above never named a
+U-series stage); both were confined to the closure report text, corrected there.
+
+### U1-CF-C4 — implementation-process deviation, recorded factually
+
+During this slice's original build, `tests.batch_workspace()` was patched directly against the live
+database (a self-verifying `regexp_replace` against `pg_get_functiondef`, raising if the substitution
+did not match exactly once) to fix its two stale `reassign_party_family()` call sites, **before** a
+migration file recording that change existed. The corresponding migration
+(`20260907072420_family_b_mutations_fix_batch_workspace_reassign_calls.sql`) was written and applied
+*afterward*, transcribing the already-live definition rather than the live state deriving from the
+migration.
+
+- Live state temporarily preceded the local migration artefact for this one function.
+- The final live body was subsequently captured byte-exact into the migration file (MD5-verified
+  against the live `pg_get_functiondef` output at the time).
+- Local/remote parity was restored — confirmed by every G-A run since, including the two in this
+  correction round (§13's own migrations included).
+- G-B (§12) proved the migration chain reproduces the live state from a genuine empty replay — the
+  patched function's final form is exactly what 130 migrations, applied to nothing, produce.
+- **Direct live patching is not precedent for subsequent slices.** Every migration in this
+  correction round (U1-CF-C1/C2) was applied via `apply_migration`, which records the migration row
+  and applies the DDL as one atomic operation — live state never preceded its migration artefact for
+  either fix.
+
+### G-B — not re-run for this round
+
+Per the closure instruction's own carve-out: a second destructive G-B is required only if a correction
+changes a structural workflow function or reveals a replay divergence. This round's two migrations are
+privilege-only (`125813`) and a test-suite assertion correction (`130316`) — no structural workflow
+function changed, and G-A remained exact in shape (133 local ⇄ 133 remote, 129 bodied) both before and
+after. G-B was not re-run; the evidence in §14 (below) is the full-focused re-verification the
+correction instruction asked for instead.
+
+## 14. Final focused verification, after U1-CF-C1 … U1-CF-C4
+
+| Check | Result |
+|---|---|
+| `tests.customer_family_mutations()` (via `run_all()`) | CFM-26 restored, asserts `anon` **and** `service_role` both lack `EXECUTE` on all ten wrappers; passes |
+| `tests.run_all()`, exact count | **821 / 821, 0 failures** (unchanged — CFM-26's condition was widened in place, no assertion added or removed) |
+| Backend mutation-route tests | **127 / 127** (`test_customer_family_mutation_routes.py`, strengthened per §10) |
+| HTTP probes for the ten wrappers | **118 / 118** (anon + the new `service_role` probe, live) |
+| G-A | **133 local ⇄ 133 remote**, 129 bodied, fingerprint `dbcd66bc2e5c49a3d06edfda4ee12370` |
+| Frontend family-action fixtures | **28 / 28**, unaffected (pure request-body/copy logic, no backend error-shape dependency) |
+| Lint / build | 66/0 ceiling held; build passes |
+| Security advisors | **2 — the accepted carry-forwards, unchanged** |
+| Performance advisors | **1 new `unused_index` INFO** on `ix_customer_families_approved_by` (a fresh, correctly-created index — not a finding requiring action) plus the same 14 pre-existing INFO entries; no unindexed-FK finding |
+| `BatchProfileBar.jsx` | untouched (uncommitted hunk preserved throughout this round) |
+| `docs/commercial-intelligence-decisions.md` | unread, unstaged, still untracked |
+| Push | nothing pushed in either repo (no upstream configured on either working branch) |
+
+**The Customer Family mutation slice is closed as of this correction round.**
 
 ---
 
