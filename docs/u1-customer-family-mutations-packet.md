@@ -237,14 +237,21 @@ caller behaviour is proved once, at the authoritative layer, by `tests.customer_
 above — a route-level fake cannot exercise RLS/capability grants meaningfully, only prove the route
 forwards the caller's own token and does not pre-empt the database's decision, which it does not.)
 
-**Frontend** — pending, one fixture-script scenario per action per the existing
-`scripts/capabilities-fixtures.mjs` convention.
+**Frontend — implemented.** `CustomerFamiliesScreen.jsx` now offers all nine actions on its existing
+rows; request-body shapes and confirm-dialog copy live in `src/lib/customerFamilyActions.js`, proven
+by `scripts/customer-family-actions-fixtures.mjs` (28 checks, the `npm run test:family-actions`
+convention). `CapabilityGate` was extended to accept an array of capabilities for OR semantics
+(propose/prospect-create's `manage_customer_master` **or** `make_quote`). All 7 standing frontend
+gates, lint (66/0 ceiling held) and build pass. The app was verified to boot cleanly in a real
+browser (Vite HMR, zero console errors) after a stale backend dev server — found running the
+pre-slice code — was restarted; no test credentials were available in this session to exercise the
+mutation flows interactively, so that rests on the DB/route/probe layers instead.
 
-**HTTP probe matrix — implemented and run live.** `U1_FAMILY_B_RPCS` added to
-`quote-gen-be/tests/http_probe_matrix.py`, one entry per newly exposed public RPC; run against the
-live project with `--anon-only`: 108/108 checks passed, including all ten U1 RPCs refused `401
-{"code":"42501",...}` before authorization is reached, matching the S5/S6 rows already in the
-matrix.
+**HTTP probe matrix — implemented and run live, twice.** `U1_FAMILY_B_RPCS` added to
+`quote-gen-be/tests/http_probe_matrix.py`, one entry per newly exposed public RPC. First run
+(`--anon-only`, before the Flask routes existed): 108/108. Second run (full matrix, after G-B — see
+§12): **182/182** (172 pre-slice + 10 new RPCs), including the authenticated personas and the
+two-session lock-race test, teardown clean.
 
 ## 11. Rollback and migration treatment
 
@@ -263,11 +270,75 @@ live, reachable, and exactly the concurrency-bypass surface the binding decision
 `20260907072420` (a second, independent fix to `tests.batch_workspace()`'s own two stale call sites,
 found only when running the *entire* `tests.run_all()`, not just the new suite in isolation).
 
+An eleventh migration, `20260907122440` (`family_b_mutations_fix_unindexed_approved_by_fk`), was
+added after G-B (§12) surfaced a genuine performance-advisor finding: `customer_families.approved_by`
+had no covering index, the one place this slice fell short of the standing discipline that every
+foreign key is index-covered (S6 Family F's `BF-5` asserts exactly this for its own tables). Additive
+only — one `CREATE INDEX IF NOT EXISTS`.
+
 Nothing in `app_private` from before this slice was altered except the two changed signatures noted
 above (both previously unreachable — no public wrapper existed for either, confirmed by the original
 S6-era search before this slice began), so no other caller anywhere in the codebase needed updating
 except the two found by running the full suite (`tests.fixtures_matrix()`, patched in the tests
 migration itself, and `tests.batch_workspace()`, patched in `072420`).
+
+## 12. G-B — full destructive replay, run at this slice's closure boundary
+
+Required by the binding decision: this slice adds governed database entry points and migrations, so
+G-B was re-run at closure, preserving identities/grants/invitations/settings exactly, same method as
+the S7 closure run (`data-model-s7-closure-evidence.md` §9.6).
+
+**Structural change from the S7-era method.** `tests._finish()` never resets pgTAP's `plan()` state
+— confirmed by reading its body, not assumed — so `tests.run_all()` can be called at most **once per
+database session**. The empty-replay check and the post-restoration check must therefore be two
+separate sessions, not two calls inside one transaction. This splits the run into three sequential
+steps rather than the one all-in-one script the S7 phrasing could be read as describing (re-reading
+that record's own wording — "drop, sweep, schema drop, empty-state assertion, migration replay,
+post-replay guard" — it never actually claims restoration was in the same commit either, so this is
+a clarification of the method, not a deviation from it):
+
+1. **Drop + replay + empty-state verification**, one transaction, committed: pre-drop `auth.users`
+   guard; drop the event trigger, 41 named `public` tables (`CASCADE`), the `app_private`/
+   `ref_private`/`tests` schemas (`CASCADE`), and every remaining non-extension `public` function via
+   a dynamic `pg_proc`/`pg_depend` sweep; an in-transaction guard asserting zero relations, zero
+   functions, zero of the three schemas and zero `ensure_rls` before replay; all **130** migrations
+   replayed in version order (126 bodied, read directly from `supabase_migrations.schema_migrations`
+   — never in the drop set; 4 bodyless repair rows staged from local files and MD5-verified byte-exact
+   beforehand: `8dfd002b…`, `eccd19cf…d197`, `8fdc6f73…e487`, `53f6be9d…f5fc`, all matching); a
+   post-replay guard (`auth.users` unchanged, `app_users` empty); `tests.run_all()` on the empty
+   replay asserted **zero `not ok` lines and exactly 821** (783 pre-slice + 38
+   `customer_family_mutations`, catching a silently-lost suite the same way S7-4/S7-5 did); a
+   synthetic-fixture sweep and a final `auth.users` re-check. Committed with no error.
+2. **Restore governed identities**, a separate transaction, committed: `app_users`,
+   `group_capability_grants`, `plant_capability_grants`, `app_private.pending_invitations`,
+   `operational_settings` re-inserted with `OVERRIDING SYSTEM VALUE` (explicit ids preserved, not
+   renumbered) from a pre-drop capture; sequences bumped past the restored maxima; verified in the
+   same transaction: exact row-for-row match on all five tables, `plants`/`capabilities` reseeded
+   identically (byte-exact id+key match against the pre-drop capture, not merely trusted from
+   precedent), zero orphans either direction between `auth.users` and `app_users`, `granted_by`
+   present on every one of the 12 plant grants.
+3. **Re-verify**, read-only: `tests.run_all()` on the restored state — **zero `not ok`, exactly 821**
+   again — then a final `auth.users` guard.
+
+| Measure | Result |
+|---|---|
+| `auth.users` | **2 — unchanged throughout** (checked before the drop, after the replay, after each `run_all()`, and at the very end) |
+| Migrations replayed | **130 / 130** |
+| `tests.run_all()`, empty replay | **821 / 821, 0 failures** |
+| Identity restore | **app_users 2, group_capability_grants 1, plant_capability_grants 12 (`granted_by` intact), pending_invitations 1, operational_settings 1 — exact match on every column, including id** |
+| `plants` / `capabilities` reseed | **byte-identical** (3 plants, 13 capabilities, same ids) |
+| Orphans | **0** |
+| `tests.run_all()`, restored state | **821 / 821, 0 failures** |
+| G-A, re-run | **130 local ⇄ 130 remote**, 126 bodied, fingerprint `304c36f6f6af6741a3266ab13e27b33a` — identical to the pre-replay figure |
+| Backend acceptance suites | **275 pass** (25 caller-context / 14 capability-shape / 13 customer-families route / 77 mutation routes / 66 email+plants / 28 first-sign-in / 29 multi-plant / 23 route caller-context) |
+| HTTP probe matrix | **182 / 182**, 0 failed, teardown clean (172 pre-slice + 10 new U1 RPCs) |
+| Frontend | all 6 gates + lint (66/0) + build pass |
+| Security advisors | **2 — the accepted carry-forwards, unchanged** (leaked-password WARN; `email_change_audit` RLS-no-policy INFO) |
+| Performance advisors | **1 new finding, fixed within this closure** (`customer_families.approved_by` unindexed FK — §11's eleventh migration); 15 INFO `unused_index` on empty/low-traffic tables, no other finding |
+| `gb_scratch` | **dropped** after every verification above completed; 0 residue |
+
+**No genuine defect was found in the replayed schema itself** — the one finding (the unindexed FK)
+was a real gap in this slice's own schema migration, not a replay defect, fixed in place per §11.
 
 ---
 
