@@ -173,12 +173,13 @@ and `/masters/customer-families` GET:
 - `PATCH /masters/customer-family-aliases/<id>` — edit. Body `{expected_content_version, alias}`.
 - `POST /masters/customer-family-aliases/<id>/retire` — Body `{expected_content_version}`.
 - `POST /masters/customer-families/merge` — Body `{survivor_id, retired_id, expected_survivor_version, expected_retired_version}`.
-- `POST /masters/customer-families/<id>/reassign` — Body `{party_id, new_family_id, expected_content_version, effective_date?}`.
-- `POST /masters/customer-families/<id>/graduate` — Body `{party_id}`.
+- `POST /masters/customer-families/reassign` — Body `{party_id, new_family_id, expected_content_version, effective_date?}`.
+- `POST /masters/customer-families/graduate` — Body `{party_id}`.
 
-(Ten bullets, nine distinct actions — reassign's route is keyed by the target Family for symmetry
-with the others but the RPC itself takes `party_id` from the body; this can be simplified once the
-frontend's actual call shape is drafted, not a data-model decision.)
+**As implemented**, all three take every id from the body rather than the URL — the earlier draft's
+`<id>`-in-path shape for reassign/graduate was ambiguous (which id — Party or Family?) and added
+nothing merge's own all-body shape didn't already establish as the pattern. A route-shape
+simplification, not a data-model decision.
 
 Each route: validate body shape (types only, not RLS's job), call the RPC once, map the result per
 §6, return `{"ok": true}` for void RPCs or the RPC's return value (new id, minted code, or the
@@ -224,19 +225,31 @@ absence of `anon` execute on any of the ten wrappers and full `authenticated` co
 `tests.batch_workspace()` (BF-13) re-verified against the new required-CAS `reassign_party_family`
 signature.
 
-**Route** — pending, to be added alongside the Flask routes in §8, same hermetic fake-client pattern
-as `test_customer_families_route.py`: unauthenticated 401; authenticated without capability 403, no
-RPC attempted; wrong-plant/wrong-group caller 403; inactive assignment 403; valid authorised caller
-success; stale `content_version` 409; each Postgres error code mapped to its documented HTTP status;
-no `service_role` client used by any of the nine routes.
+**Route — implemented.** `quote-gen-be/tests/test_customer_family_mutation_routes.py`, same hermetic
+fake-client convention as `test_customer_families_route.py` (77 checks): anonymous 401 on all ten
+routes; each route's well-formed success path calls exactly the expected RPC, with the caller's own
+token and the exact expected parameters (`reassign`'s optional `p_effective` included, both present
+and omitted); a missing/blank required field is refused 400 before any RPC is attempted; each mapped
+Postgres error code (`42501`→403, `P0002`→404, `40001`→409, `22023`/`22007`→422) is exercised via
+injected `APIError`s and an unmapped code falls back to 500 with nothing of the injected message
+forwarded to the client; no route uses the service-role client. (Wrong-plant/wrong-group/inactive-
+caller behaviour is proved once, at the authoritative layer, by `tests.customer_family_mutations()`
+above — a route-level fake cannot exercise RLS/capability grants meaningfully, only prove the route
+forwards the caller's own token and does not pre-empt the database's decision, which it does not.)
 
 **Frontend** — pending, one fixture-script scenario per action per the existing
 `scripts/capabilities-fixtures.mjs` convention.
 
-**HTTP probe matrix** — pending, `quote-gen-be/tests/http_probe_matrix.py` needs one row per newly
-exposed public route once §8 lands.
+**HTTP probe matrix — implemented and run live.** `U1_FAMILY_B_RPCS` added to
+`quote-gen-be/tests/http_probe_matrix.py`, one entry per newly exposed public RPC; run against the
+live project with `--anon-only`: 108/108 checks passed, including all ten U1 RPCs refused `401
+{"code":"42501",...}` before authorization is reached, matching the S5/S6 rows already in the
+matrix.
 
 ## 11. Rollback and migration treatment
+
+The ten Flask routes, their fake-client route gate, and the extended HTTP probe matrix are committed
+in `quote-gen-be` at `919db1d`, on top of the migrations below (`bf1acd2`).
 
 Ten migrations, chronological, already applied and locally committed (`bf1acd2`):
 `20260907065533` (schema), `20260907065939` (functions/wrappers/grants), `20260907070509` (test
