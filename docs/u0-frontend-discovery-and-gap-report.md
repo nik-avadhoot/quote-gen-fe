@@ -122,14 +122,18 @@ smallest safe addition looks like for the one domain this report's U1 scope actu
 
 ## 5. Legacy data shapes conflicting with the accepted model
 
-1. **`profile.role` is a single collapsed label** (`derive_role()` in `server.py`, admin > checker >
-   maker), computed by folding every plant-scoped capability grant into one string. The accepted
-   model is plant-scoped and capability-scoped (`plant_capability_grants`, `group_capability_grants`,
-   13 distinct `capabilities` rows). A user who is Checker at NAG and has no grant at PUN currently
-   reads simply as `"checker"` everywhere in the frontend, with no plant context — CDM-05/05-A's
-   actual shape is invisible to the UI today. U1's capability-aware navigation needs the richer shape
-   (`profile.plants`, which the backend already returns, is a start; per-plant per-capability detail
-   is not yet returned by any route and is the more important of the two gaps).
+1. ~~`profile.role` is a single collapsed label ... per-plant per-capability detail is not yet
+   returned by any route~~ — **wrong, corrected after this draft.** `derive_role()` in `server.py`
+   does collapse grants to one label, and `UserManagementTab.jsx`'s admin gate still reads only that
+   label — but this section originally missed `caller_context.py`, a separate module. Its
+   `resolve_caller()` — which `/auth/login`, `/auth/refresh` and every `@require_auth` route (via
+   `g.caller`) already use — has always returned the full shape:
+   `profile.group_capabilities` (flat array) and `profile.plant_capabilities` (`{plant_code:
+   [capability keys]}`), scoped correctly today. No backend change was needed for U1-C1; the
+   correction was fixing `lib/capabilities.js` to read the fields that already exist instead of ones
+   this report invented (`profile.capabilities`, `profile.capabilitiesByPlant`), and removing the
+   role-based fallback that could grant a capability never actually held. See the U1 correction
+   report for the fix and its tests.
 2. **`localStorage` `cbb_*` state has no relationship to any governed identity.** Batches, Constructions,
    Rates, Freight and Sectors in the browser are anonymous, single-machine, unversioned data with no
    Family/Plant/lifecycle model — they cannot be reconciled with S3–S6 by transformation; they can only
@@ -167,23 +171,30 @@ ad hoc empty/loading rendering inline.
 ## 8. Proposed capability-aware navigation
 
 Extend `Sidebar.jsx`'s `NAV_ITEMS` derivation from a single `role==="admin"` check to a small
-`hasCapability(key, plantCode?)` helper consuming `profile`'s grant shape (once §6's richer shape
-is available; until then, degrade gracefully to the existing `role` string so nothing regresses).
-New nav entries this handover authorises: **Producing Plants** (visible to any authenticated,
-active user — it is read-only reference data) and **Customer Families** (visible to a capability
-gate, provisionally `read_party_master`, pending confirmation against the accepted capability list).
+`hasCapability(key, plantCode?)` helper — corrected to read `profile.group_capabilities` /
+`profile.plant_capabilities` directly (§5.1) and to deny by default rather than degrade to a
+role-based guess. New nav entries: **Producing Plants** (visible to any authenticated, active user
+— its RLS policy is open, no capability gate) and **Customer Families** (requires
+`read_party_master`, confirmed from `pg_policies`). Both are additionally feature-flagged
+(`u1_producing_plants`, `u1_customer_families`; §9), gating the SAME flag on both the nav entry and
+the tab's render mount so a hidden entry cannot be forced to render through a stale `tab` value.
 Both mount under a new top-level section rather than inside the existing flat list, matching the
 design plan's `## 4. Proposed application navigation` grouping (`Customer Masters`, `Administration`)
 at a scale of two items rather than committing to the full proposed IA now.
 
 ## 9. Localhost and Vercel feature-flag approach
 
-No feature-flag mechanism exists today — every screen ships to both `localhost` and Vercel identically,
-gated only by `role`. This handover's shared foundation adds a minimal reader: an env-driven allow-list
-(`VITE_FEATURE_FLAGS`, comma-separated keys, empty = nothing extra enabled) checked once at boot,
-exposed as `useFeatureFlag(key)`. **Nothing in this pass changes `vercel.json` or any deployment
-config, and nothing is pushed or deployed** — the flag reader is inert on both hosts until a future
-session actually flips a flag in a Vercel project setting.
+No feature-flag mechanism existed before this handover — every screen shipped to both `localhost` and
+Vercel identically, gated only by `role`. The shared foundation adds a minimal reader:
+`VITE_FEATURE_FLAGS`, a comma-separated allow-list (documented in `.env.example`), read once at boot,
+exposed as `isFeatureEnabled(key)`/`useFeatureFlag(key)`, default-off when unset. **It is now actually
+applied** (U1-C4 correction — the first pass added the reader but left both new screens unconditional):
+`u1_producing_plants` and `u1_customer_families` gate both the `Sidebar.jsx` nav entry and the
+`QuotationApp.jsx` render mount with the same check, so a hidden nav entry can never be forced to
+render through a stale `tab` value. **Nothing in this pass changes `vercel.json`, `.env.production`
+or any deployment config, and nothing is pushed or deployed** — both flags are off on this localhost
+today (no `.env` sets them) and stay off on Vercel until a future session sets them in a Vercel
+project setting.
 
 ## 10. Maker / Checker / Administrator / master-manager / wrong-plant / inactive-user scenarios
 
@@ -212,8 +223,11 @@ session actually flips a flag in a Vercel project setting.
   effective-dated membership history all render from the one read response.
 - Merge lineage and retirement history render read-only; no merge/retire control is offered until
   the wrapper RPCs in §6 exist — the screen states this explicitly rather than showing a dead button.
-- Wrong-plant/inactive/no-capability sessions see the access-denied state, not an empty list
-  indistinguishable from "no families exist."
+- `read_party_master` is a GROUP capability (`has_group_cap`, confirmed from `pg_policies`), not
+  plant-scoped, so there is no wrong-plant case for this screen. Inactive and no-capability sessions
+  see the access-denied state, and — after the U1-C3 correction — the backend now returns a genuine
+  403 for "no capability" rather than 200 with empty arrays, so this is no longer merely a frontend
+  convention: the two cases are distinguishable at the HTTP layer.
 
 ## 12. Realistic delivery estimates
 
