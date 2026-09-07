@@ -97,7 +97,16 @@ only; **`test:costing` remains the costing-engine gate and is not merged with it
 npm run test:draft
 ```
 
-> ### ⚖️ SEVEN GATES, AND ALL SEVEN RUN EVERY TIME. Here is the reasoning, so nobody re-litigates it
+An eighth, added at S7(a) — the CalcGate authority resolver. Nothing calls it
+until S7(c), and after that its Sector tier and its blank-versus-zero rule have
+no UI path that can reach them deliberately. This fixture is the only thing that
+verifies the derivation, the four-tier chains and the returned provenance:
+
+```bash
+npm run test:resolver
+```
+
+> ### ⚖️ EIGHT GATES, AND ALL EIGHT RUN EVERY TIME. Here is the reasoning, so nobody re-litigates it
 >
 > **Total runtime is a few seconds.** The question is not cost, it is whether scoping any of them
 > to "when you touched that area" is safe. **It is not, and this pass is the evidence:**
@@ -109,6 +118,7 @@ npm run test:draft
 > | `test:costing` | The engine's only regression net, and the one thing standing between a refactor and a wrong price |
 > | `test:blanket` | Verifies text and arithmetic **nobody without admin can see in the UI** |
 > | `test:draft` | Same reason one level down: no UI path reaches the draft comparator or its corrupt branch. Its equality cases each name the rule that was NOT implemented, so a green run is evidence rather than decoration |
+> | `test:resolver` | Guards a wrong price at the *authority* level rather than the arithmetic level. Every case names the resolver that would have answered differently — a truthiness resolver passes the value cases and fails every explicit-zero one; a resolver missing the Sector tier passes everything except the block that exists for it |
 > | `build`, `eslint` | Cheap, and the ceiling discipline only works if the number is taken every time |
 >
 > **"I didn't touch that" is exactly the reasoning that lets drift in.** D-27 — two exporters

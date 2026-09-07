@@ -65,10 +65,11 @@ Gates (frontend, run from `quote-gen-fe`):
 npm run test:costing   # engine regression harness vs scripts/costing-golden.json
 npm run test:blanket   # blanket-operation confirmation wording + count arithmetic
 npm run test:draft     # Costing draft model: envelope validation, hydration merge, dirty comparator
+npm run test:resolver  # the S7 CalcGate authority resolver: chains, blank/zero, provenance
 npm run ref:case4      # derive negative Case 4's reference pair - never transcribe it
 ```
 
-The full standing gate set is **seven** and all seven run every time - see
+The full standing gate set is **eight** and all eight run every time - see
 [`docs/session-start.md`](docs/session-start.md) §3 for the list and the reasoning.
 
 There is no UI or integration test suite in either repo — `test:costing` covers `engine/costing.js`
