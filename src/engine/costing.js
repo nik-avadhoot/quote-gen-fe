@@ -13,6 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { CREDIT_PCT, DEFAULT_BOX_TRIM_DATA, TAKEUP, TRIM } from '../data/defaults.js';
+import { CALC_DEFAULTS } from './calcDefaults.js';
 
 export const bfNum=c=>{const n=parseInt(String(c||""));return n===35?33:n||0;};
 export const gsmS=g=>{const v=+g||0;if(v>0&&v<100)return 4;if(v===100)return 1.5;if(v>200)return 1;return 0;};
@@ -32,7 +33,7 @@ export const getFreightRate=(plant,delivery,matrix,override)=>{
 };
 export const calcCosting=(spec,rates,freight,boxTrimData)=>{
   const{L,W,H,ply=5,boxType="RSC",layers={},flute_F1,flute_F2,ups=1,
-    waste=5,convRate=7,wastePP=5,convRatePP=12.5,freightOverride,plant,delivery,margin=8,interest=1.5,
+    waste=5,convRate=7,wastePP=5,convRatePP=12.5,freightOverride,plant,delivery,margin=8,interest,
     printing=0,stitching=0,coating=0,handling=0,moqCharge=0,packing=0,other=0,unloading=0,
     flutingBCF=0.10,setCode,rowType}=spec;
   const isBoard=boxType==="Board"||boxType==="PP"; // PP = plates/partitions: flat piece formula
@@ -46,6 +47,14 @@ export const calcCosting=(spec,rates,freight,boxTrimData)=>{
   const isPP=rowType==="Plate"||rowType==="Part-L"||rowType==="Part-W";
   const effWaste=isPP?nz(wastePP,5):nz(waste,5);
   const effConv=isPP?nz(convRatePP,12.5):nz(convRate,7); // A1-04: fallback 10.5→12.5 to match INIT_SPEC/profile/buildSpecFromRow defaults
+  // S7 / E-1 + E-2. Interest joins waste and conversion in the nz() treatment,
+  // for the same reason and with one extra: `+interest||0` at the line below
+  // could not tell a BLANK apart from an EXPLICIT ZERO, because `+""` is 0 and
+  // `0||0` is 0. Blank must inherit the versioned fallback; an explicit 0 must
+  // charge no interest and survive. The destructuring default of 1.5 that used
+  // to sit on `interest` is gone with it — CDM-18 gives one fallback and it is
+  // 0.5, so a fourth answer hard-coded here was an answer nobody approved.
+  const effInterest=nz(interest,CALC_DEFAULTS.interestFallbackPct);
   const[dkl,cut]=getTrimD(boxType,+ply,boxTrimData);
   // Deckle formulas by box type (authoritative — verified against Excel CBB+PP col P):
   //   Board/PP : L × Ups + DklTrim
@@ -78,7 +87,7 @@ export const calcCosting=(spec,rates,freight,boxTrimData)=>{
   const fr=wtSheet*frRate;          // Freight on Sheet Weight (goods shipped)
   const addOns=(+printing||0)+(+stitching||0)+(+coating||0)+(+handling||0)+(+moqCharge||0)+(+packing||0)+(+other||0)+(+unloading||0);
   const sub=mat+conv+addOns;          // v6.1: NO freight in Total Cost
-  const intC=sub*(+interest||0)/100;  // Interest on mat+conv+addons only
+  const intC=sub*effInterest/100;      // Interest on mat+conv+addons only (E-2: blank != zero)
   const total=sub+intC+fr;            // Total Cost INCL freight — landed rate basis
   const marginAmt=total*(+margin||0)/100;
   const finalRate=Math.round((total+marginAmt)*20)/20;

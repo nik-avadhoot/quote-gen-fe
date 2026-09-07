@@ -54,11 +54,30 @@ const PART_L = { ...INIT_SPEC, L:360, W:240, H:"", boxType:"PP", ply:3, ups:2,
   flute_F1:"B", layers:LAYERS_3PLY, plant:"Nagpur", delivery:"Pune",
   convRatePP:12.5, margin:8, interest:0.5, rowType:"Part-L" };
 
+// S7(b) — the Interest arms. E-1 removed the destructuring default of 1.5 and
+// E-2 replaced `+interest||0` with the same nz() treatment waste and conversion
+// already had. Neither defect was reachable from any caller: INIT_SPEC carries
+// interest:0.5 and buildSpecFromRow supplies `prof.interest ?? 0.5`, so no
+// existing golden moved. These three arms make the corrected behaviour a
+// GOLDEN rather than an assertion about unreachable code.
+//
+// Measured before/after on the box-5ply spec:
+//
+//   interest: 0.5   0.500% -> 0.500%   finalRate 41.25 -> 41.25   unchanged
+//   interest: 0     0.000% -> 0.000%   finalRate 41.05 -> 41.05   unchanged
+//   interest: ''    0.000% -> 0.500%   finalRate 41.05 -> 41.25   E-2
+//   interest absent 1.500% -> 0.500%   finalRate 41.60 -> 41.25   E-1
 const CASES = {
   'box-5ply':     BOX_5PLY,
   'plate':        PLATE,
   'part-L wPP=0': { ...PART_L, wastePP: 0 },
   'part-L wPP=5': { ...PART_L, wastePP: 5 },
+  // explicit zero: a Pricing Group that charges no interest. Must stay 0.
+  'box int=0':     { ...BOX_5PLY, interest: 0 },
+  // blank: inherit the versioned 0.5% fallback (CDM-18). Used to become 0.
+  'box int=blank': { ...BOX_5PLY, interest: '' },
+  // absent: same fallback. Used to become the unapproved 1.5%.
+  'box int=absent': (() => { const s = { ...BOX_5PLY }; delete s.interest; return s; })(),
 };
 
 /* ── Run ───────────────────────────────────────────────────────────────────*/
@@ -91,10 +110,30 @@ for (const f of ['finalRate', 'calcMOQ']) {
          `the 0-vs-blank distinction is not being honoured`);
   }
 }
+/* The same discipline for Interest (S7 / E-2). A blank and an explicit zero
+   both produced 0% before this slice, so the two arms were identical and the
+   distinction was invisible. Assert they DIFFER, and that blank lands on the
+   versioned 0.5% fallback rather than on the withdrawn 1.5%.               */
+const i0 = actual['box int=0'], iB = actual['box int=blank'], iA = actual['box int=absent'];
+if (i0.finalRate === iB.finalRate) {
+  fail(`contrast: box interest 0 and BLANK are identical (${i0.finalRate}) — ` +
+       `blank is being read as zero (E-2)`);
+}
+if (iB.finalRate !== iA.finalRate) {
+  fail(`contrast: BLANK (${iB.finalRate}) and ABSENT (${iA.finalRate}) differ — ` +
+       `both must reach the one versioned fallback, not two different answers`);
+}
+if (iB.finalRate !== actual['box-5ply'].finalRate) {
+  fail(`contrast: BLANK (${iB.finalRate}) did not land on the 0.5% fallback ` +
+       `(${actual['box-5ply'].finalRate}) — check interestFallbackPct`);
+}
+
 const contrastBroken = failed > 0;
 if (!contrastBroken) {
   console.log(`ok    contrast: wastePP 0 vs 5 differ ` +
     `(finalRate ${w0.finalRate}/${w5.finalRate}, calcMOQ ${w0.calcMOQ}/${w5.calcMOQ})`);
+  console.log(`ok    contrast: interest 0 vs blank differ ` +
+    `(finalRate ${i0.finalRate}/${iB.finalRate}), and blank == absent == 0.5% fallback`);
 }
 
 /* ── Record or compare ─────────────────────────────────────────────────────*/

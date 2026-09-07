@@ -26,5 +26,26 @@
     "calcMOQ": 78300,
     "calcGSM": 464,
     "calcBS": 6.24
+  },
+  "box int=0": {
+    "finalRate": 41.05,
+    "ratePerKg": 50.5,
+    "calcMOQ": 6400,
+    "calcGSM": 942,
+    "calcBS": 12.24
+  },
+  "box int=blank": {
+    "finalRate": 41.25,
+    "ratePerKg": 50.75,
+    "calcMOQ": 6400,
+    "calcGSM": 942,
+    "calcBS": 12.24
+  },
+  "box int=absent": {
+    "finalRate": 41.25,
+    "ratePerKg": 50.75,
+    "calcMOQ": 6400,
+    "calcGSM": 942,
+    "calcBS": 12.24
   }
 }
