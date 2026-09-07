@@ -22,6 +22,7 @@ export default function Sidebar(){
     ["freight","🚚","Freight Rates"],
     ["defaults","🛠","Defaults"],
     ["plants","🏭","Producing Plants"],
+    ["families","👪","Customer Families"],
     ...(role==="admin"?[["users","👥","Users"]]:[]),
   ];
   return(
