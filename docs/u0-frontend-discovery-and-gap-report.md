@@ -35,13 +35,15 @@ Outside the tab switch, three more screens exist and are not nav items:
 | Change Password | `ChangePasswordModal.jsx` | TopBar action |
 | Profile / email change | `ProfileModal.jsx` | TopBar action |
 
-`role` gating is frontend-only (`Sidebar.jsx` line 24: `...(role==="admin"?[["users",...]]:[])`).
-The **backend** is the actual enforcement boundary for every write those screens make — RLS plus the
-caller-context routes below — but a non-admin who forces `tab="users"` (e.g. via React DevTools)
-would currently render `UserManagementTab` and only fail when it calls `/admin/users`. This is the
-kind of silent-trust gap U1's capability-aware navigation primitive must close: hiding the nav entry
-is a usability aid, not access control (`data-model-frontend-design-plan.md` §2.1), and today nothing
-stops the tab itself from mounting.
+`role` gating is frontend-only but is applied **twice** today — once in `Sidebar.jsx` (hides the nav
+entry) and again in the tab switch itself (`QuotationApp.jsx`: `tab==="users"&&role==="admin"&&
+<UserManagementTab/>`), so forcing `tab="users"` via React DevTools while `role!=="admin"` does not
+currently mount the component. Both checks are still plain JS string comparisons, not access control
+— the **backend** is the actual enforcement boundary (RLS plus the caller-context routes below), and
+a capability-aware nav/render primitive should replace both checks with one shared helper rather than
+leave two copies of the same frontend-only gate to drift apart, which is the real risk here: today
+they happen to agree, but nothing keeps a future third gate (e.g. a new admin-only action added
+inside an already-open screen) in sync with either.
 
 ## 2. Browser-local versus Supabase-backed data, per screen
 
