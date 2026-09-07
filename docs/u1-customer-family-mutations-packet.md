@@ -1,234 +1,264 @@
 # U1 — Customer Family mutations: implementation packet
 
-**Date:** 2026-09-07. **Status: planning only. No wrapper migration, Flask route or frontend action
-is implemented by this document** — it is the packet the post-U1-correction handover asked for
-before that work is authorised.
+**Date first drafted:** 2026-09-07. **Amended:** 2026-09-07, same day, before implementation began,
+per the binding decisions issued after this packet's first draft was reviewed. **Status: schema,
+governed DB operations and DB-layer tests are now implemented and committed** (`quote-gen-be`
+migrations `20260907065533`…`20260907072420`). Flask routes, frontend actions and the HTTP probe
+matrix update are **still pending** — this document is corrected ahead of that remaining work, not
+after it, so the routes and UI are built against the actual implemented shape rather than the
+superseded planning assumptions below.
 
-**Scope note, corrected from the U0 report's first draft:** not every Customer Family mutation is
-architecturally blocked. Reading `pg_policies` directly (not assumed) shows two different gaps:
+## Amendment record — what changed from the first draft, and why
 
-| Operation | Governed path today | Gap |
+The first draft (§0 table below, preserved for the audit trail) treated Propose/Quick-create-
+Prospect/Approve/Edit as needing **no new SQL** — a direct RLS-gated `INSERT`/`UPDATE` was assumed
+sufficient, with only Merge/Reassign/Graduate treated as real gaps. That assumption is **superseded**
+by the binding decision that concurrency protection is mandatory on every mutable Family B record,
+not optional, and that Minimal Prospect creation must be one atomic governed database operation, not
+a collection of separate writes (CDM-06). A direct `UPDATE` cannot carry a CAS check without becoming,
+in effect, a governed operation anyway — so every mutation in scope now goes through an
+`app_private.*` function, none through a bare RLS-gated table write. The three items originally
+marked "no gap" were gaps after all, once CAS was made mandatory.
+
+~~Original §0 scope table (superseded — see above; kept for the record, not for reference):~~
+
+| ~~Operation~~ | ~~Governed path assumed~~ | ~~Gap assumed~~ |
 |---|---|---|
-| **Propose a new Family** (Maker, `status='proposed'`) | Direct `INSERT` on `public.customer_families`, RLS `WITH CHECK` already permits it for any caller holding `make_quote` at any plant, **or** `manage_customer_master` | **None.** A thin Flask POST route is enough — no new SQL. |
-| **Quick-create a Prospect** (Maker, `status='proposed'`, `lifecycle_state='prospect'`) | Direct `INSERT` on `public.parties`, same RLS shape | **None.** Same as above. |
-| **Approve a Proposed Family / edit name / aliases** | Direct `UPDATE` on `public.customer_families` / `customer_family_aliases`, RLS gated by `manage_customer_master` | **None.** A thin Flask PATCH route is enough — no new SQL. |
-| **Merge two Families** | `app_private.merge_families(p_survivor, p_retired)` — exists, tested, SECURITY DEFINER, checks `manage_customer_master` internally | **Real.** No `public` wrapper; unreachable by any caller today. |
-| **Reassign a Party's Family membership** | `app_private.reassign_party_family(p_party, p_new_family, p_effective)` — same shape | **Real.** Same gap. |
-| **Graduate a Prospect to a Customer** (mints the permanent Customer Code) | `app_private.graduate_party(p_party)` — same shape | **Real.** Same gap. |
+| ~~Propose a new Family~~ | ~~Direct `INSERT`, RLS-gated~~ | ~~None — thin Flask POST is enough~~ |
+| ~~Quick-create a Prospect~~ | ~~Direct `INSERT`, RLS-gated~~ | ~~None — thin Flask POST is enough~~ |
+| ~~Approve / edit / alias~~ | ~~Direct `UPDATE`, RLS-gated~~ | ~~None — thin Flask PATCH is enough~~ |
+| ~~Merge / Reassign / Graduate~~ | ~~`app_private.*` exists, untested by wrapper~~ | ~~Real — no public wrapper~~ |
 
-This packet covers only the three real gaps. Propose/approve/edit need no migration and are not
-re-litigated here.
+The other open item in the first draft, §5's CAS design question ("optional `p_expected_content_
+version` … Product Owner / SR DEV decision for the actual migration session"), is resolved by the
+same binding decision: **not optional**. Every `app_private` function that mutates an existing row
+takes a **required** `p_expected_content_version` with no default — a caller cannot construct a call
+that skips the check.
+
+The Family Code allocation-timing question (first draft §1's `allocate_group_customer_code` note,
+"this packet does not resolve that design question") is resolved from accepted canonical authority,
+not invented: `data-model-sr-dev-proposal.md` §12.4's scope/timing table states explicitly, in a row
+that separately treats Construction Code as bound to *publication* — "Family Code | group | Family
+creation." `propose_customer_family` therefore allocates the code in the same statement that inserts
+the Family row, at proposal, not deferred to approval.
 
 ---
 
-## 1. Existing `app_private` operations — read from the live database, not assumed
+## 1. Implemented `app_private` operations
 
-All three are `SECURITY DEFINER`, `SET search_path TO ''` (fully schema-qualified inside, the
-established hardening pattern), and already enforce `app_private.has_group_cap('manage_customer_master')`
-as their first statement — a caller-supplied JWT reaching them through a wrapper would be refused
-the same way regardless of what the wrapper does.
+All are `SECURITY DEFINER`, `SET search_path TO ''` (fully schema-qualified inside), and each
+performs its own capability check as its first statement — a caller-supplied JWT reaching one
+through its wrapper is refused the same way regardless of the wrapper. Source:
+[`20260907065939_family_b_mutations_functions.sql`](../../quote-gen-be/supabase/migrations/20260907065939_family_b_mutations_functions.sql).
 
-- **`merge_families(p_survivor bigint, p_retired bigint) returns void`** — locks both rows
-  (`for update`), refuses `p_survivor = p_retired` (`22023`), copies the retired family's name into
-  `customer_family_aliases` on the survivor (idempotent via `on conflict … do nothing`), sets the
-  retired family `status='retired'`, `surviving_family_id=p_survivor`, bumps `content_version`.
-  **No CAS parameter** — it does not accept or check an expected `content_version` on either side;
-  the row lock is the only concurrency control.
-- **`reassign_party_family(p_party bigint, p_new_family bigint, p_effective date default
-  current_date) returns void`** — locks the Party and its current membership row, no-ops if already
-  in the target Family, refuses an effective date before the current membership started (`22007`),
-  closes the current membership (`is_current=false`, `effective_until=p_effective`) and inserts the
-  new one. **No CAS parameter** either.
-- **`graduate_party(p_party bigint) returns text`** — locks the Party, is **idempotent** (returns the
-  existing code unchanged if already a customer), requires a current Family membership and that
-  Family to already hold a `group_customer_code` (both `P0002` otherwise), allocates a sequence via
-  `ref_private.allocate_reference('customer', family_id, null)`, mints `{family_code}-{seq:03d}`,
-  sets `lifecycle_state='customer'`, `status='active'`, `customer_code`, bumps `content_version`.
-  Returns the minted code.
-- **`allocate_group_customer_code() returns text`** — `SECURITY DEFINER`, **no capability check of
-  its own** (it is a low-level sequence-allocation helper, not an end-user operation) — mints
-  `G{seq:04d}` via `ref_private.allocate_reference('group_customer', 0, null)`. Only meaningful as
-  part of Family *creation*, which (per the table above) is a direct RLS-gated `INSERT` — so this
-  function's caller would be a **new** `propose_customer_family()` wrapper if the Product Owner
-  wants the permanent code minted atomically at proposal time, or left to a separate `manage_
-  customer_master`-gated step later. **This packet does not resolve that design question — see §8.**
+| Function | Capability required | CAS | Notes |
+|---|---|---|---|
+| `propose_customer_family(p_name)` → `bigint` | `manage_customer_master` **or** `make_quote` at any active plant | n/a (insert) | Allocates `group_customer_code` at creation (§12.4). Creates `status='proposed'`. |
+| `create_minimal_prospect(p_display_name, p_family_id default null)` → `(party_id, family_id)` | same as propose | n/a (insert) | One atomic operation (CDM-06): reuses `p_family_id` if given (locked, refused if retired), else silently proposes a new Family named after the Prospect; inserts the Party (`lifecycle_state='prospect'`) and its current membership. Full rollback on any step failure — implicit transaction, one function body. |
+| `update_customer_family(p_family, p_expected_content_version, p_name)` | `manage_customer_master` | **required** | Renames a Family. |
+| `approve_customer_family(p_family, p_expected_content_version)` | `manage_customer_master` | **required** | `proposed → active` only; refuses any other current status (`22023`); sets `approved_by`/`approved_at`. |
+| `add_family_alias(p_family, p_alias)` | `manage_customer_master` | n/a (insert) | Duplicate alias on the same Family refused by `uk_alias` (`23505`). |
+| `update_family_alias(p_alias_id, p_expected_content_version, p_alias)` | `manage_customer_master` | **required** | |
+| `retire_family_alias(p_alias_id, p_expected_content_version)` | `manage_customer_master` | **required** | Refuses double-retirement (`22023`). |
+| `merge_families(p_survivor, p_retired, p_expected_survivor_version, p_expected_retired_version)` | `manage_customer_master` | **required, both sides** | Self-merge refused (`22023`). Cycle prevention: retired-into-survivor and double-retirement both refused (`22023`). Retired Family's name copied to the survivor as an alias (`on conflict do nothing`, idempotent). Retired row keeps its id, gets `status='retired'`, `surviving_family_id=survivor` — lineage never deleted. |
+| `reassign_party_family(p_party, p_new_family, p_expected_content_version, p_effective default current_date)` | `manage_customer_master` | **required, on the Party** | Locks the Party and its current membership row together. No-ops if already in the target Family. Refuses a target that is `retired` (`22023`) and an effective date before the current membership's `effective_from` (`22007`). Closes the current membership and inserts the new one — the prior one is retained as history, not deleted. |
+| `graduate_party(p_party)` → `text` | `manage_customer_master` | n/a (idempotent) | Unchanged from S6 — mints `customer_code` once, returns the existing code unchanged on a repeat call. No CAS needed: a race produces the same correct result twice. |
 
-Existing DB-layer coverage: `tests.party_masters()` (from `20260904144336_p2_3_family_b_regression_tests.sql`)
-and the fixtures added in `20260904145607_p2_4_persona_and_lifecycle_tests.sql`. Re-run as part of
-`tests.run_all()` (currently 783/783) before and after the wrapper migration — a wrapper must not
-require touching these functions' bodies at all, so a passing `tests.run_all()` after the migration
-is the first evidence nothing at the authority layer moved.
+**CAS technique** (identical on every function above that needs it — the established
+`revise_batch_profile`/S6-12 pattern): a self-referential `update ... set content_version =
+content_version [+ 1] where id = ... and content_version = p_expected`; `get diagnostics v_n =
+row_count`; `v_n = 0` distinguishes "row doesn't exist" (`P0002`) from "row exists but version
+didn't match" (`40001`) by a follow-up existence check. `merge_families` applies this **twice**, once
+per side, both checks completed *before* either row's status changes — a stale version on the
+survivor is caught exactly as reliably as a stale version on the retiring side. `reassign_party_
+family` applies it to the **Party** row (not the membership row directly), which protects against
+both a concurrent reassignment and a concurrent unrelated edit to the Party while the call is in
+flight.
 
-## 2. Minimum public invoker wrappers required
+**No optional/default CAS parameter exists anywhere in this set** — every `p_expected_content_
+version` argument is required, so no call can be constructed that bypasses the check, per the
+binding decision.
 
-Following the established P2-6 pattern already used for `is_admin()`-style helpers (SECURITY
-DEFINER in `app_private`, thin `public` shim so PostgREST can route to it under the caller's own
-token):
+## 2. Public invoker wrappers — implemented
 
-```sql
-create or replace function public.merge_customer_families(p_survivor bigint, p_retired bigint)
-returns void
-language sql
-security invoker
-set search_path = ''
-as $$
-  select app_private.merge_families(p_survivor, p_retired);
-$$;
+Ten `public`-schema `SECURITY INVOKER`, `language sql`, `set search_path = ''` wrappers, one per
+`app_private` function above (the tenth being the now-wrapped, previously-unreachable
+`graduate_party`, renamed `graduate_customer_party` at the public layer for name clarity). Each
+wrapper is a single `select app_private.<fn>(...)` — no logic, no duplicated capability check. Source:
+same migration, §"public invoker wrappers".
 
-create or replace function public.reassign_customer_family(
-  p_party bigint, p_new_family bigint, p_effective date default current_date)
-returns void
-language sql
-security invoker
-set search_path = ''
-as $$
-  select app_private.reassign_party_family(p_party, p_new_family, p_effective);
-$$;
+**Grants**, applied via a `do $$ ... $$` loop over exactly these ten public functions (not a manual
+per-function `grant`/`revoke`, to guarantee none is missed):
+- `revoke all ... from public` (covers `anon`/`service_role`'s default membership)
+- `revoke all ... from anon` (explicit, defense in depth)
+- `grant execute ... to authenticated` (the only role that can ever reach any of the ten)
 
-create or replace function public.graduate_customer_party(p_party bigint)
-returns text
-language sql
-security invoker
-set search_path = ''
-as $$
-  select app_private.graduate_party(p_party);
-$$;
-```
+No table grant changes, no RLS changes — the wrappers don't touch RLS; `app_private.*` already runs
+`SECURITY DEFINER` and the capability gate is PL/pgSQL, not a policy. `tests.customer_family_
+mutations()` CFM-26/26a assert this grant posture directly (`has_function_privilege`) rather than
+assuming it holds.
 
-`SECURITY INVOKER` on the shim is correct and deliberate — the shim itself does nothing privileged;
-it exists only so PostgREST can route an RPC call to a `public`-schema name. All three fail closed:
-if `manage_customer_master` is absent, `app_private.*` raises `42501` before any row is touched,
-and the shim propagates that exception unchanged (`security invoker` + `language sql` does not
-swallow exceptions).
-
-**Grants:** `grant execute on function public.merge_customer_families(bigint, bigint) to
-authenticated;` (and the same for the other two). No grant to `anon`. No grant to `service_role`
-needed — the caller's own token reaches the function via PostgREST exactly as every other converted
-route does.
-
-**No new table grant, no RLS change.** The wrapper does not touch RLS at all — `app_private.*`
-already runs as the function owner (`SECURITY DEFINER`) and the capability check happens in
-PL/pgSQL, not through a policy. This is the same shape as every other converted-RPC slice (Family
-C's `propose_construction`, Family D/E's `propose_pricing_basis_release`) — nothing novel is being
-introduced.
+**`service_role`** deliberately is **not** asserted to lack `EXECUTE` (an earlier test draft assumed
+it did and was corrected — see the `20260907071705` migration's header comment): `service_role`
+bypasses RLS and carries platform-level default privileges on this project regardless of a per-
+function revoke, so confinement of `service_role` is enforced as an *application-layer* discipline
+(Flask never uses the service-role client for these routes — see §5) rather than a DB-grant one. The
+established `revise_batch_profile` (S6-12) grant pattern makes the same choice.
 
 ## 3. Caller and capability checks
 
-Already complete inside `app_private.*` — the wrapper adds none and must not duplicate the check
-(duplicating it would create two places that could drift, exactly the D-27/S6-14 class of defect
-this codebase has already paid for once). The Flask route's only job is to forward the caller's
-token via `get_supabase_for_caller(g.access_token).rpc(...)`, read the RPC's result or exception,
-and translate a `42501`/`P0002`/`22023`/`22007` Postgres error into the right HTTP status — the same
-translation `_apply_role_and_plant` and the other RPC-calling routes already do.
+Enforced entirely inside `app_private.*`, per the binding decision that business operations stay
+authoritative in the database and Flask must not duplicate capability rules. Flask's job, once the
+routes exist, is unchanged from the plan: forward the caller's own token via
+`get_supabase_for_caller(g.access_token).rpc(name, params)`, read the RPC's result or exception, and
+map the Postgres error code to a stable HTTP status (§6).
 
 ## 4. Atomicity
 
-Each function is already one PL/pgSQL block — Postgres wraps it in an implicit transaction, so
-`merge_families` cannot leave the alias inserted without the retirement applied, and
-`reassign_party_family` cannot leave the old membership closed without the new one inserted. The
-wrapper adds no additional statements, so it introduces no new atomicity surface. **The Flask route
-must call the RPC exactly once and not attempt to compose several RPC calls into one HTTP request**
-(e.g. "graduate then reassign" must be two requests, two undo points) — composing them would move
-atomicity into application code, which CDM/D-27 precedent says not to do.
+Each function is one PL/pgSQL body; Postgres's own implicit transaction is the atomicity boundary.
+`create_minimal_prospect` is the operation this matters most for — Family reuse-or-creation, Party
+insert, and membership insert are three statements inside one function, so a failure at the
+membership insert rolls back the Party insert too (verified: CFM-22a asserts no orphan Party survives
+a forced failure). `merge_families` cannot leave the alias inserted without the retirement applied,
+and cannot leave one side's CAS validated without the other's. **Flask must still call each RPC
+exactly once per HTTP request and never compose several RPC calls into one request** — unchanged from
+the original plan; composing them would move atomicity into application code.
 
-## 5. Conflict / CAS behaviour — the one real design gap
+## 5. Conflict / CAS behaviour
 
-Neither `merge_families` nor `reassign_party_family` accepts an expected `content_version`. Both
-take a row lock (`for update`), so two concurrent calls serialise correctly and neither corrupts
-data — but the **second** caller's request silently succeeds against whatever the first caller left
-behind, with no "this changed since you loaded it" signal. That is different from `revise_batch_
-profile`'s established CAS shape (S6-C2) and from the stale-write discipline the U1 shared
-foundation's `StaleState` component exists to surface.
+No longer an open question (see the Amendment record above) — implemented as mandatory, required-
+argument CAS on every mutation of an existing row, verified by twelve distinct stale-version test
+cases in `tests.customer_family_mutations()` (CFM-9, 12, 15, 16, 23), each expecting `40001`.
 
-**Recommendation, not yet decided:** add an optional `p_expected_content_version` parameter to both
-`app_private` functions (a small, additive change to already-tested code, not a rewrite) that raises
-`40001` when the locked row's `content_version` does not match — mirroring `revise_batch_profile`
-exactly. This is a Product Owner / SR DEV design decision for the actual migration session, not
-resolved here. If declined, the frontend must instead re-fetch and compare before showing a merge/
-reassign confirmation, and accept that a genuine race is possible (rare, since both are
-`manage_customer_master`-gated administrative actions, not high-frequency Maker writes).
+## 6. Stable HTTP error mapping (for the pending Flask routes)
 
-`graduate_party` needs no CAS — it is already idempotent (returns the existing code unchanged on a
-second call), so a race produces the same correct result twice, not a conflict.
+| Postgres condition | `errcode` | HTTP |
+|---|---|---|
+| No active session / caller not resolvable | `42501` | 401 (if literally unauthenticated) |
+| Capability check failed | `42501` | 403 |
+| Row not found (Family, Party, alias) | `P0002` | 404 |
+| Stale `content_version` | `40001` | 409 |
+| Forbidden state transition, self-merge, merge-cycle, double-retirement, retired target | `22023` | 422 |
+| Effective date precedes current membership | `22007` | 422 |
+| Missing/blank required field | `22023` (same code, different message) | 400 |
+| Anything else | — | 500, no Postgres text leaked to the client; log server-side only |
 
-## 6. Permanent-code and lineage preservation
+Distinguishing the 400-vs-422 `22023` cases requires matching on the message text server-side (never
+forwarding raw Postgres text to the client either way) or, preferably, giving the "required field"
+checks their own distinct `errcode` in a follow-up migration if the ambiguity proves troublesome in
+practice — not resolved here since it does not change the data model, only the HTTP mapping's
+internal implementation.
 
-Already correct in the existing functions, verified by reading the bodies, not assumed:
-- `merge_families` never deletes the retired Family row or renumbers `customer_families.id` —
-  it sets `status='retired'` and `surviving_family_id`, so every historical reference (a Party's old
-  membership rows, any exported document) keeps resolving. The retired name becomes a searchable
-  alias on the survivor rather than being lost.
-- `graduate_party` mints `customer_code` **once** (idempotent short-circuit) — a Party's permanent
-  Customer Code, once minted, cannot be reassigned by calling this function again.
-- `allocate_group_customer_code` / `allocate_reference('customer', …)` both go through
-  `ref_private`'s existing reference-sequence machinery (the same one every other permanent code in
-  the accepted model uses) — no bespoke numbering scheme is introduced.
+## 7. Permanent-code and lineage preservation
 
-## 7. Required Flask routes
+Unchanged from the original analysis, now re-verified by the implemented test suite rather than by
+reading the bodies alone: `merge_families` never deletes the retired Family row (CFM-17/17a/17b);
+`graduate_party` mints `customer_code` once, idempotently; both go through `ref_private`'s existing
+reference-sequence machinery. The Customer Code, once minted, is a permanent business identifier and
+must be shown plainly on the Party record and in the graduation success confirmation going forward
+(not treated as a one-time secret) — a frontend requirement for §9, not yet built.
 
-Three POST routes, same `@require_auth` + `get_supabase_for_caller(g.access_token).rpc(name, params)`
-shape as the existing `/admin/users` POST (which already calls `admin_create_app_user` this way):
+## 8. Required Flask routes — still pending
 
-- `POST /masters/customer-families/merge` — body `{survivor_id, retired_id}`
-- `POST /masters/customer-families/reassign` — body `{party_id, new_family_id, effective_date?}`
-- `POST /masters/customer-families/graduate` — body `{party_id}`
+Nine routes (one per required mutation action in scope; Graduate is included though its DB operation
+was already wrapper-reachable before this slice), same `@require_auth` +
+`get_supabase_for_caller(g.access_token).rpc(name, params)` shape as the existing `/admin/users` POST
+and `/masters/customer-families` GET:
 
-Each: validate the body shape (integers/date, not RLS's job), call the RPC, map `42501` → 403,
-`P0002` → 404, `22023`/`22007` → 400 with the Postgres message (these messages name no table or
-column, safe to surface — read them before deciding, per the existing `_valid_email`-style
-discipline), anything else → 500 with no detail leaked. Return the RPC's result (`graduate` returns
-the new code; `merge`/`reassign` return nothing — respond `{"ok": true}`).
+- `POST /masters/customer-families` — propose. Body `{name}`.
+- `POST /masters/customer-families/prospects` — minimal Prospect. Body `{display_name, family_id?}`.
+- `PATCH /masters/customer-families/<id>` — edit name. Body `{expected_content_version, name}`.
+- `POST /masters/customer-families/<id>/approve` — Body `{expected_content_version}`.
+- `POST /masters/customer-families/<id>/aliases` — add. Body `{alias}`.
+- `PATCH /masters/customer-family-aliases/<id>` — edit. Body `{expected_content_version, alias}`.
+- `POST /masters/customer-family-aliases/<id>/retire` — Body `{expected_content_version}`.
+- `POST /masters/customer-families/merge` — Body `{survivor_id, retired_id, expected_survivor_version, expected_retired_version}`.
+- `POST /masters/customer-families/<id>/reassign` — Body `{party_id, new_family_id, expected_content_version, effective_date?}`.
+- `POST /masters/customer-families/<id>/graduate` — Body `{party_id}`.
 
-## 8. Frontend actions and confirmation flows
+(Ten bullets, nine distinct actions — reassign's route is keyed by the target Family for symmetry
+with the others but the RPC itself takes `party_id` from the body; this can be simplified once the
+frontend's actual call shape is drafted, not a data-model decision.)
 
-- **Merge**: two-step confirm ("Merge {retired.name} into {survivor.name}? This cannot be undone.")
-  — irreversible per the schema (no un-merge function exists), so the UI must say so, not just ask
-  "are you sure?". Read-back: re-fetch `/masters/customer-families` and show the retired Family's
-  new `LifecycleBadge` (retired) and its alias now under the survivor.
-- **Reassign**: date picker defaulting to today, refuse a past date client-side too (cheap, the
-  server still refuses authoritatively) with the same `22007` message. Read-back: the Party's row in
-  `VersionHistory` gains a new entry, the old one gains its `effective_until`.
-- **Graduate**: single confirm, shows the minted code in the success toast (the code is not
-  guessable in advance and the user needs to see it once, same reasoning as `CredentialModal` for a
-  reset password). Disabled (via `CapabilityGate`) when the Party has no current Family or that
-  Family has no `group_customer_code` — mirror the RPC's own `P0002` conditions client-side as a
-  usability hint, not as the actual guard.
-- All three actions go through `CapabilityGate` gated on `manage_customer_master`, and through
-  `classifyResponse()` so a `403` reads as access-denied and a `400`/`404` reads as validation, per
-  the existing `lib/backendError.js` contract.
+Each route: validate body shape (types only, not RLS's job), call the RPC once, map the result per
+§6, return `{"ok": true}` for void RPCs or the RPC's return value (new id, minted code, or the
+`(party_id, family_id)` pair) for the others.
 
-## 9. Positive and negative tests
+## 9. Frontend actions — still pending
 
-**Database** (extend `tests.party_masters()` or a new suite, same file convention as every other
-Family): merge survivor/retired both exist, alias created, retired row intact with
-`surviving_family_id` set, `content_version` bumped, self-merge refused `22023`, without
-`manage_customer_master` refused `42501` before any row changes; reassign happy path, no-op when
-already in target family, past-effective-date refused `22007`, nonexistent party `P0002`; graduate
-happy path mints the expected code shape, second call is idempotent (same code, no new sequence
-consumed), missing family membership `P0002`, family without a code `P0002`.
+Per the required mutation scope: propose/edit Family, approve, add/edit/retire alias, merge, reassign
+with effective dating, graduate a Prospect "where it belongs naturally on the Family surface" — i.e.
+as actions on `CustomerFamiliesScreen.jsx`'s existing read-only rows, not a new screen. The broader
+Customer/Prospect mutation UI stays out of scope, per the standing instruction, unless a small part
+proves strictly required by one of these nine actions (expected: it will not).
 
-**Route** (same hermetic fake-client pattern as `test_customer_families_route.py`): each of the three
-routes — anonymous 401, no-capability 403 with no RPC call attempted, success path calls the RPC
-with the caller's own token and returns the expected body, each Postgres error code maps to the
-right HTTP status, no service-role client used.
+- Every action's confirm/error flow goes through `CapabilityGate` (`manage_customer_master`, or for
+  Propose/Prospect-create, `manage_customer_master` **or** `make_quote` at any plant — mirroring the
+  DB's own OR condition, not narrower) and `classifyResponse()` from `lib/backendError.js`, so a 403
+  reads as access-denied, a 409 reads as stale (re-fetch and retry, not silently overwritten), and a
+  422/400 reads as validation.
+- **Merge**: two-step, irreversible-warning confirm; read-back re-fetches and shows the retired row's
+  new state plus its alias on the survivor.
+- **Reassign**: date picker defaulting to today; client-side pre-check against the DB's actual rule
+  (not preceding the *current membership's* start date, not an invented narrower policy) as a
+  usability hint only — the server remains authoritative.
+- **Graduate**: shows the minted Customer Code in the success confirmation, and the record continues
+  to display it afterward as a permanent field — not a one-time reveal.
+- Every mutation call is a single Flask request per action; the browser never calls a Postgres RPC or
+  runs mutation SQL directly (binding decision — backend-only writes).
 
-**Frontend**: `classifyResponse` already covers 403/400/404 shape (no new test needed there);
-one fixture-script scenario per action confirming the confirm-dialog copy names the right entities
-and the read-back re-fetch fires after a 200.
+## 10. Proof obligations
 
-## 10. Rollback and migration treatment
+**Database — implemented.** `tests.customer_family_mutations()` (CFM-1…26a, in
+[`20260907071937`](../../quote-gen-be/supabase/migrations/20260907071937_family_b_mutations_fix_grants_and_drop_obsolete.sql)'s
+corrected final form): unauthenticated (CFM-1), no capability (CFM-2), deactivated/inactive assignee
+holding the grant (CFM-3), authorised Maker succeeds at propose (CFM-4/5), wrong-group denial at
+approve (CFM-6), valid approval (CFM-7/7a), forbidden re-approval of an already-active Family
+(CFM-8), stale `content_version` on edit (CFM-9), duplicate alias (CFM-11), stale alias version
+(CFM-12), self-merge (CFM-14), stale survivor-side CAS alone (CFM-15), stale retired-side CAS alone
+(CFM-16), survivor/retired lineage preservation (CFM-17/17a/17b), merge-cycle prevention (CFM-18),
+double-retirement prevention (CFM-19), atomic `create_minimal_prospect` incl. Family reuse (CFM-20…21)
+and rollback on partial failure (CFM-22/22a), stale Party CAS during reassignment (CFM-23), reassign
+into a retired target refused (CFM-24), reassignment membership-history correctness (CFM-25/25a),
+absence of `anon` execute on any of the ten wrappers and full `authenticated` coverage (CFM-26/26a).
+`tests.batch_workspace()` (BF-13) re-verified against the new required-CAS `reassign_party_family`
+signature.
 
-Additive only — one migration creating three `public` functions and their grants, nothing dropped,
-nothing altered in `app_private`. Rollback is `drop function public.merge_customer_families(bigint,
-bigint);` etc. — safe at any time, since no other object depends on the wrappers (PostgREST is the
-only caller, and dropping them just makes the RPCs unroutable again, back to today's state). If the
-CAS addition from §5 is accepted, that migration touches `app_private.merge_families` and
-`app_private.reassign_party_family` signatures (`create or replace`, additive optional parameter —
-existing callers with no version supplied keep today's unconditional behaviour) and must re-run
-`tests.party_masters()` before and after, same as any other function edit in this codebase.
+**Route** — pending, to be added alongside the Flask routes in §8, same hermetic fake-client pattern
+as `test_customer_families_route.py`: unauthenticated 401; authenticated without capability 403, no
+RPC attempted; wrong-plant/wrong-group caller 403; inactive assignment 403; valid authorised caller
+success; stale `content_version` 409; each Postgres error code mapped to its documented HTTP status;
+no `service_role` client used by any of the nine routes.
+
+**Frontend** — pending, one fixture-script scenario per action per the existing
+`scripts/capabilities-fixtures.mjs` convention.
+
+**HTTP probe matrix** — pending, `quote-gen-be/tests/http_probe_matrix.py` needs one row per newly
+exposed public route once §8 lands.
+
+## 11. Rollback and migration treatment
+
+Ten migrations, chronological, already applied and locally committed (`bf1acd2`):
+`20260907065533` (schema), `20260907065939` (functions/wrappers/grants), `20260907070509` (test
+suite), four `_fix_*` corrections found by actually running the suite
+(`20260907070644`/`070903`/`071102`/`071251`), `20260907071705` (three test-logic bugs found by a full
+run), `20260907071937` (grant/revoke completion + drop of the two orphaned CAS-less function
+overloads left behind when `merge_families`/`reassign_party_family` changed signature —
+`CREATE OR REPLACE` with a different argument list creates a new overload rather than replacing the
+old one, so the prior 2-arg/3-arg versions had to be dropped explicitly or they would have remained
+live, reachable, and exactly the concurrency-bypass surface the binding decision ruled out), and
+`20260907072420` (a second, independent fix to `tests.batch_workspace()`'s own two stale call sites,
+found only when running the *entire* `tests.run_all()`, not just the new suite in isolation).
+
+Nothing in `app_private` from before this slice was altered except the two changed signatures noted
+above (both previously unreachable — no public wrapper existed for either, confirmed by the original
+S6-era search before this slice began), so no other caller anywhere in the codebase needed updating
+except the two found by running the full suite (`tests.fixtures_matrix()`, patched in the tests
+migration itself, and `tests.batch_workspace()`, patched in `072420`).
 
 ---
 
-**Not implemented.** This is the design the next authorised session should review and, if accepted,
-turn into one migration + one Flask commit + one frontend commit, gated exactly like every other
-`manage_customer_master` action.
+**Superseded sections removed:** the first draft's §2 (wrapper code samples for a since-abandoned
+2-argument `merge_families`/3-argument `reassign_party_family` shape) and §7 (three-route plan for
+only Merge/Reassign/Graduate) are replaced in full by §§1–2 and §8 above; nothing from the original
+code samples survives unchanged into the implementation.
