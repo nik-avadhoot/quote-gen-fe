@@ -17,6 +17,11 @@
 // mutation actions, all on this existing screen's rows. No new screen, no
 // broader Customer/Prospect mutation UI (out of scope, per the standing
 // instruction).
+//
+// U1 Slice A (docs/u1-customer-foundation-authorization-packet.md) adds one
+// more action to the existing Party rows: editing display_name only, via
+// lib/partyActions.js + PATCH /masters/parties/<id>. No deactivation, no
+// merge, no Location action — those remain separately authorised.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
@@ -28,6 +33,7 @@ import {
   mergeConfirmMessage, reassignConfirmMessage, graduateConfirmMessage, retireAliasConfirmMessage,
   effectiveDatePrecedesMembership,
 } from "../lib/customerFamilyActions.js";
+import { updatePartyBody } from "../lib/partyActions.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, VersionHistory } from "../ui/dataDisplay.jsx";
 import CapabilityGate from "../ui/CapabilityGate.jsx";
@@ -411,6 +417,9 @@ function FamilyDetail({ family, aliases, memberships, parties, families, profile
   const [aliasBusy, setAliasBusy] = useState(false);
   const [editingAliasId, setEditingAliasId] = useState(null);
   const [editAliasDraft, setEditAliasDraft] = useState("");
+  const [editingPartyId, setEditingPartyId] = useState(null);
+  const [editPartyDraft, setEditPartyDraft] = useState("");
+  const [partyBusy, setPartyBusy] = useState(false);
 
   const partyById = useMemo(() => Object.fromEntries(parties.map(p => [p.id, p])), [parties]);
   const familyAliases = aliases.filter(a => a.family_id === family.id);
@@ -447,6 +456,21 @@ function FamilyDetail({ family, aliases, memberships, parties, families, profile
       updateAliasBody(editAliasDraft, alias.content_version),
       { method: "PATCH", showToast, successMessage: "Alias updated." });
     if (data !== null) { setEditingAliasId(null); onReload(family.id); }
+  };
+
+  // U1 Slice A — Party display_name edit only. No deactivation, no merge,
+  // no Location action here — those are separate slices/packets.
+  const saveParty = async (party) => {
+    if (!editPartyDraft.trim() || editPartyDraft.trim() === party.display_name) {
+      setEditingPartyId(null);
+      return;
+    }
+    setPartyBusy(true);
+    const data = await runMutation(`/masters/parties/${party.id}`,
+      updatePartyBody(editPartyDraft, party.content_version),
+      { method: "PATCH", showToast, successMessage: "Party renamed." });
+    setPartyBusy(false);
+    if (data !== null) { setEditingPartyId(null); onReload(family.id); }
   };
 
   return (
@@ -541,18 +565,32 @@ function FamilyDetail({ family, aliases, memberships, parties, families, profile
         {current.map(m => {
           const party = partyById[m.party_id];
           if (!party) return null;
+          const isEditingParty = editingPartyId === party.id;
           return (
             <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.slateM, padding: "4px 0" }}>
-              <PermanentCode code={party.customer_code} /> — {party.display_name}
-              <LifecycleBadge status={party.lifecycle_state} />
-              <CapabilityGate profile={profile} capability={MANAGE}>
-                <Btn ch="Reassign" sm v="ghost"
-                  onClick={() => openModal({ kind: "reassign", party, membership: m, currentFamilyId: family.id })} />
-                {party.lifecycle_state === "prospect" && (
-                  <Btn ch="Graduate" sm v="ghost"
-                    onClick={() => openModal({ kind: "graduate", party, currentFamilyId: family.id })} />
-                )}
-              </CapabilityGate>
+              <PermanentCode code={party.customer_code} />
+              {isEditingParty ? (
+                <>
+                  <Inp value={editPartyDraft} onChange={setEditPartyDraft} st={{ width: 180 }} />
+                  <Btn ch="Save" sm disabled={partyBusy} onClick={() => saveParty(party)} />
+                  <Btn ch="Cancel" sm v="secondary" disabled={partyBusy} onClick={() => setEditingPartyId(null)} />
+                </>
+              ) : (
+                <>
+                  — {party.display_name}
+                  <LifecycleBadge status={party.lifecycle_state} />
+                  <CapabilityGate profile={profile} capability={MANAGE}>
+                    <Btn ch="Edit" sm v="ghost"
+                      onClick={() => { setEditPartyDraft(party.display_name); setEditingPartyId(party.id); }} />
+                    <Btn ch="Reassign" sm v="ghost"
+                      onClick={() => openModal({ kind: "reassign", party, membership: m, currentFamilyId: family.id })} />
+                    {party.lifecycle_state === "prospect" && (
+                      <Btn ch="Graduate" sm v="ghost"
+                        onClick={() => openModal({ kind: "graduate", party, currentFamilyId: family.id })} />
+                    )}
+                  </CapabilityGate>
+                </>
+              )}
             </div>
           );
         })}
