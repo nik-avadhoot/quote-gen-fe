@@ -1,51 +1,53 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // src/lib/capabilities.js — capability-aware navigation/action gating.
 //
-// U1 shared foundation (post-S7 handover §9.2). RLS is the enforcement
-// boundary (data-model-frontend-design-plan.md §2.1) — everything here is a
-// USABILITY aid that hides a control or nav entry a caller could not
-// exercise anyway, never the reason an action is safe.
+// U1 shared foundation (post-S7 handover S9.2), corrected after the U0/U1
+// review. RLS is the enforcement boundary (data-model-frontend-design-plan.md
+// S2.1) — everything here is a USABILITY aid that hides a control or nav
+// entry a caller could not exercise anyway, never the reason an action is
+// safe.
 //
-// The backend today (`derive_role()` in server.py) collapses the full
-// plant-scoped capability-grant model down to one of "admin" | "checker" |
-// "maker" on `profile.role` — see the U0 report §5.1. This module is
-// written against the RICHER shape the backend does not return yet
-// (`profile.capabilities`, a flat array of capability keys the caller holds
-// anywhere) and degrades to the role string when that shape is absent, so
-// call sites do not have to know which shape they got.
+// CORRECTION: the first pass invented field names (`profile.capabilities`,
+// `profile.capabilitiesByPlant`) and a role-implies-capability fallback that
+// could grant a capability never actually held. Both were wrong.
+// `caller_context.resolve_caller()` (quote-gen-be) already returns the real
+// shape on every /auth/login, /auth/refresh and /auth/me response, and
+// always has:
+//   profile.group_capabilities   — flat array of capability keys, group-wide
+//   profile.plant_capabilities   — { [plant_code]: [capability keys] }
+// This was missed during U0 discovery (only server.py's admin routes were
+// read, not caller_context.py) and is corrected here rather than left as an
+// aspirational shape the backend was asked to grow into.
+//
+// DENY BY DEFAULT. There is no role-based inference any more: an absent or
+// malformed profile, or a capability neither list mentions, is a denial, not
+// a guess. A legacy screen may keep reading `profile.role` directly for now
+// (UserManagementTab.jsx's own admin gate is untouched by this file), but no
+// NEW capability check may be satisfied by a role string.
 // ═══════════════════════════════════════════════════════════════════════════
 
-// role -> the capability keys that role is known to imply, for the
-// degraded path only. This is intentionally the SAME collapsing the backend
-// already does (admin > checker > maker) — it adds no new authority
-// distinction the backend does not already grant; it only lets the
-// degraded path answer hasCapability() without a new field to read.
-const ROLE_IMPLIES = {
-  admin: ["administer_users", "check_quote", "make_quote", "read_party_master"],
-  checker: ["check_quote", "make_quote", "read_party_master"],
-  maker: ["make_quote"],
-};
-
 export function hasCapability(profile, key) {
-  if (!profile) return false;
-  if (Array.isArray(profile.capabilities)) {
-    return profile.capabilities.includes(key);
+  if (!profile || !key) return false;
+  const groupCaps = Array.isArray(profile.group_capabilities) ? profile.group_capabilities : [];
+  if (groupCaps.includes(key)) return true;
+  const byPlant = profile.plant_capabilities;
+  if (byPlant && typeof byPlant === "object") {
+    for (const caps of Object.values(byPlant)) {
+      if (Array.isArray(caps) && caps.includes(key)) return true;
+    }
   }
-  const implied = ROLE_IMPLIES[profile.role] || [];
-  return implied.includes(key);
+  return false;
 }
 
-// Plant-scoped form. Degrades to the flat check above when the backend has
-// not returned per-plant detail (see the U0 report §5.1) — that is a real
-// loss of precision (a Checker at NAG reads as a Checker everywhere), named
-// explicitly here rather than silently assumed correct.
+// Plant-scoped form: true only if the caller holds `key` AT that specific
+// plant code. Deliberately does NOT fall back to the flat check — a group
+// capability (e.g. administer_users) is not a plant capability, and a caller
+// with make_quote at NAG must not read as holding it at PUN.
 export function hasCapabilityAtPlant(profile, key, plantCode) {
-  if (!profile) return false;
-  if (profile.capabilitiesByPlant && plantCode) {
-    const atPlant = profile.capabilitiesByPlant[plantCode] || [];
-    return atPlant.includes(key);
-  }
-  return hasCapability(profile, key);
+  if (!profile || !key || !plantCode) return false;
+  const byPlant = profile.plant_capabilities;
+  const atPlant = byPlant && typeof byPlant === "object" ? byPlant[plantCode] : null;
+  return Array.isArray(atPlant) && atPlant.includes(key);
 }
 
 export function useCapability(profile, key) {

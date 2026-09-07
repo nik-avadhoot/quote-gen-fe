@@ -11,6 +11,7 @@
     "test:blanket": "node scripts/blanket-confirm-fixtures.mjs",
     "test:draft": "node scripts/draft-fixtures.mjs",
     "test:resolver": "node scripts/resolver-fixtures.mjs",
+    "test:capabilities": "node scripts/capabilities-fixtures.mjs",
     "preview": "vite preview",
     "ref:case4": "node scripts/case4-reference.mjs"
   },
