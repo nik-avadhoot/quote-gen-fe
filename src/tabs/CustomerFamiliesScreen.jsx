@@ -21,7 +21,15 @@
 // U1 Slice A (docs/u1-customer-foundation-authorization-packet.md) adds one
 // more action to the existing Party rows: editing display_name only, via
 // lib/partyActions.js + PATCH /masters/parties/<id>. No deactivation, no
-// merge, no Location action — those remain separately authorised.
+// merge — those remain separately authorised.
+//
+// U1 Slice C adds a Locations sub-list under each Party row: propose (with
+// eligibility fixed at that point), edit descriptive detail (new version),
+// approve, retire, assign the permanent code — via
+// lib/customerLocationActions.js + the /masters/parties/<id>/locations and
+// /masters/customer-locations/* routes. There is deliberately no
+// eligibility-change action — post-proposal eligibility change is
+// Product-Owner-blocked, not designed.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
@@ -34,6 +42,10 @@ import {
   effectiveDatePrecedesMembership,
 } from "../lib/customerFamilyActions.js";
 import { updatePartyBody } from "../lib/partyActions.js";
+import {
+  proposeLocationBody, updateLocationBody, approveLocationBody, retireLocationBody,
+  retireLocationConfirmMessage, hasIncompleteDetails,
+} from "../lib/customerLocationActions.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, VersionHistory } from "../ui/dataDisplay.jsx";
 import CapabilityGate from "../ui/CapabilityGate.jsx";
@@ -74,7 +86,7 @@ const labelSt = { fontSize: 10, fontWeight: 700, color: C.slateM, textTransform:
 
 export default function CustomerFamiliesScreen({ showToast }) {
   const { isActive, profile } = useAuth();
-  const [state, setState] = useState({ status: "loading", families: [], aliases: [], memberships: [], parties: [] });
+  const [state, setState] = useState({ status: "loading", families: [], aliases: [], memberships: [], parties: [], locations: [], locationVersions: [] });
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [selectedId, setSelectedId] = useState(null);
@@ -97,6 +109,8 @@ export default function CustomerFamiliesScreen({ showToast }) {
         aliases: data.aliases || [],
         memberships: data.memberships || [],
         parties: data.parties || [],
+        locations: data.locations || [],
+        locationVersions: data.location_versions || [],
       });
       if (selectAfter !== undefined) setSelectedId(selectAfter);
     } else if (outcome.kind === "access-denied") {
@@ -171,7 +185,8 @@ export default function CustomerFamiliesScreen({ showToast }) {
           <EmptyState title="Select a family" />
         ) : (
           <FamilyDetail key={selected.id} family={selected} aliases={state.aliases} memberships={state.memberships}
-            parties={state.parties} families={state.families} profile={profile}
+            parties={state.parties} families={state.families} locations={state.locations}
+            locationVersions={state.locationVersions} profile={profile}
             showToast={showToast} onReload={load} openModal={setModal} />
         )}
       </div>
@@ -233,6 +248,59 @@ export default function CustomerFamiliesScreen({ showToast }) {
               { showToast, successMessage: `"${modal.family.name}" approved.` });
             if (data !== null) { setModal(null); load(modal.family.id); }
             return data !== null;
+          }} />
+      )}
+      {modal?.kind === "propose-location" && (
+        <ProposeLocationModal party={modal.party} showToast={showToast}
+          onClose={() => setModal(null)}
+          onDone={() => { setModal(null); load(modal.currentFamilyId); }} />
+      )}
+      {modal?.kind === "edit-location" && (
+        <EditLocationModal location={modal.location} currentVersion={modal.currentVersion} showToast={showToast}
+          onClose={() => setModal(null)}
+          onDone={() => { setModal(null); load(modal.currentFamilyId); }} />
+      )}
+      {modal?.kind === "approve-location" && (
+        <ConfirmModal message={`Approve this Location? It moves from Proposed to Active.`}
+          confirmLabel="Approve" showToast={showToast}
+          onClose={() => setModal(null)}
+          onConfirm={async () => {
+            const data = await runMutation(`/masters/customer-locations/${modal.location.id}/approve`,
+              approveLocationBody(modal.location.content_version),
+              { showToast, successMessage: "Location approved." });
+            if (data !== null) { setModal(null); load(modal.currentFamilyId); }
+            return data !== null;
+          }} />
+      )}
+      {modal?.kind === "retire-location" && (
+        <ConfirmModal message={retireLocationConfirmMessage(modal.location.location_code || "this Location")}
+          confirmLabel="Retire" danger showToast={showToast}
+          onClose={() => setModal(null)}
+          onConfirm={async () => {
+            const data = await runMutation(`/masters/customer-locations/${modal.location.id}/retire`,
+              retireLocationBody(modal.location.content_version),
+              { showToast, successMessage: "Location retired." });
+            if (data !== null) { setModal(null); load(modal.currentFamilyId); }
+            return data !== null;
+          }} />
+      )}
+      {modal?.kind === "assign-location-code" && (
+        <ConfirmModal message={`Mint the permanent Location Code for this Location? This is permanent and cannot be reissued.`}
+          confirmLabel="Assign Code" showToast={showToast}
+          onClose={() => setModal(null)}
+          onConfirm={async () => {
+            const resp = await apiFetch(`/masters/customer-locations/${modal.location.id}/assign-code`,
+              { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+            const data = await resp.json().catch(() => ({}));
+            const outcome = classifyResponse({ ok: resp.ok, status: resp.status, data });
+            if (outcome.kind === "ok") {
+              showToast?.(`✅ Permanent Location Code ${data.location_code}`, "success", 10000);
+              setModal(null);
+              load(modal.currentFamilyId);
+              return true;
+            }
+            showToast?.(`❌ ${outcome.message || "Could not assign the Location Code."}`, "error", 8000);
+            return false;
           }} />
       )}
     </div>
@@ -408,7 +476,148 @@ function ReassignModal({ party, membership, families, currentFamilyId, onClose, 
   );
 }
 
-function FamilyDetail({ family, aliases, memberships, parties, families, profile, showToast, onReload, openModal }) {
+const LOCATION_TYPE_OPTS = [
+  { v: "plant", l: "Plant" }, { v: "office", l: "Office" },
+  { v: "warehouse", l: "Warehouse" }, { v: "other", l: "Other" },
+];
+
+// U1 Slice C — propose a Customer Location. Eligibility is fixed here, at
+// proposal; there is no later action to change it (Product-Owner-blocked —
+// see docs/u1-customer-foundation-authorization-packet.md, Slice C).
+function ProposeLocationModal({ party, onClose, onDone, showToast }) {
+  const [locationType, setLocationType] = useState("");
+  const [addressText, setAddressText] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [notes, setNotes] = useState("");
+  const [billTo, setBillTo] = useState(true);
+  const [shipTo, setShipTo] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const eligible = billTo || shipTo;
+  const submit = async () => {
+    if (!eligible) return;
+    setBusy(true);
+    const data = await runMutation(`/masters/parties/${party.id}/locations`,
+      proposeLocationBody({ locationType, addressText, contactName, notes, billToEligible: billTo, shipToEligible: shipTo }),
+      { showToast, successMessage: "Location proposed." });
+    setBusy(false);
+    if (data) onDone();
+  };
+  return (
+    <div style={overlaySt}>
+      <div style={cardSt}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.slate }}>Propose a Location for "{party.display_name}"</div>
+        <label style={labelSt}>Type</label>
+        <Sel value={locationType} onChange={setLocationType} opts={LOCATION_TYPE_OPTS} ph="— unspecified —" />
+        <label style={labelSt}>Address</label>
+        <Inp value={addressText} onChange={setAddressText} placeholder="Address (optional)" />
+        <label style={labelSt}>Contact</label>
+        <Inp value={contactName} onChange={setContactName} placeholder="Contact name (optional)" />
+        <label style={labelSt}>Notes</label>
+        <Inp value={notes} onChange={setNotes} placeholder="Notes (optional)" />
+        <label style={labelSt}>Eligibility — fixed at proposal, cannot be changed later</label>
+        <div style={{ display: "flex", gap: 14, fontSize: 12, color: C.slateM }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={billTo} onChange={e => setBillTo(e.target.checked)} /> Bill-to
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={shipTo} onChange={e => setShipTo(e.target.checked)} /> Ship-to
+          </label>
+        </div>
+        {!eligible && <div style={{ marginTop: 6, fontSize: 11, color: C.red }}>A Location must be Bill-to, Ship-to or both.</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <Btn ch={busy ? "Proposing…" : "Propose"} full disabled={busy || !eligible} onClick={submit} />
+          <Btn ch="Cancel" v="secondary" onClick={onClose} disabled={busy} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// U1 Slice C — edit descriptive detail only (creates a new version). Eligibility
+// and location_type are not editable through this action.
+function EditLocationModal({ location, currentVersion, onClose, onDone, showToast }) {
+  const [addressText, setAddressText] = useState(currentVersion?.address_text || "");
+  const [contactName, setContactName] = useState(currentVersion?.contact_name || "");
+  const [notes, setNotes] = useState(currentVersion?.notes || "");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    setBusy(true);
+    const data = await runMutation(`/masters/customer-locations/${location.id}`,
+      updateLocationBody({ addressText, contactName, notes }, location.content_version),
+      { method: "PATCH", showToast, successMessage: "Location updated." });
+    setBusy(false);
+    if (data !== null) onDone();
+  };
+  return (
+    <div style={overlaySt}>
+      <div style={cardSt}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.slate }}>Edit Location {location.location_code || ""}</div>
+        <label style={labelSt}>Address</label>
+        <Inp value={addressText} onChange={setAddressText} placeholder="Address (optional)" />
+        <label style={labelSt}>Contact</label>
+        <Inp value={contactName} onChange={setContactName} placeholder="Contact name (optional)" />
+        <label style={labelSt}>Notes</label>
+        <Inp value={notes} onChange={setNotes} placeholder="Notes (optional)" />
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <Btn ch={busy ? "Saving…" : "Save"} full disabled={busy} onClick={submit} />
+          <Btn ch="Cancel" v="secondary" onClick={onClose} disabled={busy} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// U1 Slice C — a Party's Customer Locations: code, eligibility (fixed at
+// proposal), status, incomplete-details indication, and the actions this
+// slice authorises (Propose/Edit/Approve/Retire/Assign-Code). No eligibility
+// action exists — post-proposal eligibility change is Product-Owner-blocked.
+function LocationsList({ party, locations, locationVersions, profile, currentFamilyId, openModal }) {
+  return (
+    <div style={{ marginLeft: 24, marginTop: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: C.slateL, textTransform: "uppercase" }}>
+          Locations — {locations.length}
+        </div>
+        <CapabilityGate profile={profile} capability={CREATE_CAPS}>
+          <Btn ch="+ Location" sm v="ghost" onClick={() => openModal({ kind: "propose-location", party, currentFamilyId })} />
+        </CapabilityGate>
+      </div>
+      {locations.map(loc => {
+        const currentVersion = locationVersions.find(v => v.location_id === loc.id && v.status === "current");
+        const incomplete = hasIncompleteDetails(currentVersion);
+        const eligibility = [loc.bill_to_eligible && "Bill-to", loc.ship_to_eligible && "Ship-to"]
+          .filter(Boolean).join(" / ");
+        return (
+          <div key={loc.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.slateM, padding: "2px 0" }}>
+            <PermanentCode code={loc.location_code} style={{ fontSize: 11 }} />
+            <span>{eligibility}</span>
+            <LifecycleBadge status={loc.status} />
+            {incomplete && <span style={{ fontSize: 9, color: C.amber }}>(details incomplete)</span>}
+            <CapabilityGate profile={profile} capability={MANAGE}>
+              <Btn ch="Edit" sm v="ghost"
+                onClick={() => openModal({ kind: "edit-location", location: loc, currentVersion, currentFamilyId })} />
+              {loc.status === "proposed" && (
+                <Btn ch="Approve" sm v="ghost"
+                  onClick={() => openModal({ kind: "approve-location", location: loc, currentFamilyId })} />
+              )}
+              {loc.status === "active" && (
+                <Btn ch="Retire" sm v="ghost"
+                  onClick={() => openModal({ kind: "retire-location", location: loc, currentFamilyId })} />
+              )}
+              {!loc.location_code && party.customer_code && (
+                <Btn ch="Assign Code" sm v="ghost"
+                  onClick={() => openModal({ kind: "assign-location-code", location: loc, currentFamilyId })} />
+              )}
+            </CapabilityGate>
+          </div>
+        );
+      })}
+      {!locations.length && <div style={{ fontSize: 10, color: C.slateL }}>None yet.</div>}
+    </div>
+  );
+}
+
+function FamilyDetail({ family, aliases, memberships, parties, families, locations, locationVersions, profile, showToast, onReload, openModal }) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(family.name);
   const [nameBusy, setNameBusy] = useState(false);
@@ -566,31 +775,36 @@ function FamilyDetail({ family, aliases, memberships, parties, families, profile
           const party = partyById[m.party_id];
           if (!party) return null;
           const isEditingParty = editingPartyId === party.id;
+          const partyLocations = locations.filter(l => l.party_id === party.id);
           return (
-            <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.slateM, padding: "4px 0" }}>
-              <PermanentCode code={party.customer_code} />
-              {isEditingParty ? (
-                <>
-                  <Inp value={editPartyDraft} onChange={setEditPartyDraft} st={{ width: 180 }} />
-                  <Btn ch="Save" sm disabled={partyBusy} onClick={() => saveParty(party)} />
-                  <Btn ch="Cancel" sm v="secondary" disabled={partyBusy} onClick={() => setEditingPartyId(null)} />
-                </>
-              ) : (
-                <>
-                  — {party.display_name}
-                  <LifecycleBadge status={party.lifecycle_state} />
-                  <CapabilityGate profile={profile} capability={MANAGE}>
-                    <Btn ch="Edit" sm v="ghost"
-                      onClick={() => { setEditPartyDraft(party.display_name); setEditingPartyId(party.id); }} />
-                    <Btn ch="Reassign" sm v="ghost"
-                      onClick={() => openModal({ kind: "reassign", party, membership: m, currentFamilyId: family.id })} />
-                    {party.lifecycle_state === "prospect" && (
-                      <Btn ch="Graduate" sm v="ghost"
-                        onClick={() => openModal({ kind: "graduate", party, currentFamilyId: family.id })} />
-                    )}
-                  </CapabilityGate>
-                </>
-              )}
+            <div key={m.id} style={{ padding: "4px 0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.slateM }}>
+                <PermanentCode code={party.customer_code} />
+                {isEditingParty ? (
+                  <>
+                    <Inp value={editPartyDraft} onChange={setEditPartyDraft} st={{ width: 180 }} />
+                    <Btn ch="Save" sm disabled={partyBusy} onClick={() => saveParty(party)} />
+                    <Btn ch="Cancel" sm v="secondary" disabled={partyBusy} onClick={() => setEditingPartyId(null)} />
+                  </>
+                ) : (
+                  <>
+                    — {party.display_name}
+                    <LifecycleBadge status={party.lifecycle_state} />
+                    <CapabilityGate profile={profile} capability={MANAGE}>
+                      <Btn ch="Edit" sm v="ghost"
+                        onClick={() => { setEditPartyDraft(party.display_name); setEditingPartyId(party.id); }} />
+                      <Btn ch="Reassign" sm v="ghost"
+                        onClick={() => openModal({ kind: "reassign", party, membership: m, currentFamilyId: family.id })} />
+                      {party.lifecycle_state === "prospect" && (
+                        <Btn ch="Graduate" sm v="ghost"
+                          onClick={() => openModal({ kind: "graduate", party, currentFamilyId: family.id })} />
+                      )}
+                    </CapabilityGate>
+                  </>
+                )}
+              </div>
+              <LocationsList party={party} locations={partyLocations} locationVersions={locationVersions}
+                profile={profile} currentFamilyId={family.id} openModal={openModal} />
             </div>
           );
         })}
