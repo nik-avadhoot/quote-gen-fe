@@ -22,6 +22,8 @@ import { C, sans } from "./theme.js";
 // ── State layer (Phase 4 refactor) ───────────────────────────────────────
 import { AppStateProvider } from "./state/AppStateProvider.jsx";
 import { useAppState } from "./state/AppStateContext.js";
+import { hasCapability } from "./lib/capabilities.js";
+import { isFeatureEnabled } from "./lib/featureFlags.js";
 
 /* ═══ MAIN APP ═════════════════════════════════════════════════════════════ */
 
@@ -43,7 +45,7 @@ export default function App(){
 // useAppState() directly. Do not reintroduce prop-drilling from here.
 function QuotationApp(){
   const st = useAppState();
-  const { role, setShowChangePassword, setShowProfile,
+  const { profile, role, setShowChangePassword, setShowProfile,
     showChangePassword, showProfile, showToast, tab } = st;
 
   // ── MAIN RENDER ───────────────────────────────────────────────────────────
@@ -63,8 +65,8 @@ function QuotationApp(){
           {tab==="defaults"&&<DefaultsTab/>}
           {tab==="freight"&&<FreightTab/>}
           {tab==="users"&&role==="admin"&&<UserManagementTab showToast={showToast}/>}
-          {tab==="plants"&&<ProducingPlantsScreen/>}
-          {tab==="families"&&<CustomerFamiliesScreen/>}
+          {tab==="plants"&&isFeatureEnabled("u1_producing_plants")&&<ProducingPlantsScreen/>}
+          {tab==="families"&&isFeatureEnabled("u1_customer_families")&&hasCapability(profile,"read_party_master")&&<CustomerFamiliesScreen/>}
         </div>
       </div>
     </div>
