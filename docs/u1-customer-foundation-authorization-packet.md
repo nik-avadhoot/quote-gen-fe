@@ -143,7 +143,7 @@ in §"Customers/Prospects acceptance matrix" below for what is and is not closed
 ### Feature flag
 Reuses `u1_customer_families`.
 
-### Negative and positive tests (`tests.party_mutations()`)
+### Negative and positive tests (`tests.party_edit_mutations()`)
 Unauthenticated refused; no-capability refused; deactivated-user-holding-grant refused; blank
 `display_name` refused `22023`; not-found `P0002`; stale `content_version` refused `40001`; authorised
 update succeeds, `content_version` increments by exactly 1; a second call with the now-stale original
