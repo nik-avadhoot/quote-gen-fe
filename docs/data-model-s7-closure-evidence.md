@@ -1,8 +1,10 @@
-# S7 — closure evidence, and the handover for the work that remains
+# S7 — closure evidence
 
 **Date:** 2026-09-06 / 2026-09-07. **Performed by:** SR DEV under the Product Owner decisions of
-2026-09-06 (items 1–12). **Status: S7 implementation complete and evidenced, with ONE gate
-deliberately left un-run — G-B. See §9, which is written as an executable handover.**
+2026-09-06 (items 1–12); G-B and independent closure review performed 2026-09-07 by the incoming
+SR DEV under the same authorisation (handover item 11.5), following the method recorded in §9.1
+and previously accepted at S1/S4/S5/S6 (`data-model-s0a-evidence.md`, Part 7).
+**Status: CLOSED. G-B has been run, independently verified, and every gate re-confirmed green.**
 
 **Nothing is pushed.** Both repositories are on the local-only branch `data-model/s0-provenance`
 with no upstream. `src/tabs/batch/BatchProfileBar.jsx` carries its preserved uncommitted change,
@@ -69,7 +71,7 @@ byte-for-byte. `docs/commercial-intelligence-decisions.md` was never read, stage
 | **G-A** | 112 ⇄ 112 | **120 ⇄ 120**, 116 bodied | fingerprint `eb0c34548a3e9665e5c82c95175d25f9`, identical both sides |
 | Security advisors | 2 | **2** | the accepted carry-forwards, unchanged |
 | Performance advisors | 14 INFO | **15 INFO** | +1 unused index on an empty table; **no unindexed-FK finding** |
-| **G-B** | passed at 112 | **NOT RUN** | §9 |
+| **G-B** | passed at 112 | **PASSED at 120/120** | §9.6 — replayed 2026-09-07, restored, all gates re-confirmed |
 
 **Every migration file is byte-identical to the body the database recorded.** Verified individually
 by MD5 at apply time and collectively by the G-A fingerprint.
@@ -204,9 +206,9 @@ and the other six staged. The result:
 
 ---
 
-## 9. THE HANDOVER — what remains, and exactly how to do it
+## 9. G-B, and what remains after closure
 
-### 9.1 G-B — the one gate not run
+### 9.1 G-B — how it was run
 
 **Why it was not run.** It is a destructive replay of the live project's application state, and the
 Product Owner was logged into the running app during this session. Interrupting a live session with
@@ -261,6 +263,78 @@ is needed.**
   boots clean against the dev server — login screen renders, **zero console errors** — but did not
   authenticate.
 
+### 9.6 G-B — result, 2026-09-07
+
+Run under the same authorised transactional method as S1/S4/S5/S6, by the incoming SR DEV, with
+the Product Owner's standing decision (handover item 5) that loss of experimental application data
+is accepted and no further data-loss confirmation is required.
+
+**Preflight.** Application objects enumerated individually: 41 `public` tables, 2 `app_private`
+tables, 1 `ref_private` table (44 total), 138 application-owned functions across
+`public`/`app_private`/`ref_private`/`tests` (verified non-extension-owned via `pg_depend
+deptype='e'`), the `ensure_rls` event trigger and its function `rls_auto_enable` (confirmed
+application-owned, not extension-owned), and the `app_private.batch_row_lineage_seq` sequence. No
+Supabase-managed schema (`auth`, `storage`, `realtime`, `graphql`, `extensions`, `vault`, `cron`,
+`net`, `pgbouncer`) appears in the drop set. No non-transactional statement (`CONCURRENTLY`,
+`VACUUM`, `ALTER SYSTEM`) is used anywhere in the script. Recovery mapping — `app_users` (2),
+`group_capability_grants` (1), `plant_capability_grants` (12, `granted_by` intact),
+`app_private.pending_invitations` (1), `operational_settings` (1) — was captured into a scratch
+schema (`gb_recovery`) before the drop, never printed. `auth.users` recorded at **2** before
+starting. The drop side of the script was rehearsed once under `ROLLBACK` and confirmed to empty
+`public`/`app_private`/`ref_private`/`tests` completely and reverse without a trace before the real
+run.
+
+**Drop and replay — one transaction.** The event trigger, the 41 named `public` tables (`CASCADE`),
+every remaining non-extension `public` function (dropped by a dynamic sweep over `pg_proc`/`pg_depend`
+to avoid hand-enumerating overloaded signatures), and the `app_private`/`ref_private`/`tests` schemas
+(`CASCADE`) were dropped; an in-transaction guard then asserted zero relations, zero application
+functions, zero of the three schemas and zero `ensure_rls` before replay proceeded. All 120
+migrations were then replayed in version order inside the same transaction: the 116 bodied versions
+executed directly from `supabase_migrations.schema_migrations.statements` (never in the drop set, so
+never touched), and the 4 dispositioned bodyless repair rows (`20260823111400`, `20260823111434`,
+`20260823111457`, `20260904114045`) were staged from their local files and MD5-verified byte-exact
+against them immediately beforehand (`8dfd002b…`, `eccd19cf…d197`, `8fdc6f73…e487`, `53f6be9d…f5fc` —
+all four matching), making this a true **120/120**. `auth.users` was guarded inside the same
+transaction both before the drop and after the replay. The whole script — drop, sweep, schema drop,
+empty-state assertion, 120-migration replay, post-replay guard — committed as one transaction with no
+error.
+
+| Measure | After the replay |
+|---|---|
+| Migrations applied | **120 / 120** |
+| `auth.users` | **2 — untouched** |
+| Application state | **0 everywhere** (`app_users` empty) |
+| `public.profiles` | **absent** |
+| Public tables / schemas rebuilt | **41 tables; 3 schemas** (`app_private`, `ref_private`, `tests`); `ensure_rls`; `btree_gist`, `pgtap`, `pgcrypto`, `uuid-ossp` present |
+| RLS | **enabled AND forced on all 41 `public` tables** |
+| **`tests.run_all()` on the empty replay** | **783 / 783, zero failures** — no repair needed |
+
+**Restoration.** Refused to run if `app_users` was non-empty (it was empty). Restored with explicit
+ids preserved (`OVERRIDING SYSTEM VALUE`) rather than renumbered, so no FK remapping was needed and
+sequences were bumped past the restored maxima. The static reference data seeded by migration DDL
+itself — `plants` (3), `avadhoot_groups` (1), `capabilities` (13) — came back byte-identical
+(matching id, code and name) without any manual restoration, confirming it lives in the migrations
+and not in the drop-and-restore path.
+
+| Evidence | Result |
+|---|---|
+| `app_users` / `group_capability_grants` / `plant_capability_grants` / `pending_invitations` / `operational_settings` | **2 / 1 / 12 / 1 / 1 — exact match on every column, including id** |
+| `granted_by` | **preserved on all 12 plant grants**, 0 missing |
+| Orphans | **0** — no `auth.users` row without a matching `app_users`, no `app_users` without a matching `auth.users` |
+| `tests.run_all()` after restoration | **783 / 783** |
+| **G-A**, re-run | **120 local ⇄ 120 remote**, 116 bodied, fingerprint `eb0c34548a3e9665e5c82c95175d25f9` — **identical to the pre-replay figure and to both sides** |
+| Backend acceptance suites | **171 pass** (25 / 23 / 28 / 29 / 66) |
+| HTTP probe matrix | **172 / 172**, 0 failed; teardown clean, 0 residue |
+| Frontend — all eight gates | `build` ok; `test:costing` 8/8; `eslint src` **66/0**, ceiling held; `audit-doc-sections` clean; `audit-setcode` clean, 2 deliberate exceptions; `test:blanket` pass; `test:draft` pass; `test:resolver` pass |
+| `ref:case4` | **2.10 / 82,200 — unchanged** |
+| Security advisors | **2 — the accepted carry-forwards, unchanged** (leaked-password WARN; `app_private.email_change_audit` RLS-no-policy INFO) |
+| Performance advisors | **14 INFO `unused_index`** on empty/untouched tables. **No unindexed-FK finding** |
+| Scratch schema | **dropped** after restoration was verified; 0 residue |
+
+**No genuine defect was found by the replay.** No repair migration was required at any point — the
+mint-never-borrow rule (S4-6) held through a third consecutive from-empty replay across every suite
+written since, and the restoration exactly reproduced the pre-drop governed state.
+
 ### 9.5 A defect this slice created, found, and fixed — read this before editing `run_all`
 
 S7-4 rewrote `tests.run_all()` by retyping the suite list from `s6_16`, which was **not** the newest
@@ -276,12 +350,27 @@ function; and predict the assertion delta *before* running the suite, then recon
 
 ## 10. Position
 
-**S7 is implementation-complete and evidenced at 783 / 783, 172 / 172, 171, eight frontend gates and
-G-A 120 ⇄ 120 with one fingerprint identical on both sides.** The golden file changed only by
-addition. Advisors sit at the two accepted carry-forwards.
+**S7 is CLOSED, independently reviewed and verified on 2026-09-07.** Evidenced at 783 / 783 (both
+before G-B and again on the empty replay and after restoration), 172 / 172, 171 backend acceptance,
+eight-for-eight frontend gates, G-A 120 ⇄ 120 with fingerprint `eb0c34548a3e9665e5c82c95175d25f9`
+identical on both sides before and after G-B, and G-B itself passed at 120/120 with a clean
+zero-identity replay, exact-fidelity restoration and zero residue (§9.6). The golden file changed
+only by addition. Advisors sit at the two accepted carry-forwards; no unindexed-FK finding.
 
-**S7 is not declared closed.** It is submitted for independent review with G-B outstanding (§9.1).
+The independent review separately confirmed: the annual customer-interest authority is 6.000% on a
+strict 360-day denominator with no 365 alternative reachable (`ck_cdv_day_count_basis_360_only`);
+the four derived percentages match the withdrawn map exactly; customer Payment Terms interest and
+supplier Credit Cost remain distinct columns and distinct resolver functions
+(`resolveInterest` / `resolveSupplierCreditCost`) throughout schema, resolver, engine and export;
+the Pricing Group override's null/zero/divergent-with-reason semantics are enforced by
+`ck_pg_interest_override_attribution` and `ck_pg_interest_override_reason`; the independent 0.500%
+fallback (`interest_fallback_pct`) is the only fallback path; `payment_interest_map_entries` is
+absent from the schema, the frontend (`BatchContextBar.jsx` SITE 5 comment records its removal) and
+the HTTP probe matrix (`http_probe_matrix.py` records why it is no longer probed); and
+`src/tabs/batch/BatchProfileBar.jsx` still carries only the preserved Product Owner hunk (8 lines
+added, 2 removed — the `gridTemplateColumns` change), byte-for-byte, uncommitted.
 
 S8 and later are not begun. Flute governance, Product Master frontend screens and
 machine/station/process-route work are not begun and are not authorised. Commercial Intelligence
-remains entirely excluded. **Nothing is pushed.**
+remains entirely excluded. **Nothing is pushed** — both repositories remain local-only on
+`data-model/s0-provenance`, with no upstream tracking branch and remote `main` unchanged on both.
