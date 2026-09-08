@@ -1,9 +1,9 @@
 # U1 Users/Access — authorisation packet
 
-**Status:** revision 2 authorised, and **UA-1 + UA-3 + UA-4 are CLOSED** — implemented,
+**Status:** revision 2 authorised. **UA-1, UA-3, UA-4, UA-5 and UA-6 are CLOSED** — implemented,
 automated-test verified, browser verified, technically closed and **Product Owner validated on
-2026-09-08**. See §11. **UA-5, UA-6 and UA-7 remain open and unauthorised**; Users/Access as a whole
-is *not* closed, and neither is U1.
+2026-09-08** (§11 and §12). **UA-7 is the ONLY remaining Users/Access sub-slice**, still open,
+unauthorised and gated (§5). Users/Access as a whole is therefore not closed, and neither is U1.
 
 Revision 2 applies the Product Owner's corrections A-J: a mandatory `content_version` concurrency
 contract (§2.1), the exact `p_plant_caps` payload (§2.2), a last-active-administrator invariant
@@ -533,12 +533,109 @@ instruction. No live administrator was demoted, deactivated or otherwise manipul
 Commits: `quote-gen-be` `0926c82`, `4eb3458`, `e3b9124`, `ce332e7`; `quote-gen-fe` `d740f95`,
 `b5298dd`, `d0f8d8e`. Nothing pushed.
 
-### Still open — Users/Access is NOT closed
+### Still open at the time of §11
+
+UA-5, UA-6 and UA-7 were all open and unauthorised. UA-5 and UA-6 were authorised and closed
+afterwards — see §12. UA-7 remains the only one left.
+
+
+---
+
+## 12. Closure record — UA-5 + UA-6 (2026-09-08)
+
+**Product Owner validation granted for both slices.**
+
+| Status | UA-5 | UA-6 |
+|---|---|---|
+| Implemented | yes | yes |
+| Automated-test verified | yes | yes |
+| Browser verified | yes | yes |
+| Technically closed | yes | yes |
+| Product Owner validated | yes | yes |
+
+### UA-5 — activation and deactivation, and the CAS correction
+
+The reconciliation found a concrete concurrency defect.
+`app_private.admin_set_user_status(bigint, text)` **incremented `content_version` on every call but
+never checked it**, so two administrators holding the same Users list could both act on one row and
+the second write landed silently on top of the first — A deactivates, B (still seeing "Active")
+clicks and reactivates, with no stale signal anywhere. Every other governed mutation here compares a
+version and raises PT409; this one did not.
+
+Corrected with the same compare-and-set `set_user_capabilities` already uses, raising the same
+`PT409` through the same `_RPC_ERROR_MAP` entry — no new error code. The two-argument forms were
+**dropped, not kept alongside**: `authenticated` held EXECUTE on both, so leaving them would have
+left a reachable unprotected path to the same table. An unchanged status is now a no-op reporting
+`changed: false` without bumping the version. The route's status branch was a bare
+`except Exception: return 400`, collapsing a stale conflict, a capability loss, a missing user and
+the last-administrator refusal into one answer; each now maps distinctly.
+
+The screen confirms before deactivating and states both halves plainly — access stops until
+reactivation, and **nothing is deleted**: quotes, approvals and every record stay, still attributed
+to the user. The last-active-administrator refusal has its own wording, because the remedy is the
+same as the capability path but the attempt is not. No editable role returned.
+
+### UA-6 — orphan-account recovery
+
+Built over the two existing tested routes. Explains what an unattached sign-in account is, that it
+grants nothing, and how it happens; lists them with loading, empty, denied, failure and
+outcome-unknown states; confirms before adopting; and refreshes both the orphan list and the Users
+list afterwards. The authentication uuid is deliberately **not** carried into the view model — the
+panel shows the route's non-reversible `ref` — and no password, token or session value exists on
+this path at all. Not invitation-provider integration.
+
+### Associated closure corrections, accepted
+
+- **`065a0b3` — capability-based gating across all eight Users/Access routes.** Four still wore
+  `require_role("admin")`: `PATCH /admin/users/<id>/email`, `GET /admin/users`, `POST /admin/users`
+  and `POST /admin/users/<id>/reset-password`. Never wrong in effect — `derive_role` computes
+  `admin` from `administer_users` — but it made a presentation label the thing a route consults, and
+  that label cannot express nine of the thirteen capabilities. `server.py` now applies `require_role`
+  nowhere and no longer imports it. **The helper is deliberately retained**, with zero callers,
+  warning documentation and regression tests; it is not deleted for cleanup.
+  The database still checks independently on every path (`admin_prepare_email_change`,
+  `admin_create_app_user`, `admin_set_user_status`, `set_user_capabilities` each raise 42501; the
+  `app_users` SELECT policy exposes other users' rows only to a holder).
+- **`0292160` — creation and adoption wording.** `maker` / `checker` / `admin` survive on those
+  paths only because `admin_create_app_user` takes them. Both forms now label the control **Initial
+  access**, name what each preset seeds, and say it is not a role and does not override the
+  capability matrix. Creation itself is unchanged.
+
+### Evidence totals at closure
+
+| Gate | Result |
+|---|---|
+| pgTAP `tests.run_all()` | 930 passed, 0 failed (US-1..US-13 added) |
+| Backend hermetic (14 suites) | 656 passed, 0 failed |
+| Frontend gates (10) | 628 checks, all pass — `user-access` 124 |
+| G-A migration correspondence | 155 local = 155 remote, fingerprint `cc836cdf` |
+| ESLint | 66 errors, 0 new |
+
+Browser verified live: confirmation genuinely required (declining issued **zero** requests); the
+consequence wording; reactivation and deactivation carrying `expected_content_version`; a real
+two-administrator **stale conflict** answered 409, reloaded and not applied; the inactive
+presentation; the orphan empty and populated states; adoption gating and governed adoption; the
+adopted user appearing correctly; and the failure state with recovery. The last-active-administrator
+refusal rests on automated evidence only, by instruction — no live administrator was touched.
+
+### Retained fixtures — inactive, deliberately not deleted
+
+| id | Identity | Final state |
+|---|---|---|
+| 1375 | `UA Test User` / `ua-test@fixture.invalid` | deactivated, `deactivated_at` stamped, **0 active group and plant grants**, `content_version` 9 |
+| 1574 | `Rescued Account` / `ua6-orphan@fixture.invalid` | adopted through the governed route, then deactivated with **0 active grants**, `content_version` 3 |
+
+Revoked grant rows are retained as the audit trail. `NikunjRL` ends at `content_version` 1 with no
+revoked rows in either grant table; `ClaudeCode` is unchanged.
+
+Commits: `quote-gen-be` `b38f3a5`, `eb0452b`, `065a0b3`; `quote-gen-fe` `9301600`, `019b4a3`,
+`0292160`. Nothing pushed.
+
+### The only remaining Users/Access sub-slice
 
 | # | Slice | State |
 |---|---|---|
-| **UA-5** | Activation/deactivation UX and consequence handling | Open, unauthorised |
-| **UA-6** | Orphan-account recovery screen | Open, unauthorised |
-| **UA-7** | Remove the duplicated embedded Plant Master panel | Open, unauthorised, **and gated on reliable standalone Producing Plants visibility (§5)** |
+| **UA-7** | Remove the duplicated embedded Plant Master panel | Open, unauthorised, **gated on reliable standalone Producing Plants visibility (§5)** |
 
-Each needs its own authorisation. Nothing here begins S8 or U2.
+UA-1, UA-3, UA-4, UA-5 and UA-6 are closed. UA-7 needs its own authorisation, and nothing here
+begins S8 or U2.
