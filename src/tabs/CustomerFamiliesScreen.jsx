@@ -46,7 +46,7 @@ import {
 import { updatePartyBody } from "../lib/partyActions.js";
 import {
   proposeLocationBody, updateLocationBody, approveLocationBody, retireLocationBody,
-  retireLocationConfirmMessage, hasIncompleteDetails,
+  retireLocationConfirmMessage, hasIncompleteDetails, LOCATION_TYPE_OPTS,
 } from "../lib/customerLocationActions.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, VersionHistory } from "../ui/dataDisplay.jsx";
@@ -466,10 +466,6 @@ function ReassignModal({ party, membership, families, currentFamilyId, onClose, 
   );
 }
 
-const LOCATION_TYPE_OPTS = [
-  { v: "plant", l: "Plant" }, { v: "office", l: "Office" },
-  { v: "warehouse", l: "Warehouse" }, { v: "other", l: "Other" },
-];
 
 // U1 Slice C — propose a Customer Location. Eligibility is fixed here, at
 // proposal; there is no later action to change it (Product-Owner-blocked —

@@ -10,6 +10,7 @@
 import {
   proposeLocationBody, updateLocationBody, approveLocationBody, retireLocationBody,
   retireLocationConfirmMessage, hasIncompleteDetails,
+  LOCATION_TYPE_OPTS, locationTypeIsAllowed,
 } from "../src/lib/customerLocationActions.js";
 
 let fails = 0;
@@ -65,6 +66,45 @@ ok("incomplete: a version with just an address is NOT incomplete",
    hasIncompleteDetails({ address_text: "1 Ave", contact_name: null, notes: null }) === false);
 ok("incomplete: a version with just a contact name is NOT incomplete",
    hasIncompleteDetails({ address_text: null, contact_name: "A", notes: null }) === false);
+
+// ── location_type must match ck_lv_type EXACTLY ───────────────────────────
+//
+// Added after a live 500 during U1 Slice D browser validation: the Slice D
+// modal had transcribed this list by hand and offered `factory`, which the
+// database refuses. Postgres raised 23514 check_violation; `_RPC_ERROR_MAP`
+// does not map it, so the route correctly answered 500 INTERNAL_ERROR. A
+// client-side bug, caught only in a real browser against the real database —
+// no hermetic route test or RLS probe could have caught it, because both use
+// values that were already valid.
+//
+// The constraint, read directly from pg_constraint, not assumed:
+//   CHECK (location_type IS NULL OR location_type = ANY
+//          (ARRAY['plant','office','warehouse','other']))
+
+const ALLOWED = ["plant", "office", "warehouse", "other"];
+
+ok("location_type: the option list is exactly the four values ck_lv_type permits",
+   eq(LOCATION_TYPE_OPTS.map(o => o.v), ALLOWED),
+   `got ${JSON.stringify(LOCATION_TYPE_OPTS.map(o => o.v))}`);
+
+ok("location_type: every option carries a human label",
+   LOCATION_TYPE_OPTS.every(o => typeof o.l === "string" && o.l.length > 0));
+
+ok("location_type: `factory` — the value that caused the live 500 — is NOT offered",
+   !LOCATION_TYPE_OPTS.some(o => o.v === "factory") && locationTypeIsAllowed("factory") === false);
+
+ok("location_type: each permitted value is accepted",
+   ALLOWED.every(v => locationTypeIsAllowed(v) === true));
+
+ok("location_type: NULL/blank is permitted, matching the constraint's IS NULL branch",
+   locationTypeIsAllowed(null) === true && locationTypeIsAllowed(undefined) === true
+   && locationTypeIsAllowed("") === true);
+
+ok("location_type: an invented value is refused",
+   ["depot", "site", "Plant", "PLANT"].every(v => locationTypeIsAllowed(v) === false));
+
+ok("location_type: the list is frozen, so a consumer cannot mutate the shared constant",
+   Object.isFrozen(LOCATION_TYPE_OPTS));
 
 console.log();
 console.log(fails === 0 ? "all checks pass" : `${fails} FAILED`);

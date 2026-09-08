@@ -127,3 +127,79 @@ removed freight helper survives in the module's exports.
 is excluded from every commit in this slice and left in the working tree byte-for-byte as found —
 content fingerprint `ea4aa9d8…`, recorded before the first edit and re-verified after each commit.
 `docs/commercial-intelligence-decisions.md` has not been read, modified, staged or committed.
+
+---
+
+# Addendum — two defects found in authenticated browser validation, 2026-09-08
+
+The authenticated walkthrough found two defects. **Both were mine, both in Slice D code, and neither
+could have been caught by any gate that was passing.** Recorded here rather than folded silently into
+a green report.
+
+## D-D1 — a `location_type` value the database refuses
+
+`BatchQuickPickModal.jsx` carried its own hand-transcribed copy of the location-type option list and
+offered **`factory`**. `ck_lv_type` on `customer_location_versions` permits only
+`plant | office | warehouse | other` (or NULL) — read directly from `pg_constraint`, not assumed.
+Postgres raised `23514 check_violation`, which `_RPC_ERROR_MAP` does not map, so the route answered
+**500 INTERNAL_ERROR**. That is correct backend behaviour for an unmapped code. The bug was entirely
+client-side.
+
+The cause was duplication: `CustomerFamiliesScreen.jsx` had the list right (`plant`), and the copy
+drifted the moment it was made. `LOCATION_TYPE_OPTS` now lives once in
+`lib/customerLocationActions.js`, both screens import it, and
+`customer-location-actions-fixtures.mjs` pins the four values to the constraint — including an
+explicit assertion that `factory` is not offered.
+
+## D-D2 — a silent failure, which is the worse of the two
+
+The Location create called `runMutation(path, body)` **without `showToast`**. The 500 above therefore
+produced **no toast, no inline error, nothing** — the form simply sat there. A user would have
+concluded the button was dead.
+
+This is precisely the failure mode `data-model-frontend-design-plan.md` §2.7 forbids: "silent RLS
+no-ops must not be presented as success", and an unreported 500 is worse than that. Every governed
+call in the file now passes `showToast` and reports its own outcome through the D2 vocabulary
+(denied / stale / outcome-unknown / failed).
+
+## Why the gates did not catch either
+
+Worth stating plainly, because the gate numbers were green while both defects were live:
+
+- the **hermetic route tests** (108/108) use a recording fake client — they prove which RPC the route
+  calls with which parameters, never what the real database accepts;
+- the **HTTP probe matrix** (204/204) proves *refusals* for unauthorised personas; it never exercises
+  the authorised happy path with a novel field value;
+- **pgTAP** (859/859) tests the database functions directly, with values that were already valid;
+- the **frontend fixtures** tested the body builder, which faithfully forwarded whatever the UI gave
+  it — the invalid value was in the component's option list, which had no test.
+
+The gap was a UI constant with no test, reachable only by an authenticated human action against the
+real database. That is exactly what the §2.1 item 8 real-browser requirement exists to catch, and it
+did. The new fixture closes it for the future.
+
+---
+
+# Authenticated walkthrough — results
+
+Performed in the Product Owner's own Chrome, signed in as `ClaudeCode`, against the live backend and
+Supabase project, after the two fixes above.
+
+| Step | Result |
+|---|---|
+| Quick-create a Prospect ("Slice D Acceptance Prospect"), confirm | **Only `client` changed** — `Nagpur Distillers` to `Slice D Acceptance Prospect`. `delivery` `Nagpur`, `freightOverride` `2`, matrix rate `2`, 15/15 keys, no new `cbb_*` key |
+| Select an existing Party ("Nagpur Distillers Private Limited, G0080-001"), confirm | **Only `client` changed.** `delivery`, freight, key set, localStorage key count all unchanged |
+| Nothing written before confirmation | Verified: after the Prospect was created and before Confirm, `cbb_batchprofile` was **byte-identical** to baseline |
+| Create a Customer Location | Created as `customer_locations.id = 165`, party 314, `location_type = 'plant'`, ship-to, `status 'proposed'`, version 1 `'current'` — confirmed by direct SQL. Panel showed "Created in Customer Master ... not linked to this Batch". **`cbb_batchprofile` byte-identical across the create** |
+| Cancel after creating | Batch profile **byte-identical**; the governed rows correctly remained |
+| Manually change freight destination | `Nagpur` to `Pune`; `freightOverride` `2` to **`2.5`**, exactly `freight['Nagpur']['Pune']`. Freight resolution behaviour unchanged |
+| Reload | 15 keys, **no unexpected keys**, no `partyId`/`locationId`/link/stale keys, every value a scalar, same 12 `cbb_*` keys, autosave profile snapshot equally clean |
+| Delivery control | Renders exactly the 12 freight-master destinations, **no synthetic Location option** |
+
+The Product Owner's Batch profile was restored byte-exactly to its pre-walkthrough state after the
+run; verified field-by-field with a zero-difference comparison.
+
+**Test rows left in the Customer Master** (deliberately, as Slice E evidence): party 314 "Slice D
+Acceptance Prospect" and its Location 165. The Location can be retired through the existing Slice C
+action; Party deactivation remains Product-Owner-blocked, so the Prospect cannot be removed through
+any governed operation that exists today.

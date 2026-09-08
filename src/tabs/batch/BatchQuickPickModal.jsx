@@ -62,6 +62,11 @@ import {
   locationCreatedNotLinkedMessage, locationLabel, locationNotLinkedNotice, partyLabel,
   proposeLocationBody, quickPickAbilities,
 } from "../../lib/batchQuickCreate.js";
+// The location_type list is imported, never transcribed: writing `factory`
+// here by hand is exactly what produced a live 500 (ck_lv_type permits only
+// plant/office/warehouse/other), and the shared constant is pinned by a
+// fixture so it cannot drift from the database constraint again.
+import { LOCATION_TYPE_OPTS } from "../../lib/customerLocationActions.js";
 import { Btn, Inp, Sel } from "../../ui/primitives.jsx";
 import { C, sans } from "../../theme.js";
 import { inputSt } from "../../ui/styles.js";
@@ -77,11 +82,6 @@ const noteSt = { fontSize: 11, color: C.slateL, marginTop: 6, lineHeight: 1.45 }
 const rowSt = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
   padding: "5px 8px", border: `1px solid ${C.border}`, borderRadius: 5, marginTop: 4,
   fontSize: 11, color: C.slate };
-
-const LOCATION_TYPE_OPTS = [
-  { v: "factory", l: "Factory" }, { v: "office", l: "Office" },
-  { v: "warehouse", l: "Warehouse" }, { v: "other", l: "Other" },
-];
 
 const FIELD = "client"; // the only Batch field this modal may write
 
@@ -170,7 +170,12 @@ export default function BatchQuickPickModal({ profile, setBatchProfile, onClose,
       contactName: locDraft.contactName, notes: locDraft.notes,
       billToEligible: locDraft.billTo, shipToEligible: locDraft.shipTo,
     });
-    const data = await runMutation(`/masters/parties/${party.id}/locations`, body);
+    // showToast is NOT optional here. Omitting it made a real 500 from this
+    // route completely invisible: the form simply sat there, which is the
+    // silent-failure mode design-plan §2.7 forbids. Every governed call in
+    // this file now reports its own outcome.
+    const data = await runMutation(`/masters/parties/${party.id}/locations`, body,
+      { showToast });
     setBusy(false);
     if (!data) return;
     const lbl = locationLabel({ id: data.id, location_code: null }, {
