@@ -21,7 +21,7 @@ import CapabilityMatrix from "../ui/CapabilityMatrix.jsx";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import {
   confirmCapabilityChange, deriveRoleLabel, lastAdministratorMessage,
-  removesLastAdministrator, sameCapabilityState, setCapabilitiesBody,
+  refusalReason, removesLastAdministrator, sameCapabilityState, setCapabilitiesBody,
   staleCapabilityMessage,
 } from "../lib/userAccessActions.js";
 
@@ -305,10 +305,10 @@ function UserRow({ user, plants, isSelf, activeAdminIds, onChanged, onCredential
     // The database refuses the last active administrator with the broad public
     // code TRANSITION_NOT_ALLOWED. The code stays as it is; the reason is
     // supplied here, because "transition not allowed" tells nobody what to do.
-    const isLastAdmin = outcome.kind === "validation" && body.active === false
+    const deactivatingLastAdministrator = body.active === false
       && (activeAdminIds || []).filter(id => id !== user.id).length === 0
       && (user.group_capabilities || []).includes("administer_users");
-    showToast(feedback(outcome, isLastAdmin ? lastAdministratorMessage() : null),
+    showToast(feedback(outcome, refusalReason(outcome, { deactivatingLastAdministrator })),
               "error", outcome.outcomeUnknown ? 12000 : 8000);
   };
 
@@ -349,7 +349,8 @@ function UserRow({ user, plants, isSelf, activeAdminIds, onChanged, onCredential
       onChanged();
       return;
     }
-    showToast(feedback(outcome, wouldStrandAdmins ? lastAdministratorMessage() : null),
+    showToast(feedback(outcome, refusalReason(outcome,
+                { removingLastAdministrator: wouldStrandAdmins })),
               "error", outcome.outcomeUnknown ? 12000 : 8000);
   };
 

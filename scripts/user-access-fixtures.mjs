@@ -14,7 +14,7 @@ import {
   GROUP_CAPABILITIES, PLANT_CAPABILITIES,
   canonicalGroupSet, canonicalPlantMap, capabilityChangeSummary,
   confirmCapabilityChange, deriveRoleLabel, isGroupCapability, isPlantCapability,
-  lastAdministratorMessage, removesLastAdministrator, sameCapabilityState,
+  lastAdministratorMessage, refusalReason, removesLastAdministrator, sameCapabilityState,
   setCapabilitiesBody, staleCapabilityMessage,
 } from "../src/lib/userAccessActions.js";
 import * as UA from "../src/lib/userAccessActions.js";
@@ -161,6 +161,30 @@ ok("confirm: names the granted and revoked capabilities",
    confirm.includes("manage_customer_master") && confirm.includes("read_party_master"));
 ok("confirm: says the database decides access, not the screen",
    /database decides access, not this screen/i.test(confirm));
+
+// ── TRANSITION_NOT_ALLOWED: the code is broad, so the UI supplies the reason ─
+//
+// The database refuses a last-administrator removal or deactivation with 22023.
+// The route maps that to the established public code TRANSITION_NOT_ALLOWED
+// (HTTP 422), which classifyResponse reports as kind 'validation'. That code is
+// shared with several unrelated refusals and is deliberately NOT narrowed, so
+// the frontend must supply the reason where it knows what it attempted.
+const VALIDATION = { kind: "validation", message: "That action could not be completed." };
+
+ok("422 handling: a last-administrator REMOVAL gets the explanatory reason",
+   refusalReason(VALIDATION, { removingLastAdministrator: true }) === lastAdministratorMessage());
+ok("422 handling: a last-administrator DEACTIVATION gets the same reason",
+   refusalReason(VALIDATION, { deactivatingLastAdministrator: true }) === lastAdministratorMessage());
+ok("422 handling: an unrelated 422 is NOT relabelled - the server's own message stands",
+   refusalReason(VALIDATION, {}) === null);
+ok("422 handling: the rule applies only to a validation outcome, not to denied/stale/error",
+   ["access-denied", "stale", "error"].every(k =>
+     refusalReason({ kind: k }, { removingLastAdministrator: true }) === null));
+ok("422 handling: a missing outcome is handled without a crash",
+   refusalReason(null, { removingLastAdministrator: true }) === null);
+ok("422 handling: the reason names the remedy, not just the refusal",
+   /Grant administer_users to another\s+active user first/.test(
+     refusalReason(VALIDATION, { removingLastAdministrator: true })));
 
 // ── stale conflict: reload and re-decide, never a silent retry ────────────
 const stale = staleCapabilityMessage("R. Sharma");

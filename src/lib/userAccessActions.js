@@ -141,6 +141,25 @@ export function lastAdministratorMessage() {
     + "active user first, then remove it here.";
 }
 
+// The database refuses a last-administrator removal or deactivation with 22023,
+// which the route maps to the broad public code TRANSITION_NOT_ALLOWED (HTTP
+// 422) and classifyResponse reports as kind 'validation'. That code is shared
+// with several unrelated refusals and is deliberately NOT narrowed - so the
+// reason has to be supplied here, where the caller knows what it was
+// attempting. "Transition not allowed" tells an administrator nothing about
+// what to do next; lastAdministratorMessage() does.
+//
+// Returns null when this rule does not apply, so the caller falls back to the
+// server's own message.
+export function refusalReason(outcome, { deactivatingLastAdministrator = false,
+                                         removingLastAdministrator = false } = {}) {
+  if (!outcome || outcome.kind !== "validation") return null;
+  if (deactivatingLastAdministrator || removingLastAdministrator) {
+    return lastAdministratorMessage();
+  }
+  return null;
+}
+
 // ── stale-conflict copy — reload and re-decide, never a silent retry ───────
 
 export function staleCapabilityMessage(displayName) {
