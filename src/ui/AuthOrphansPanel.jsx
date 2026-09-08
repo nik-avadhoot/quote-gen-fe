@@ -107,10 +107,14 @@ export default function AuthOrphansPanel({ plants, onAdopted, showToast }) {
     }
   };
 
+  // Re-read on EVERY expand, not only the first. An administrator who expands
+  // this, fixes something, collapses it and expands it again must not be shown
+  // the answer from before the fix - a recovery list that can be stale is worse
+  // than one that costs a request.
   const expand = () => {
     const next = !open;
     setOpen(next);
-    if (next && state === "idle") load();
+    if (next) load();
   };
 
   const adopt = async (view, displayName, role, codes) => {
@@ -175,6 +179,12 @@ export default function AuthOrphansPanel({ plants, onAdopted, showToast }) {
             <div style={{ fontSize: 12, color: C.red, marginBottom: 8 }}>
               {error} Nothing has been changed.{" "}
               <button onClick={load} style={btn("outline")}>Try again</button>
+            </div>
+          )}
+
+          {state === "ok" && (
+            <div style={{ marginBottom: 8 }}>
+              <button onClick={load} disabled={busy} style={btn("outline")}>Refresh</button>
             </div>
           )}
 
