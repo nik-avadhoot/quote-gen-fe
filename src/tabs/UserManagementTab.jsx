@@ -11,6 +11,13 @@
 // POST /admin/users/<id>/capabilities carrying expected_content_version. A 409
 // reloads that user and explains that permissions changed elsewhere — never a
 // silent retry, because re-sending an unchanged desired set can only fail again.
+//
+// UA-5. The status change is the same discipline on the other operation: it
+// carries expected_content_version too, confirms before deactivating, says what
+// deactivation actually does to the person and to their records, and explains
+// the last-active-administrator refusal instead of reporting "transition not
+// allowed". A 409 here means somebody else changed that user while this list
+// was open — it reloads and asks rather than retrying.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState, useEffect } from "react";
 import { C, mono, sans } from "../theme.js";
@@ -18,11 +25,14 @@ import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
 import { useAuth } from "../AuthContext.jsx";
 import CapabilityMatrix from "../ui/CapabilityMatrix.jsx";
+import AuthOrphansPanel from "../ui/AuthOrphansPanel.jsx";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import {
-  confirmCapabilityChange, deriveRoleLabel, lastAdministratorMessage,
+  confirmCapabilityChange, confirmDeactivation, confirmReactivation,
+  deactivatesLastAdministrator, deactivationConsequence, deriveRoleLabel,
+  lastAdministratorDeactivationMessage, lastAdministratorMessage,
   refusalReason, removesLastAdministrator, sameCapabilityState, setCapabilitiesBody,
-  staleCapabilityMessage,
+  setStatusBody, staleCapabilityMessage, staleStatusMessage, statusChangeSummary,
 } from "../lib/userAccessActions.js";
 
 const ROLES = ["maker", "checker", "admin"];
@@ -282,6 +292,7 @@ function UserRow({ user, plants, isSelf, activeAdminIds, onChanged, onCredential
   const edited = draft || current;
   const unchanged = sameCapabilityState(current, edited);
   const wouldStrandAdmins = removesLastAdministrator(user, edited.group, activeAdminIds);
+  const wouldStrandByDeactivating = deactivatesLastAdministrator(user, activeAdminIds);
 
   // display_name / active only. Capability changes never come through here.
   const patch = async (body) => {
@@ -296,20 +307,51 @@ function UserRow({ user, plants, isSelf, activeAdminIds, onChanged, onCredential
       data = await resp.json().catch(() => ({}));
     } catch {
       setBusy(false);
-      showToast("❌ Network error — could not reach the server.", "error", 8000);
+      showToast("❌ Network error — could not reach the server. Nothing was changed.", "error", 8000);
       return;
     }
     setBusy(false);
     const outcome = classifyResponse({ ok: resp.ok, status: resp.status, data });
-    if (outcome.kind === "ok") { onChanged(); return; }
+    const changingStatus = "active" in body;
+    if (outcome.kind === "ok") {
+      if (changingStatus) {
+        showToast(data.active
+          ? `✅ "${user.display_name}" can sign in again.`
+          : `✅ "${user.display_name}" is deactivated and can no longer sign in. Their records are unchanged.`,
+          "success", 7000);
+      }
+      onChanged();
+      return;
+    }
+    if (outcome.kind === "stale") {
+      // Someone else changed this user while the list was open. Reload and let
+      // the operator re-decide; retrying the same version can only fail again.
+      showToast("⏱ " + staleStatusMessage(user.display_name), "error", 12000);
+      onChanged();
+      return;
+    }
     // The database refuses the last active administrator with the broad public
     // code TRANSITION_NOT_ALLOWED. The code stays as it is; the reason is
     // supplied here, because "transition not allowed" tells nobody what to do.
-    const deactivatingLastAdministrator = body.active === false
-      && (activeAdminIds || []).filter(id => id !== user.id).length === 0
-      && (user.group_capabilities || []).includes("administer_users");
-    showToast(feedback(outcome, refusalReason(outcome, { deactivatingLastAdministrator })),
+    showToast(feedback(outcome, refusalReason(outcome, {
+                deactivatingLastAdministrator: body.active === false && wouldStrandByDeactivating })),
               "error", outcome.outcomeUnknown ? 12000 : 8000);
+  };
+
+  // UA-5 — confirmed, versioned, and refused up front when it would strand the
+  // administrators. The database enforces the invariant regardless; this only
+  // means the operator is told BEFORE the request instead of after it.
+  const changeStatus = async () => {
+    if (user.active) {
+      if (wouldStrandByDeactivating) {
+        showToast("🚫 " + lastAdministratorDeactivationMessage(), "error", 10000);
+        return;
+      }
+      if (!window.confirm(confirmDeactivation(user.display_name))) return;
+    } else if (!window.confirm(confirmReactivation(user.display_name))) {
+      return;
+    }
+    await patch(setStatusBody(user.content_version, !user.active));
   };
 
   // UA-4 — the ONE governed capability write. Complete replacement, versioned.
@@ -387,6 +429,12 @@ function UserRow({ user, plants, isSelf, activeAdminIds, onChanged, onCredential
         <td style={{ padding: "6px 8px", fontSize: 10, color: C.slateL, fontFamily: mono }}>{user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : "never"}</td>
         <td style={{ padding: "6px 8px" }}>
           <span style={{ fontSize: 10, fontWeight: 700, color: user.active ? C.green : C.red }}>{user.active ? "● Active" : "○ Inactive"}</span>
+          {!user.active && (
+            <div style={{ fontSize: 9.5, color: C.slateL, marginTop: 2, maxWidth: 130 }}
+                 title="Deactivation blocks access. It deletes nothing.">
+              Cannot sign in. Records kept.
+            </div>
+          )}
         </td>
         <td style={{ padding: "6px 8px", display: "flex", gap: 6, flexWrap: "wrap" }}>
           <button disabled={busy} onClick={() => setOpen(o => !o)} style={btnStyle("outline")}>
@@ -394,8 +442,12 @@ function UserRow({ user, plants, isSelf, activeAdminIds, onChanged, onCredential
           </button>
           <button disabled={busy} onClick={() => onChangeEmail(user)} style={btnStyle("outline")}>Change email</button>
           <button disabled={busy} onClick={resetPassword} style={btnStyle("outline")}>Reset password</button>
-          <button disabled={busy || isSelf} onClick={() => patch({ active: !user.active })} style={btnStyle(user.active ? "danger" : "outline")}>
-            {user.active ? "Deactivate" : "Activate"}
+          <button disabled={busy || isSelf} onClick={changeStatus}
+            title={isSelf ? "You cannot deactivate your own account."
+                          : user.active ? deactivationConsequence()
+                                        : "They will be able to sign in again with the permissions they hold now."}
+            style={btnStyle(statusChangeSummary(user).danger ? "danger" : "outline")}>
+            {statusChangeSummary(user).verb}
           </button>
         </td>
       </tr>
@@ -529,6 +581,7 @@ export default function UserManagementTab({ showToast }) {
     <div style={{ overflowY: "auto", height: "100%", padding: 16 }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: C.slate, marginBottom: 10 }}>User Management</div>
       <PlantMasterPanel plants={plants} />
+      <AuthOrphansPanel plants={plants} onAdopted={load} showToast={showToast} />
       <NewUserForm plants={plants} onCreated={handleCreated} showToast={showToast} />
       <div style={{ marginBottom: 10 }}>
         <input value={query} onChange={e => setQuery(e.target.value)}

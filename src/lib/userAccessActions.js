@@ -141,6 +141,63 @@ export function lastAdministratorMessage() {
     + "active user first, then remove it here.";
 }
 
+// ── UA-5: activation and deactivation ──────────────────────────────────────
+//
+// The same invariant, reached by the other path. It reads differently because
+// the remedy is the same but the thing being attempted is not: nothing is being
+// "removed here", and saying so would send an administrator to the permission
+// editor for a problem they hit on the Deactivate button.
+export function deactivatesLastAdministrator(user, activeAdministratorIds) {
+  const holdsIt = (user?.group_capabilities || []).includes("administer_users");
+  if (!holdsIt || !user?.active) return false;
+  return (activeAdministratorIds || []).filter(id => id !== user?.id).length === 0;
+}
+
+export function lastAdministratorDeactivationMessage() {
+  return "At least one active administrator must remain. This is the only one, so deactivating "
+    + "them would leave nobody able to manage users. Grant administer_users to another active "
+    + "user first.";
+}
+
+// What deactivation actually DOES, in the words a person needs before they
+// press it. Both halves matter: an administrator hesitates over this button
+// because they are unsure whether it destroys anything. It does not.
+export function deactivationConsequence() {
+  return "They will not be able to sign in or use the application until the account is "
+    + "reactivated. Nothing is deleted: their quotes, approvals and every record they created "
+    + "stay exactly as they are, still attributed to them.";
+}
+
+export function confirmDeactivation(displayName) {
+  return `Deactivate "${displayName}"? ${deactivationConsequence()} Their permissions are left `
+    + `untouched, so reactivating restores the same access.`;
+}
+
+export function confirmReactivation(displayName) {
+  return `Reactivate "${displayName}"? They will be able to sign in again, with exactly the `
+    + `permissions they hold now — reactivating grants nothing on its own.`;
+}
+
+// The status write carries a version for the same reason the capability write
+// does: without it, two administrators holding the same list both act and the
+// second silently overwrites the first. The database refuses a stale version
+// with PT409, which reaches this screen as a 409.
+export function setStatusBody(expectedContentVersion, active) {
+  return { active: !!active, expected_content_version: expectedContentVersion };
+}
+
+export function staleStatusMessage(displayName) {
+  return `"${displayName}" was changed somewhere else while this list was open. Their current `
+    + `state has been reloaded — check it and apply your change again if it is still what you `
+    + `want.`;
+}
+
+export function statusChangeSummary(user) {
+  return user?.active
+    ? { verb: "Deactivate", danger: true }
+    : { verb: "Reactivate", danger: false };
+}
+
 // The database refuses a last-administrator removal or deactivation with 22023,
 // which the route maps to the broad public code TRANSITION_NOT_ALLOWED (HTTP
 // 422) and classifyResponse reports as kind 'validation'. That code is shared
@@ -154,9 +211,8 @@ export function lastAdministratorMessage() {
 export function refusalReason(outcome, { deactivatingLastAdministrator = false,
                                          removingLastAdministrator = false } = {}) {
   if (!outcome || outcome.kind !== "validation") return null;
-  if (deactivatingLastAdministrator || removingLastAdministrator) {
-    return lastAdministratorMessage();
-  }
+  if (deactivatingLastAdministrator) return lastAdministratorDeactivationMessage();
+  if (removingLastAdministrator) return lastAdministratorMessage();
   return null;
 }
 
