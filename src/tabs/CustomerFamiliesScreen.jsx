@@ -35,6 +35,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
+import { runMutation } from "../lib/runMutation.js";
 import {
   familyNameIsBlank,
   proposeFamilyBody, createProspectBody, updateFamilyNameBody, approveFamilyBody,
@@ -56,41 +57,6 @@ import { C, mono, sans } from "../theme.js";
 
 const MANAGE = "manage_customer_master";
 const CREATE_CAPS = [MANAGE, "make_quote"]; // mirrors the DB's own OR condition (propose / prospect)
-
-async function runMutation(path, body, { method = "POST", showToast, successMessage } = {}) {
-  let resp, data;
-  try {
-    resp = await apiFetch(path, {
-      method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-    });
-    data = await resp.json().catch(() => ({}));
-  } catch {
-    showToast?.("❌ Network error — could not reach the server.", "error", 8000);
-    return null;
-  }
-  const outcome = classifyResponse({ ok: resp.ok, status: resp.status, data });
-  if (outcome.kind === "ok") {
-    if (successMessage) showToast?.("✅ " + successMessage, "success", 6000);
-    return data;
-  }
-  // Three visually distinct outcomes, because the right user action differs:
-  //   🚫 denied          — you may not do this; retrying changes nothing.
-  //   ⏱ stale conflict   — someone else moved first; reload, then redo.
-  //   ⚠️ outcome unknown  — the response was lost; the write MAY have landed,
-  //                        so look before acting rather than resubmitting.
-  //   ❌ plain failure    — it did not happen.
-  const prefix = outcome.kind === "access-denied" ? "🚫"
-    : outcome.kind === "stale" ? "⏱"
-    : outcome.outcomeUnknown ? "⚠️" : "❌";
-  const fallback = outcome.kind === "stale"
-    ? "This record changed since you loaded it — reload and try again."
-    : outcome.outcomeUnknown
-      ? "The outcome of this action is unknown — refresh to see the current state before trying again."
-      : "That action could not be completed.";
-  showToast?.(`${prefix} ${outcome.message || fallback}`,
-              "error", outcome.outcomeUnknown ? 12000 : 8000);
-  return null;
-}
 
 const overlaySt = { position: "fixed", inset: 0, background: "rgba(28,43,58,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000 };
 const cardSt = { width: 380, background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: 22, boxShadow: "0 8px 32px rgba(0,0,0,.2)", fontFamily: sans };

@@ -14,14 +14,45 @@
 // See D-13: both guards block this state and both point the user at
 // + New Batch, which is the destructive action. Recorded, deliberately unfixed.
 // ═══════════════════════════════════════════════════════════════════════════
+import { useState } from "react";
 import { PLANTS } from "../../data/defaults.js";
 import { resolveField, resolveInterest } from "../../engine/resolveAuthority.js";
 import { C } from "../../theme.js";
 import { useAppState } from "../../state/AppStateContext.js";
+import { useFeatureFlag } from "../../lib/featureFlags.js";
+import BatchQuickPickModal from "./BatchQuickPickModal.jsx";
 
 export default function BatchProfileBar(){
   const {batchAgeLabel,batchProfile,copyCostingToProfile,freight,importConstrFromSpec,locations,
-    sectorCodes,sectors,setBatchProfile,startNewBatch}=useAppState();
+    sectorCodes,sectors,setBatchProfile,showToast,startNewBatch}=useAppState();
+
+  // ── U1 Slice D — governed quick-create/select for Client and Delivery ─────
+  // Flag-gated and default-off (lib/featureFlags.js). The flag makes the
+  // affordance MOUNTABLE; it grants nothing. The caller still needs
+  // manage_customer_master or make_quote to create, and read_party_master to
+  // browse — both decided by the backend and RLS, not here.
+  //
+  // The whole of this slice's effect on Batch state is one string written to
+  // `client` or `delivery` through applyLabelToProfile(). No partyId, no
+  // locationId, no link object, no new Batch Profile key. Referential linkage
+  // is U4's, per docs/u1-customer-foundation-authorization-packet.md Slice D.
+  const quickPickEnabled=useFeatureFlag("u1_batch_party_link");
+  const[quickPickField,setQuickPickField]=useState(null); // 'client' | 'delivery' | null
+
+  // A governed Location's name is not one of the freight master's destinations,
+  // so `delivery` can now legitimately hold a value the <select> has no option
+  // for. Without this the control would fall back to showing the first option
+  // and silently misreport what the Batch actually holds. Rendered only when
+  // the stored value is genuinely absent from the master.
+  const deliveryOffMaster=!!batchProfile.delivery&&!locations.includes(batchProfile.delivery);
+
+  const pickBtn=(field,label)=>(
+    <button type="button" onClick={()=>setQuickPickField(field)}
+      title={`Create or select a governed ${label} record, then copy its name into this free-text field`}
+      style={{padding:"1px 4px",borderRadius:3,border:`1px solid ${C.amber}`,background:C.white,
+        color:C.amber,fontSize:9,fontWeight:700,cursor:"pointer",lineHeight:1.3,flexShrink:0}}>
+      ⊕
+    </button>);
 
   return(
     <div style={{background:"#FEF8F0",borderBottom:`2px solid ${C.amber}`,
@@ -61,9 +92,14 @@ export default function BatchProfileBar(){
           columnGap:5,rowGap:3,alignItems:"center"}}>
           {/* Row 1: Client | Sector */}
           <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Client</span>
-          <input value={batchProfile.client||""} onChange={e=>setBatchProfile(p=>({...p,client:e.target.value}))}
-            style={{padding:"2px 6px",borderRadius:3,border:`1px solid ${C.border}`,
-              fontSize:10,background:C.white,color:C.slate,width:90,minWidth:0}}/>
+          <div style={{display:"flex",gap:3,alignItems:"center",minWidth:0}}>
+            {/* Ordinary manual typing is untouched — Slice D adds a second way
+                to fill this box, never a replacement for the first. */}
+            <input value={batchProfile.client||""} onChange={e=>setBatchProfile(p=>({...p,client:e.target.value}))}
+              style={{padding:"2px 6px",borderRadius:3,border:`1px solid ${C.border}`,
+                fontSize:10,background:C.white,color:C.slate,width:90,minWidth:0}}/>
+            {quickPickEnabled&&pickBtn("client","Customer or Prospect")}
+          </div>
           <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Sector</span>
           <select value={batchProfile.sector||""} onChange={e=>{
               // S7(c) SITE 1. Choosing a Sector used to stamp its four numbers into
@@ -94,19 +130,32 @@ export default function BatchProfileBar(){
             {PLANTS.map(o=><option key={o} value={o}>{o}</option>)}
           </select>
           <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Delivery</span>
-          <select value={batchProfile.delivery||""} onChange={e=>{
-              const nv=e.target.value;
-              setBatchProfile(p=>{
-                const newP={...p,delivery:nv};
-                const fr=freight?.[p.plant]?.[nv];
-                if(fr!==undefined) newP.freightOverride=fr;
-                return newP;
-              });
-            }} style={{padding:"2px 4px",borderRadius:3,border:`1px solid ${C.border}`,
-              fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90}}>
-            <option value="">— select —</option>
-            {locations.map(o=><option key={o} value={o}>{o}</option>)}
-          </select>
+          <div style={{display:"flex",gap:3,alignItems:"center",minWidth:0}}>
+            <select value={batchProfile.delivery||""} onChange={e=>{
+                const nv=e.target.value;
+                setBatchProfile(p=>{
+                  const newP={...p,delivery:nv};
+                  const fr=freight?.[p.plant]?.[nv];
+                  if(fr!==undefined) newP.freightOverride=fr;
+                  return newP;
+                });
+              }} style={{padding:"2px 4px",borderRadius:3,border:`1px solid ${C.border}`,
+                fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90}}
+              title={deliveryOffMaster
+                ?`"${batchProfile.delivery}" is not a freight master destination, so the freight `
+                 +`matrix rate reads 0 for it — enter freight by hand, or pick a destination.`
+                :undefined}>
+              <option value="">— select —</option>
+              {/* A value the master does not carry — a governed Customer
+                  Location name copied in by Slice D, or a destination since
+                  removed from the freight master. Shown as its own option so
+                  the control reports what the Batch actually holds instead of
+                  falling back to the first entry. */}
+              {deliveryOffMaster&&<option value={batchProfile.delivery}>{batchProfile.delivery} ⚠</option>}
+              {locations.map(o=><option key={o} value={o}>{o}</option>)}
+            </select>
+            {quickPickEnabled&&pickBtn("delivery","Customer Location")}
+          </div>
           {/* Row 3: Cust Type | Price Context */}
           <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Cust Type</span>
           <select value={batchProfile.customerType||'existing'}
@@ -305,6 +354,11 @@ export default function BatchProfileBar(){
           + New Batch
         </button>
       </div>
+
+      {quickPickEnabled&&quickPickField&&(
+        <BatchQuickPickModal field={quickPickField} profile={batchProfile}
+          setBatchProfile={setBatchProfile} freightLocations={locations}
+          showToast={showToast} onClose={()=>setQuickPickField(null)}/>)}
 
     </div>
   );

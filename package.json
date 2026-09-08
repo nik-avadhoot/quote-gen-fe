@@ -15,6 +15,7 @@
     "test:family-actions": "node scripts/customer-family-actions-fixtures.mjs",
     "test:party-actions": "node scripts/party-actions-fixtures.mjs",
     "test:location-actions": "node scripts/customer-location-actions-fixtures.mjs",
+    "test:batch-quick-create": "node scripts/batch-quick-create-fixtures.mjs",
     "preview": "vite preview",
     "ref:case4": "node scripts/case4-reference.mjs"
   },
