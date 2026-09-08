@@ -22,6 +22,18 @@ export function classifyResponse({ ok, status, data }, { expectRows } = {}) {
   if (status === 401 || status === 403) return { kind: "access-denied", message: readMessage(data) };
   if (status === 409 || status === 412) return { kind: "stale", message: readMessage(data) };
   if (status === 400 || status === 422) return { kind: "validation", message: readMessage(data) };
+  // D2 — an upstream timeout (backend UPSTREAM_TIMEOUT → 504) is a retryable
+  // infrastructure answer, not an application fault. It stays kind 'error' so
+  // no caller's handling changes, but it always carries an actionable message
+  // rather than falling through to a bare "Request failed (504)".
+  if (status === 502 || status === 503 || status === 504) {
+    return {
+      kind: "error",
+      retryable: true,
+      message: readMessage(data)
+        || "The service did not respond in time. Nothing was changed — please try again.",
+    };
+  }
 
   if (ok) {
     if (typeof expectRows === "number") {

@@ -18,6 +18,7 @@
 // nowhere, since the copy is invisible to any other gate in this repo.
 // ═══════════════════════════════════════════════════════════════════════════
 import {
+  familyNameIsBlank,
   proposeFamilyBody, createProspectBody, updateFamilyNameBody, approveFamilyBody,
   addAliasBody, updateAliasBody, retireAliasBody, mergeBody, reassignBody, graduateBody,
   mergeConfirmMessage, reassignConfirmMessage, graduateConfirmMessage, retireAliasConfirmMessage,
@@ -35,6 +36,23 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 ok("propose: trims whitespace and maps to {name}",
    eq(proposeFamilyBody("  Acme  "), { name: "Acme" }));
+
+// ── D3: a blank Family proposal must be refused visibly, never silently ────
+// The button used to LOOK disabled while staying clickable (ui/primitives.jsx
+// styled it but never set the DOM `disabled` attribute), so a whitespace-only
+// name produced a dead button and no message at all. The screen now derives
+// both the disabled state and the inline error from this one predicate.
+ok("blank check: empty string is blank", familyNameIsBlank("") === true);
+ok("blank check: spaces only is blank", familyNameIsBlank("   ") === true);
+ok("blank check: tab/newline only is blank", familyNameIsBlank(String.fromCharCode(9,10,32)) === true);
+ok("blank check: a real name is not blank", familyNameIsBlank("Acme") === false);
+ok("blank check: a name with surrounding spaces is not blank",
+   familyNameIsBlank("  Acme  ") === false);
+ok("blank check: undefined is blank (never proposable)", familyNameIsBlank(undefined) === true);
+ok("blank check: null is blank (never proposable)", familyNameIsBlank(null) === true);
+ok("blank check: a non-string is blank (never proposable)", familyNameIsBlank(42) === true);
+ok("blank name and the body builder agree — what the button blocks is exactly what would send empty",
+   familyNameIsBlank("   ") === true && proposeFamilyBody("   ").name === "");
 
 ok("prospect: family_id omitted entirely when not given",
    eq(createProspectBody("Beta Co", null), { display_name: "Beta Co" })

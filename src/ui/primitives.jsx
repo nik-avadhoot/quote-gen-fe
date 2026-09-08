@@ -24,7 +24,13 @@ export const Btn=({ch,onClick,v="primary",sm,full,disabled,style:sx={}})=>{
     ghost:{background:"transparent",color:C.slateL,border:"none"},
     success:{background:C.green,color:C.white},danger:{background:C.red,color:C.white},
     info:{background:"#2E6094",color:C.white}};
-  return<button onClick={disabled?undefined:onClick} style={{
+  // D3: `disabled` used to change only the STYLING and drop the handler. The
+  // native button stayed enabled, so it was still focusable and clickable, the
+  // click silently did nothing, and assistive technology was never told the
+  // control was unavailable. That is what made a blank Family proposal look
+  // like a dead button. Forward it to the DOM so "disabled" actually is.
+  return<button disabled={!!disabled} aria-disabled={disabled?"true":undefined}
+    onClick={disabled?undefined:onClick} style={{
     padding:sm?"5px 12px":"8px 16px",borderRadius:6,fontSize:sm?11:13,fontWeight:600,
     cursor:disabled?"not-allowed":"pointer",border:"none",width:full?"100%":"auto",
     opacity:disabled?.45:1,...vs[v],...sx}}>{ch}</button>;

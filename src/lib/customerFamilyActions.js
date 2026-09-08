@@ -14,6 +14,20 @@
 // screen component, which is what a browser, not a Node fixture, can exercise.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// D3 — a Family name that is empty, whitespace-only, or not a string at all is
+// not proposable. Extracted here rather than left inline in the modal so the
+// rule has a testable surface (scripts/customer-family-actions-fixtures.mjs);
+// the screen uses it to disable the button AND to show an inline message, so
+// the two can never disagree.
+//
+// This is a usability pre-check, NOT the authority. The Flask route still
+// refuses a blank name with INVALID_INPUT, and app_private.propose_customer_
+// family raises 22023 for one regardless of what any client sends — verified
+// directly against the live database, not assumed.
+export function familyNameIsBlank(name) {
+  return typeof name !== "string" || name.trim() === "";
+}
+
 export function proposeFamilyBody(name) {
   return { name: (name || "").trim() };
 }

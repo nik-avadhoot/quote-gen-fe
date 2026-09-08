@@ -36,6 +36,7 @@ import { useAuth } from "../AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
 import {
+  familyNameIsBlank,
   proposeFamilyBody, createProspectBody, updateFamilyNameBody, approveFamilyBody,
   addAliasBody, updateAliasBody, retireAliasBody, mergeBody, reassignBody, graduateBody,
   mergeConfirmMessage, reassignConfirmMessage, graduateConfirmMessage, retireAliasConfirmMessage,
@@ -332,9 +333,15 @@ function ConfirmModal({ message, confirmLabel, danger, onConfirm, onClose }) {
 
 function ProposeFamilyModal({ onClose, onDone, showToast }) {
   const [name, setName] = useState("");
+  const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+  // D3 - a blank or whitespace-only name is refused here, visibly. The guard in
+  // submit() stays as the last line of defence, and the database remains the
+  // authority: app_private.propose_customer_family raises 22023 on a blank
+  // name regardless of what any client sends.
+  const blank = familyNameIsBlank(name);
   const submit = async () => {
-    if (!name.trim()) return;
+    if (blank) { setTouched(true); return; }
     setBusy(true);
     const data = await runMutation("/masters/customer-families", proposeFamilyBody(name),
       { showToast, successMessage: `"${name.trim()}" proposed.` });
@@ -346,9 +353,15 @@ function ProposeFamilyModal({ onClose, onDone, showToast }) {
       <div style={cardSt}>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.slate }}>Propose a Family</div>
         <label style={labelSt}>Name</label>
-        <Inp value={name} onChange={setName} placeholder="Family name" />
+        <Inp value={name} placeholder="Family name"
+          onChange={v => { setName(v); setTouched(true); }} />
+        {touched && blank && (
+          <div style={{ marginTop: 6, fontSize: 11, color: C.red }}>
+            A Family name is required — it cannot be blank or only spaces.
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-          <Btn ch={busy ? "Proposing…" : "Propose"} full disabled={busy || !name.trim()} onClick={submit} />
+          <Btn ch={busy ? "Proposing…" : "Propose"} full disabled={busy || blank} onClick={submit} />
           <Btn ch="Cancel" v="secondary" onClick={onClose} disabled={busy} />
         </div>
       </div>
