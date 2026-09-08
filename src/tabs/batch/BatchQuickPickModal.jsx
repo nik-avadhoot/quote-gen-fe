@@ -1,23 +1,46 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // src/tabs/batch/BatchQuickPickModal.jsx — U1 Slice D, the affordance itself.
 //
-// docs/u1-customer-foundation-authorization-packet.md, Slice D. Kept in its
-// own file so BatchProfileBar.jsx gains a button and an import and nothing
-// else — that file carries a preserved, user-owned uncommitted hunk in its
-// Commercials region, and the smallest possible edit there is deliberate.
+// docs/u1-customer-foundation-authorization-packet.md, Slice D, as corrected by
+// the Product Owner ruling of 2026-09-08. Kept in its own file so
+// BatchProfileBar.jsx gains a button and an import and nothing else — that file
+// carries a preserved, user-owned uncommitted hunk in its Commercials region,
+// and the smallest possible edit there is deliberate.
 //
-// WHAT IT DOES, AND WHERE IT STOPS.
+// WHAT IT DOES.
 //
-// Two governed calls, sequenced by the user, never composed into one request:
+// It sets ONE Batch field: `client`, the Batch Profile's free-text customer
+// name. It does that by creating or selecting a governed Party first, so the
+// customer is recorded properly in the Customer Master rather than existing
+// only as a string somebody typed.
+//
 //   POST /masters/customer-families/prospects   (create_minimal_prospect)
-//   POST /masters/parties/<id>/locations        (propose_customer_location)
-// plus, for selecting an existing record, the read the Customer Families
-// screen already uses: GET /masters/customer-families.
+//   GET  /masters/customer-families             (select an existing Party)
 //
-// The ONLY thing it writes to Batch state is one string, through
-// applyLabelToProfile(). No partyId, no locationId, no link object, no
-// staleness state, no new Batch Profile key, no new localStorage key. See the
-// boundary note at the top of lib/batchQuickCreate.js.
+// WHAT IT DELIBERATELY DOES NOT DO, AND WHY.
+//
+// The first pass also offered this beside `delivery` and copied a Customer
+// Location's label into it. That was wrong. `delivery` is a FREIGHT-DESTINATION
+// MASTER KEY — BatchProfileBar resolves freight[plant][delivery] from it to
+// price the Batch — not free-text Customer Location data. A Location label is
+// not a key in that master, so the lookup returned 0 and produced a misleading,
+// commercially unsafe pricing state. Confirmation text did not make that
+// acceptable, and one field cannot carry two incompatible commercial meanings.
+//
+// So: no Location label reaches `delivery`, and existing-Location SELECTION is
+// gone from Batch Entry altogether — not because identifiers were refused, but
+// because there is no Batch field into which a selected Location could be
+// represented without inventing the U4 referential state this slice must not
+// introduce. Formal Location selection belongs to U4's Delivery Group UI, which
+// references real Bill-to/Ship-to Locations and is the correct home for it.
+//
+// What remains is a CREATE-ONLY Customer Location convenience: it uses the
+// governed Slice C proposal route, says up front and again afterwards that the
+// Location is recorded in the Customer Master and NOT linked to this Batch, and
+// leaves `client`, `delivery`, freight and every other Batch field untouched.
+// There is no selected-Location state afterwards, so nothing can look linked.
+//
+//   POST /masters/parties/<id>/locations        (propose_customer_location)
 //
 // CAPABILITY, HONESTLY. Creating and browsing are different authorities and
 // this modal shows them as different answers:
@@ -36,7 +59,7 @@ import { classifyResponse } from "../../lib/backendError.js";
 import { runMutation } from "../../lib/runMutation.js";
 import {
   applyLabelToProfile, copyToBatchConfirmMessage, createProspectBody, createdButNotCopiedMessage,
-  deliveryFreightWarning, deliveryLabelIsOffFreightMatrix, fieldTitle, locationLabel, partyLabel,
+  locationCreatedNotLinkedMessage, locationLabel, locationNotLinkedNotice, partyLabel,
   proposeLocationBody, quickPickAbilities,
 } from "../../lib/batchQuickCreate.js";
 import { Btn, Inp, Sel } from "../../ui/primitives.jsx";
@@ -60,30 +83,28 @@ const LOCATION_TYPE_OPTS = [
   { v: "warehouse", l: "Warehouse" }, { v: "other", l: "Other" },
 ];
 
-export default function BatchQuickPickModal({ field, profile, setBatchProfile,
-  freightLocations, onClose, showToast }) {
+const FIELD = "client"; // the only Batch field this modal may write
+
+export default function BatchQuickPickModal({ profile, setBatchProfile, onClose, showToast }) {
   const { profile: caller } = useAuth();
   const { canCreate, canBrowse } = quickPickAbilities(caller);
-  const title = fieldTitle(field);
-  const needsLocation = field === "delivery";
 
   // Master rows for "select an existing" — only fetched when the caller may
   // browse. A caller who may not is never shown a list that would 403.
-  const [masters, setMasters] = useState({ status: canBrowse ? "loading" : "denied",
-    parties: [], locations: [], locationVersions: [] });
+  const [masters, setMasters] = useState({ status: canBrowse ? "loading" : "denied", parties: [] });
   const [query, setQuery] = useState("");
 
-  // The Party is the first step for BOTH fields: `client` copies its name, and
-  // a Location cannot be proposed without its parent Party.
   const [party, setParty] = useState(null);          // { id, display_name }
   const [partyWasCreated, setPartyWasCreated] = useState(false);
   const [newPartyName, setNewPartyName] = useState("");
 
-  // The Location, for `delivery` only.
-  const [picked, setPicked] = useState(null);        // { location, version }
+  // The unlinked Customer Location convenience. `locDone` is a plain record of
+  // what was created, for the confirmation line only — deliberately NOT a
+  // "selected Location", because nothing consumes it and nothing may.
+  const [showLocForm, setShowLocForm] = useState(false);
   const [locDraft, setLocDraft] = useState({ locationType: "", addressText: "",
     contactName: "", notes: "", billTo: false, shipTo: true });
-  const [locWasCreated, setLocWasCreated] = useState(false);
+  const [locDone, setLocDone] = useState(null);      // { label } | null
 
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -103,8 +124,7 @@ export default function BatchQuickPickModal({ field, profile, setBatchProfile,
       if (cancelled) return;
       const outcome = classifyResponse({ ok: resp.ok, status: resp.status, data });
       if (outcome.kind === "ok") {
-        setMasters({ status: "ok", parties: data.parties || [], locations: data.locations || [],
-          locationVersions: data.location_versions || [] });
+        setMasters({ status: "ok", parties: data.parties || [] });
       } else {
         // Includes the explicit 403 from the route's own read_party_master
         // check. Browsing is unavailable; creating is a separate authority and
@@ -117,28 +137,14 @@ export default function BatchQuickPickModal({ field, profile, setBatchProfile,
 
   const partyMatches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const rows = masters.parties.filter(p => !q || (p.display_name || "").toLowerCase().includes(q));
-    return rows.slice(0, 25);
+    return masters.parties
+      .filter(p => !q || (p.display_name || "").toLowerCase().includes(q))
+      .slice(0, 25);
   }, [masters.parties, query]);
 
-  // Only this Party's Locations. Slice D deliberately reaches no further: a
-  // cross-Family third-party Bill-to/Ship-to search belongs to U4's Delivery
-  // Group UI, per the packet's own deferral.
-  const partyLocations = useMemo(() => {
-    if (!party) return [];
-    const versionFor = (locId) => masters.locationVersions
-      .filter(v => v.location_id === locId)
-      .sort((a, b) => (b.version_no || 0) - (a.version_no || 0))[0] || null;
-    return masters.locations
-      .filter(l => l.party_id === party.id && l.status !== "inactive")
-      .map(l => ({ location: l, version: versionFor(l.id) }));
-  }, [masters.locations, masters.locationVersions, party]);
-
-  const label = needsLocation
-    ? locationLabel(picked?.location, picked?.version)
-    : partyLabel(party);
-  const currentText = (profile?.[field] || "").trim();
-  const offMatrix = needsLocation && deliveryLabelIsOffFreightMatrix(label, freightLocations);
+  const label = partyLabel(party);
+  const currentText = (profile?.[FIELD] || "").trim();
+  const eligible = locDraft.billTo || locDraft.shipTo;
 
   const createProspect = async () => {
     const name = newPartyName.trim();
@@ -154,92 +160,87 @@ export default function BatchQuickPickModal({ field, profile, setBatchProfile,
     setNewPartyName("");
   };
 
+  // Governed Slice C proposal. Writes NOTHING to the Batch — not `delivery`,
+  // not `client`, not freight. The only local effect is a note saying so.
   const proposeLocation = async () => {
-    if (!party || !(locDraft.billTo || locDraft.shipTo)) return;
+    if (!party || !eligible) return;
     setBusy(true);
     const body = proposeLocationBody({
       locationType: locDraft.locationType, addressText: locDraft.addressText,
       contactName: locDraft.contactName, notes: locDraft.notes,
       billToEligible: locDraft.billTo, shipToEligible: locDraft.shipTo,
     });
-    const data = await runMutation(`/masters/parties/${party.id}/locations`, body,
-      { showToast, successMessage: "Location proposed." });
+    const data = await runMutation(`/masters/parties/${party.id}/locations`, body);
     setBusy(false);
     if (!data) return;
-    setPicked({
-      location: { id: data.id, location_code: null, party_id: party.id, status: "proposed" },
-      version: { address_text: body.address_text, contact_name: body.contact_name,
-        notes: body.notes, location_type: body.location_type },
+    const lbl = locationLabel({ id: data.id, location_code: null }, {
+      address_text: body.address_text, contact_name: body.contact_name,
+      notes: body.notes, location_type: body.location_type,
     });
-    setLocWasCreated(true);
+    setLocDone({ label: lbl });
+    setShowLocForm(false);
+    setLocDraft({ locationType: "", addressText: "", contactName: "", notes: "",
+      billTo: false, shipTo: true });
+    showToast?.(locationCreatedNotLinkedMessage(lbl, party.display_name), "info", 11000);
   };
 
   // The ONLY write to Batch state in this slice.
   const confirmCopy = () => {
-    setBatchProfile(p => applyLabelToProfile(p, field, label));
-    showToast?.(`✅ ${title} set to "${label}".`, "success", 5000);
+    setBatchProfile(p => applyLabelToProfile(p, FIELD, label));
+    showToast?.(`✅ Client set to "${label}".`, "success", 5000);
     onClose();
   };
 
   // Cancel must leave the existing text unchanged — and must not pretend it
-  // undid a governed create that really happened.
+  // undid governed records that really were created.
   const cancel = () => {
-    if (partyWasCreated || locWasCreated) {
-      const created = locWasCreated ? locationLabel(picked?.location, picked?.version)
-        : partyLabel(party);
-      showToast?.(createdButNotCopiedMessage(title, created), "info", 9000);
+    if (partyWasCreated) {
+      showToast?.(createdButNotCopiedMessage("Client", partyLabel(party)), "info", 9000);
     }
     onClose();
   };
 
-  const eligible = locDraft.billTo || locDraft.shipTo;
-
   return (
-    <div style={overlaySt} role="dialog" aria-modal="true" aria-label={`Set ${title} from Customer Master`}>
+    <div style={overlaySt} role="dialog" aria-modal="true" aria-label="Set Client from Customer Master">
       <div style={cardSt}>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.slate }}>
-          Set {title} from the Customer Master
+          Set Client from the Customer Master
         </div>
 
         {/* The interim-representation disclosure, stated up front rather than
-            only inside the confirm step, because it governs what the whole
-            panel is FOR. */}
+            only inside the confirm step, because it governs what the panel is
+            FOR. */}
         <div style={{ ...noteSt, marginTop: 6, background: "#FEF8F0",
           border: `1px solid ${C.amber}`, borderRadius: 5, padding: "6px 8px" }}>
-          {title} is a free-text Batch value. Creating or selecting here records the customer
+          Client is a free-text Batch value. Creating or selecting here records the customer
           properly in the Customer Master, then copies its name into the box — it does not store a
           link. The Batch keeps plain text you can edit or clear, and it will not follow later
-          changes to the governed record.
+          changes to the governed record. <strong>Delivery is not affected by anything on this
+          panel</strong> — it stays a freight destination chosen from its own list.
         </div>
 
         {confirming ? (
           <>
             <label style={labelSt}>Confirm</label>
             <div style={{ fontSize: 12, color: C.slateM, lineHeight: 1.5 }}>
-              {copyToBatchConfirmMessage(field, label, currentText)}
+              {copyToBatchConfirmMessage(FIELD, label, currentText)}
             </div>
-            {offMatrix && (
-              <div style={{ ...noteSt, color: C.red, marginTop: 10 }}>
-                ⚠️ {deliveryFreightWarning(label)}
-              </div>
-            )}
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-              <Btn ch={`Set ${title}`} full onClick={confirmCopy} />
+              <Btn ch="Set Client" full onClick={confirmCopy} />
               <Btn ch="Cancel" v="secondary" onClick={() => setConfirming(false)} />
             </div>
           </>
         ) : (
           <>
-            {/* ── STEP 1 — the Party ──────────────────────────────────────── */}
-            <label style={labelSt}>
-              {needsLocation ? "1 · Customer or Prospect (the Location's owner)" : "Customer or Prospect"}
-            </label>
+            {/* ── The Party — the only thing that reaches a Batch field ────── */}
+            <label style={labelSt}>Customer or Prospect</label>
 
             {party ? (
               <div style={{ ...rowSt, borderColor: C.amber, background: "#FEF8F0" }}>
                 <span><strong>{party.display_name}</strong>{partyWasCreated ? " · just created" : ""}</span>
                 <Btn ch="Change" v="ghost" sm onClick={() => {
-                  setParty(null); setPartyWasCreated(false); setPicked(null); setLocWasCreated(false);
+                  setParty(null); setPartyWasCreated(false);
+                  setShowLocForm(false); setLocDone(null);
                 }} />
               </div>
             ) : (
@@ -254,7 +255,7 @@ export default function BatchQuickPickModal({ field, profile, setBatchProfile,
                 ) : (
                   <div style={noteSt}>
                     You do not hold <code>manage_customer_master</code> or <code>make_quote</code>,
-                    so you cannot create a Prospect. Type the {title} by hand instead.
+                    so you cannot create a Prospect. Type the Client by hand instead.
                   </div>
                 )}
 
@@ -298,90 +299,72 @@ export default function BatchQuickPickModal({ field, profile, setBatchProfile,
               </>
             )}
 
-            {/* ── STEP 2 — the Location, delivery only ────────────────────── */}
-            {needsLocation && party && (
+            {/* ── Customer Location — create only, and explicitly unlinked ─── */}
+            {party && canCreate && (
               <>
-                <label style={labelSt}>2 · Location</label>
-                {picked ? (
-                  <div style={{ ...rowSt, borderColor: C.amber, background: "#FEF8F0" }}>
-                    <span><strong>{label}</strong>{locWasCreated ? " · just proposed" : ""}</span>
-                    <Btn ch="Change" v="ghost" sm
-                      onClick={() => { setPicked(null); setLocWasCreated(false); }} />
+                <label style={labelSt}>Customer Location — optional, not linked to this Batch</label>
+                <div style={noteSt}>{locationNotLinkedNotice()}</div>
+
+                {locDone && (
+                  <div style={{ ...rowSt, borderColor: C.green, background: "#F4FBF6" }}>
+                    <span>✅ Created in Customer Master: <strong>{locDone.label}</strong>
+                      <span style={{ color: C.slateL }}> · not linked to this Batch</span>
+                    </span>
+                  </div>
+                )}
+
+                {!showLocForm ? (
+                  <div style={{ marginTop: 8 }}>
+                    <Btn ch={locDone ? "Create another Location" : "Create Customer Location"}
+                      v="secondary" sm onClick={() => setShowLocForm(true)} />
                   </div>
                 ) : (
                   <>
-                    {canBrowse && partyLocations.map(({ location, version }) => (
-                      <div key={location.id} style={rowSt}>
-                        <span>{locationLabel(location, version)}
-                          <span style={{ color: C.slateL }}> · {location.status}
-                            {location.bill_to_eligible ? " · bill-to" : ""}
-                            {location.ship_to_eligible ? " · ship-to" : ""}</span>
-                        </span>
-                        <Btn ch="Select" v="secondary" sm
-                          onClick={() => setPicked({ location, version })} />
-                      </div>
-                    ))}
-                    {canBrowse && partyLocations.length === 0 && (
-                      <div style={noteSt}>
-                        This {partyWasCreated ? "new Prospect has no Locations yet" : "Party has no selectable Locations"}.
-                        Propose one below.
+                    <Sel value={locDraft.locationType}
+                      onChange={v => setLocDraft(d => ({ ...d, locationType: v }))}
+                      opts={LOCATION_TYPE_OPTS} ph="— type unspecified —" />
+                    <div style={{ marginTop: 6 }}>
+                      <Inp value={locDraft.addressText}
+                        onChange={v => setLocDraft(d => ({ ...d, addressText: v }))}
+                        placeholder="Address (optional)" st={{ width: "100%", boxSizing: "border-box" }} />
+                    </div>
+                    <div style={{ marginTop: 6 }}>
+                      <Inp value={locDraft.contactName}
+                        onChange={v => setLocDraft(d => ({ ...d, contactName: v }))}
+                        placeholder="Contact name (optional)" st={{ width: "100%", boxSizing: "border-box" }} />
+                    </div>
+                    <div style={{ display: "flex", gap: 14, fontSize: 11, color: C.slateM, marginTop: 8 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <input type="checkbox" checked={locDraft.billTo}
+                          onChange={e => setLocDraft(d => ({ ...d, billTo: e.target.checked }))} /> Bill-to
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <input type="checkbox" checked={locDraft.shipTo}
+                          onChange={e => setLocDraft(d => ({ ...d, shipTo: e.target.checked }))} /> Ship-to
+                      </label>
+                    </div>
+                    {/* Same rule, same wording, as the Customer Families screen —
+                        a usability pre-check only; the route and
+                        app_private.propose_customer_location refuse it
+                        regardless of what this client sends. */}
+                    {!eligible && (
+                      <div style={{ marginTop: 6, fontSize: 11, color: C.red }}>
+                        A Location must be Bill-to, Ship-to or both.
                       </div>
                     )}
-                    {!canBrowse && (
-                      <div style={noteSt}>
-                        Existing Locations cannot be listed without <code>read_party_master</code>.
-                        You can still propose a new one.
-                      </div>
-                    )}
-
-                    {canCreate && (
-                      <>
-                        <label style={labelSt}>Propose a new Location</label>
-                        <Sel value={locDraft.locationType}
-                          onChange={v => setLocDraft(d => ({ ...d, locationType: v }))}
-                          opts={LOCATION_TYPE_OPTS} ph="— type unspecified —" />
-                        <div style={{ marginTop: 6 }}>
-                          <Inp value={locDraft.addressText}
-                            onChange={v => setLocDraft(d => ({ ...d, addressText: v }))}
-                            placeholder="Address (optional)" st={{ width: "100%", boxSizing: "border-box" }} />
-                        </div>
-                        <div style={{ marginTop: 6 }}>
-                          <Inp value={locDraft.contactName}
-                            onChange={v => setLocDraft(d => ({ ...d, contactName: v }))}
-                            placeholder="Contact name (optional)" st={{ width: "100%", boxSizing: "border-box" }} />
-                        </div>
-                        <div style={{ display: "flex", gap: 14, fontSize: 11, color: C.slateM, marginTop: 8 }}>
-                          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <input type="checkbox" checked={locDraft.billTo}
-                              onChange={e => setLocDraft(d => ({ ...d, billTo: e.target.checked }))} /> Bill-to
-                          </label>
-                          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <input type="checkbox" checked={locDraft.shipTo}
-                              onChange={e => setLocDraft(d => ({ ...d, shipTo: e.target.checked }))} /> Ship-to
-                          </label>
-                        </div>
-                        {/* Same rule, same wording, as the Customer Families
-                            screen — a usability pre-check only; the route and
-                            app_private.propose_customer_location refuse it
-                            regardless of what this client sends. */}
-                        {!eligible && (
-                          <div style={{ marginTop: 6, fontSize: 11, color: C.red }}>
-                            A Location must be Bill-to, Ship-to or both.
-                          </div>
-                        )}
-                        <div style={{ marginTop: 8 }}>
-                          <Btn ch={busy ? "Proposing…" : "Propose Location"} sm
-                            disabled={busy || !eligible} onClick={proposeLocation} />
-                        </div>
-                      </>
-                    )}
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      <Btn ch={busy ? "Creating…" : "Create in Customer Master"} sm
+                        disabled={busy || !eligible} onClick={proposeLocation} />
+                      <Btn ch="Cancel" v="ghost" sm disabled={busy}
+                        onClick={() => setShowLocForm(false)} />
+                    </div>
                   </>
                 )}
               </>
             )}
 
             <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
-              <Btn ch={`Use for ${title}`} full disabled={!label} onClick={() => setConfirming(true)} />
+              <Btn ch="Use for Client" full disabled={!label} onClick={() => setConfirming(true)} />
               <Btn ch="Cancel" v="secondary" onClick={cancel} />
             </div>
           </>
@@ -390,4 +373,3 @@ export default function BatchQuickPickModal({ field, profile, setBatchProfile,
     </div>
   );
 }
-

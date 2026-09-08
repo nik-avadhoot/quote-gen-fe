@@ -39,16 +39,23 @@ export default function BatchProfileBar(){
   const quickPickEnabled=useFeatureFlag("u1_batch_party_link");
   const[quickPickField,setQuickPickField]=useState(null); // 'client' | 'delivery' | null
 
-  // A governed Location's name is not one of the freight master's destinations,
-  // so `delivery` can now legitimately hold a value the <select> has no option
-  // for. Without this the control would fall back to showing the first option
-  // and silently misreport what the Batch actually holds. Rendered only when
-  // the stored value is genuinely absent from the master.
-  const deliveryOffMaster=!!batchProfile.delivery&&!locations.includes(batchProfile.delivery);
-
-  const pickBtn=(field,label)=>(
-    <button type="button" onClick={()=>setQuickPickField(field)}
-      title={`Create or select a governed ${label} record, then copy its name into this free-text field`}
+  // CORRECTION (Product Owner ruling, 2026-09-08). The first pass also put this
+  // affordance beside `delivery` and copied a Customer Location's label into it.
+  // That was wrong, and a confirmation dialog did not make it right: `delivery`
+  // is a FREIGHT-DESTINATION MASTER KEY — freight[plant][delivery] resolves the
+  // matrix rate a few lines below — not free-text Customer Location data. A
+  // Location label is not a key in that master, so the lookup would have
+  // returned 0 and produced a misleading, commercially unsafe pricing state.
+  // One field cannot carry two incompatible meanings. `delivery` is therefore
+  // untouched by this slice: same options, same onChange, same freight
+  // resolution, no synthetic option, no affordance beside it.
+  //
+  // Formal Customer Location selection is deferred to U4, where a Delivery
+  // Group referencing real Bill-to/Ship-to Locations is the correct home for
+  // it. This is a decision about freight authority, not a refusal of ids.
+  const pickBtn=()=>(
+    <button type="button" onClick={()=>setQuickPickField("client")}
+      title="Create or select a governed Customer or Prospect, then copy its name into this free-text field"
       style={{padding:"1px 4px",borderRadius:3,border:`1px solid ${C.amber}`,background:C.white,
         color:C.amber,fontSize:9,fontWeight:700,cursor:"pointer",lineHeight:1.3,flexShrink:0}}>
       ⊕
@@ -98,7 +105,7 @@ export default function BatchProfileBar(){
             <input value={batchProfile.client||""} onChange={e=>setBatchProfile(p=>({...p,client:e.target.value}))}
               style={{padding:"2px 6px",borderRadius:3,border:`1px solid ${C.border}`,
                 fontSize:10,background:C.white,color:C.slate,width:90,minWidth:0}}/>
-            {quickPickEnabled&&pickBtn("client","Customer or Prospect")}
+            {quickPickEnabled&&pickBtn()}
           </div>
           <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Sector</span>
           <select value={batchProfile.sector||""} onChange={e=>{
@@ -130,32 +137,19 @@ export default function BatchProfileBar(){
             {PLANTS.map(o=><option key={o} value={o}>{o}</option>)}
           </select>
           <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Delivery</span>
-          <div style={{display:"flex",gap:3,alignItems:"center",minWidth:0}}>
-            <select value={batchProfile.delivery||""} onChange={e=>{
-                const nv=e.target.value;
-                setBatchProfile(p=>{
-                  const newP={...p,delivery:nv};
-                  const fr=freight?.[p.plant]?.[nv];
-                  if(fr!==undefined) newP.freightOverride=fr;
-                  return newP;
-                });
-              }} style={{padding:"2px 4px",borderRadius:3,border:`1px solid ${C.border}`,
-                fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90}}
-              title={deliveryOffMaster
-                ?`"${batchProfile.delivery}" is not a freight master destination, so the freight `
-                 +`matrix rate reads 0 for it — enter freight by hand, or pick a destination.`
-                :undefined}>
-              <option value="">— select —</option>
-              {/* A value the master does not carry — a governed Customer
-                  Location name copied in by Slice D, or a destination since
-                  removed from the freight master. Shown as its own option so
-                  the control reports what the Batch actually holds instead of
-                  falling back to the first entry. */}
-              {deliveryOffMaster&&<option value={batchProfile.delivery}>{batchProfile.delivery} ⚠</option>}
-              {locations.map(o=><option key={o} value={o}>{o}</option>)}
-            </select>
-            {quickPickEnabled&&pickBtn("delivery","Customer Location")}
-          </div>
+          <select value={batchProfile.delivery||""} onChange={e=>{
+              const nv=e.target.value;
+              setBatchProfile(p=>{
+                const newP={...p,delivery:nv};
+                const fr=freight?.[p.plant]?.[nv];
+                if(fr!==undefined) newP.freightOverride=fr;
+                return newP;
+              });
+            }} style={{padding:"2px 4px",borderRadius:3,border:`1px solid ${C.border}`,
+              fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90}}>
+            <option value="">— select —</option>
+            {locations.map(o=><option key={o} value={o}>{o}</option>)}
+          </select>
           {/* Row 3: Cust Type | Price Context */}
           <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Cust Type</span>
           <select value={batchProfile.customerType||'existing'}
@@ -355,9 +349,8 @@ export default function BatchProfileBar(){
         </button>
       </div>
 
-      {quickPickEnabled&&quickPickField&&(
-        <BatchQuickPickModal field={quickPickField} profile={batchProfile}
-          setBatchProfile={setBatchProfile} freightLocations={locations}
+      {quickPickEnabled&&quickPickField==="client"&&(
+        <BatchQuickPickModal profile={batchProfile} setBatchProfile={setBatchProfile}
           showToast={showToast} onClose={()=>setQuickPickField(null)}/>)}
 
     </div>

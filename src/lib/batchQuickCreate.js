@@ -9,11 +9,27 @@
 //
 // WHAT THIS SLICE IS, STATED AS A BOUNDARY RATHER THAN AS A FEATURE.
 //
-// Batch Entry's `client` and `delivery` are ordinary Batch Profile strings
-// persisted to `cbb_batchprofile` (state/useBatchState.js). This slice adds a
-// governed way to PRODUCE one of those strings. It adds no way to STORE
-// anything else. After the copy, the value is indistinguishable from one typed
-// by hand — which is the point, not a limitation:
+// CORRECTION — Product Owner ruling, 2026-09-08. The first pass treated
+// `client` AND `delivery` as interchangeable free text. They are not.
+// `client` is genuinely free text. `delivery` is a FREIGHT-DESTINATION MASTER
+// KEY: BatchProfileBar resolves freight[plant][delivery] from it to price the
+// Batch. A Customer Location's label is not a key in that master, so writing
+// one there made the freight lookup return 0 — a misleading and commercially
+// unsafe pricing state that a confirmation dialog does not make acceptable.
+// One field cannot carry two incompatible commercial meanings.
+//
+// So this slice writes `client` and NOTHING else. That is a decision about
+// preserving correct freight authority, NOT a refusal of identifiers: formal
+// Customer Location selection is deferred to U4, where a Delivery Group
+// referencing real Bill-to/Ship-to Locations is the right place for it.
+// Creating a Location from here remains available as an explicitly UNLINKED
+// Customer Master convenience — it changes no Batch field at all.
+//
+// Batch Entry's `client` is an ordinary Batch Profile string persisted to
+// `cbb_batchprofile` (state/useBatchState.js). This slice adds a governed way
+// to PRODUCE that string. It adds no way to STORE anything else. After the
+// copy, the value is indistinguishable from one typed by hand — the point,
+// not a limitation:
 //
 //   * no `partyId`, no `locationId`, no link object, no snapshot;
 //   * no staleness concept, because no state is left that could go stale;
@@ -27,9 +43,10 @@
 // rules — which belongs to U4's durable Batch Workspace, not here.
 //
 // applyLabelToProfile() below is the mechanical guarantee of that boundary: it
-// is the ONLY way this slice writes to the profile, it accepts only the two
-// named fields, and it writes only a string. scripts/batch-quick-create-
-// fixtures.mjs asserts the resulting object's key set is unchanged.
+// is the ONLY way this slice writes to the profile, it accepts `client` and
+// nothing else, and it writes only a string. scripts/batch-quick-create-
+// fixtures.mjs asserts the key set is unchanged AND that `delivery` — along
+// with every other field — is refused outright.
 // ═══════════════════════════════════════════════════════════════════════════
 import { hasCapability } from "./capabilities.js";
 
@@ -39,10 +56,12 @@ import { hasCapability } from "./capabilities.js";
 export { createProspectBody } from "./customerFamilyActions.js";
 export { proposeLocationBody } from "./customerLocationActions.js";
 
-// The only two Batch Profile fields this slice may write. Not a style choice —
+// The ONLY Batch Profile field this slice may write. Not a style choice —
 // applyLabelToProfile refuses anything else, so a future edit cannot quietly
 // widen the write surface without changing this line and failing its fixture.
-export const BATCH_TEXT_FIELDS = Object.freeze(["client", "delivery"]);
+// `delivery` is deliberately absent and must stay absent: it belongs to the
+// freight master, and the fixtures assert that writing it is refused.
+export const BATCH_TEXT_FIELDS = Object.freeze(["client"]);
 
 // Capabilities, mirroring the backend's own conditions rather than inventing a
 // narrower frontend rule:
@@ -84,6 +103,10 @@ export function partyLabel(party) {
 // separate later action — so the descriptive detail the user just entered is
 // what identifies it. Falls back to the surrogate id only when a Location
 // carries no descriptive detail at all, which CDM-08 explicitly permits.
+//
+// POST-CORRECTION: this label is for TELLING THE USER what was created. It is
+// never written into any Batch field — applyLabelToProfile would refuse
+// `delivery` even if a caller tried.
 export function locationLabel(location, version) {
   const code = (location?.location_code || "").trim();
   const descriptive = (version?.address_text || "").trim()
@@ -97,10 +120,10 @@ export function locationLabel(location, version) {
 
 // ── the write — the whole of this slice's effect on Batch state ────────────
 
-// Returns a NEW profile with exactly one string field replaced, or the SAME
-// profile object untouched if the field is not one of the two permitted ones
-// or the label is empty. Never adds a key, never removes one, never writes a
-// non-string.
+// Returns a NEW profile with `client` replaced, or the SAME profile object
+// untouched if the field is not permitted or the label is empty. Never adds a
+// key, never removes one, never writes a non-string, and never writes
+// `delivery` — a Location-create caller cannot reach Batch state through here.
 export function applyLabelToProfile(profile, field, label) {
   const base = profile || {};
   if (!BATCH_TEXT_FIELDS.includes(field)) return base;
@@ -111,7 +134,9 @@ export function applyLabelToProfile(profile, field, label) {
 
 // ── explicit confirmation ─────────────────────────────────────────────────
 
-const FIELD_TITLES = { client: "Client", delivery: "Delivery" };
+// `delivery` is deliberately NOT here: it is not a field this slice may name,
+// title or write.
+const FIELD_TITLES = { client: "Client" };
 
 export function fieldTitle(field) {
   return FIELD_TITLES[field] || field;
@@ -138,22 +163,24 @@ export function createdButNotCopiedMessage(what, label) {
     + ` text was left unchanged.`;
 }
 
-// ── freight consequence of a Delivery label (disclosure, not a rule) ───────
+// ── Customer Location: created, explicitly NOT linked to this Batch ───────
 //
-// `delivery` is not purely decorative: BatchProfileBar reads
-// freight[plant][delivery] to show the matrix freight rate. A governed
-// Customer Location's label is not a key in that freight master, so the matrix
-// rate reads as 0 — exactly as it already does when no Delivery is selected.
-// This is a real consequence of writing a Location name into this field, so
-// the UI states it before the copy rather than letting a rate silently drop.
-export function deliveryLabelIsOffFreightMatrix(label, freightLocations) {
-  const text = (label || "").trim();
-  if (!text) return false;
-  return !(Array.isArray(freightLocations) ? freightLocations : []).includes(text);
+// The retained convenience. It uses the governed Slice C proposal route and
+// then says, plainly, that nothing about the Batch changed — because nothing
+// did. There is no Batch field a Location can correctly occupy: `delivery`
+// belongs to the freight master, and inventing a second field would be the
+// U4 referential state this slice must not introduce.
+
+export function locationCreatedNotLinkedMessage(locLabel, partyName) {
+  return `Location "${locLabel}" was created in the Customer Master under "${partyName}".`
+    + ` It is NOT linked to this Batch: Delivery, freight and every other Batch field are`
+    + ` unchanged. Delivery remains a freight destination, chosen from its own list.`
 }
 
-export function deliveryFreightWarning(label) {
-  return `"${label}" is not one of the freight master's destinations, so the freight matrix rate`
-    + ` will read 0 for it — the same as an unset Delivery. Enter the freight rate by hand, or pick`
-    + ` a freight destination from the list instead.`;
+// Shown beside the create form, before the user commits to it, so the absence
+// of a Batch effect is stated up front rather than only reported afterwards.
+export function locationNotLinkedNotice() {
+  return `Creating a Location here records it in the Customer Master only. It does not set`
+    + ` Delivery and does not affect freight — Delivery is a freight destination, and`
+    + ` choosing a Location for a Batch arrives with Delivery Groups in a later stage.`;
 }
