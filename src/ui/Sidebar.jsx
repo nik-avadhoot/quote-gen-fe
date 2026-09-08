@@ -4,7 +4,7 @@
 //
 // NAV_ITEMS travels WITH the sidebar rather than living in a constants file:
 // two of its entries carry live counts (items.length, constructionLib.length)
-// and one is role-gated, so it is derived state, not configuration. Adding a
+// and one is capability-gated, so it is derived state, not configuration. Adding a
 // master tab is still a one-line change - it is just a line in here.
 //
 // Producing Plants and Customer Families are additionally feature-flagged
@@ -20,7 +20,7 @@ import { useAppState } from "../state/AppStateContext.js";
 import { C, sans } from "../theme.js";
 
 export default function Sidebar(){
-  const { constructionLib, items, profile, role, setSidebarCollapsed, setTab,
+  const { constructionLib, items, profile, setSidebarCollapsed, setTab,
     sidebarCollapsed, tab } = useAppState();
   const NAV_ITEMS=[
     ["costing","📊","Costing"],
@@ -33,7 +33,9 @@ export default function Sidebar(){
     ...(isFeatureEnabled("u1_producing_plants")?[["plants","🏭","Producing Plants"]]:[]),
     ...(isFeatureEnabled("u1_customer_families")&&hasCapability(profile,"read_party_master")
       ?[["families","👪","Customer Families"]]:[]),
-    ...(role==="admin"?[["users","👥","Users"]]:[]),
+    // UA-1: gated on the CAPABILITY, not the derived label. A role string is a
+    // presentation summary and must never decide what a screen can be.
+    ...(hasCapability(profile,"administer_users")?[["users","👥","Users"]]:[]),
   ];
   return(
   <div style={{background:C.slate,display:"flex",flexDirection:"column",flexShrink:0,
