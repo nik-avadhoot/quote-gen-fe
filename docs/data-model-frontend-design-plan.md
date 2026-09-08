@@ -43,6 +43,53 @@ field set, access model, backend/RPC contract, error behaviour and acceptance ev
    project. A feature appears on Vercel only after approved code is pushed and deployed with the
    correct configuration and feature flag.
 
+### 2.1 Delivery pace, evidence and proportionate gates
+
+> **Product Owner decision — 2026-09-08.** The application is still in private development and has
+> not been shared with any other user. Current development users, login activity and business rows
+> have been created only by the Product Owner and may be recreated. Development-data preservation
+> must therefore not be treated as if it were production-data preservation when that would materially
+> delay delivery. Source integrity, migration reproducibility, security boundaries and the accepted
+> data model remain non-negotiable.
+
+The programme is a product-building journey with proportionate speedbreakers, not a sequence of gates
+that prevents forward movement. Reviews and tests exist to catch credible accidents while allowing
+the next useful, visible increment to ship.
+
+1. **Stop-the-line risks** are credible threats to source or migration history, security or access
+   boundaries, canonical architecture, irreversible external state, or production/shared data. These
+   block progress until resolved or explicitly ruled on by the Product Owner.
+2. **Recoverable development-state risks** include loss of the Product Owner's current development
+   rows, recreated test identities, localhost configuration and disposable test artefacts. They must
+   be disclosed and handled deliberately, but do not by themselves justify prolonged suspension of
+   product delivery.
+3. **G-A remains mandatory** after database migration work, together with the relevant database tests,
+   backend regression suite, permission checks, HTTP probes, frontend fixtures, build and lint gates.
+4. **G-B is a milestone gate**, required at major backend/stage closure, before deployment, when
+   migration drift or replay integrity is in doubt, or when the Product Owner specifically requests
+   it. It is not automatically repeated after every intermediate frontend-enablement slice. A
+   Product Owner-approved deferral must be recorded explicitly; it is neither a passed gate nor a
+   failed implementation.
+5. A missing convenience tool or a desire to preserve disposable development data is not automatically
+   a genuine blocker. The team must first consider safe, bounded alternatives and the actual business
+   consequence of proceeding.
+6. Backend foundations must be converted into **visible frontend increments promptly**. A substantial
+   backend capability should be followed by the smallest useful screen, action or workflow that lets
+   the Product Owner see and exercise it; backend completion alone must not be presented as equivalent
+   to delivered product value.
+7. Every increment reports status separately as **implemented**, **tested**, **technically closed**,
+   **feature-enabled/currently visible**, and **Product Owner validated**. These terms are not
+   interchangeable.
+8. Feature-flagged work is not Product Owner-visible merely because its code exists. Localhost
+   configuration, caller capability and a real-browser walkthrough form part of visible acceptance;
+   production enablement remains separately authorised.
+9. Review rounds must converge. Once credible safety, correctness and scope issues are resolved, work
+   proceeds to the next visible increment. Repeated planning or proof redesign without a newly
+   evidenced material risk is not a substitute for implementation.
+10. No relaxation in this section authorises bypassing governed operations, weakening RLS or caller
+    checks, exposing privileged credentials, rewriting migration history, silently crossing `S`/`U`
+    scope, deploying, or pushing code without the separately required approval.
+
 ## 3. Terminology
 
 ### 3.1 Producing Plant
@@ -432,6 +479,9 @@ Wireframes support this specification but do not replace it.
 6. Design U3 Commercial Masters after the annual-interest model is approved.
 7. Implement the durable U4 Batch Workspace only on accepted S6–S8 foundations.
 8. Deliver U5 with S9 and U6 with S10/audit foundations.
+9. After each approved backend or database increment, deliver and visibly verify the smallest useful
+   frontend increment before starting another extended foundation-only workstream, unless a recorded
+   dependency makes that impossible.
 
 U1–U3 design may proceed without changing the costing engine. Implementation requires its own
 approval and must use accepted operations.
