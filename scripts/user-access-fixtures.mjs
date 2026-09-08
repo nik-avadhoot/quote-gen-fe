@@ -17,6 +17,7 @@ import {
   deactivatesLastAdministrator, deactivationConsequence, deriveRoleLabel,
   isGroupCapability, isPlantCapability, lastAdministratorDeactivationMessage,
   lastAdministratorMessage, refusalReason, removesLastAdministrator, sameCapabilityState,
+  INITIAL_ACCESS_PRESETS, initialAccessNote, initialAccessSeeds,
   setCapabilitiesBody, setStatusBody, staleCapabilityMessage, staleStatusMessage,
   statusChangeSummary,
 } from "../src/lib/userAccessActions.js";
@@ -372,6 +373,39 @@ ok("adoption success: names the address and the new identity",
    && adoptionSuccessMessage(view, "Rescued").includes("Rescued"));
 ok("adoption success: says where to look for them next",
    /appear in the list below/i.test(adoptionSuccessMessage(view, "Rescued")));
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Creation and adoption wording — an INITIAL ACCESS PRESET, not a role
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// maker/checker/admin survive on the creation and adoption paths because
+// admin_create_app_user takes them. The interface must never let that read as
+// the authority model, because it is not: nine of the thirteen capabilities
+// cannot be expressed by it at all.
+ok("preset: the three values still match what admin_create_app_user accepts",
+   eq(INITIAL_ACCESS_PRESETS.map(p => p.value), ["maker", "checker", "admin"]));
+ok("preset: the list is frozen", Object.isFrozen(INITIAL_ACCESS_PRESETS));
+ok("preset: every option says what it actually SEEDS, in capability words",
+   INITIAL_ACCESS_PRESETS.every(p => /Plant access/.test(p.seeds)));
+ok("preset: maker seeds Make quotes, checker seeds Check quotes",
+   /Make quotes/.test(initialAccessSeeds("maker"))
+   && /Check quotes/.test(initialAccessSeeds("checker"))
+   && !/Check quotes/.test(initialAccessSeeds("maker")));
+ok("preset: the administrator option names the GROUP capability it grants",
+   /Administer users/.test(initialAccessSeeds("admin")));
+ok("preset: an unknown value describes nothing rather than guessing",
+   initialAccessSeeds("superuser") === "");
+
+const note = initialAccessNote();
+ok("preset note: calls it starting access, not a role",
+   /Starting access only/i.test(note) && /It is not a role/i.test(note));
+ok("preset note: says permissions are the authority",
+   /permissions are the authority/i.test(note));
+ok("preset note: says explicitly that it does NOT override the matrix",
+   /does not override the capability matrix/i.test(note));
+ok("preset note: points at where permissions are actually edited",
+   /edited per user/i.test(note));
 
 console.log();
 console.log(fails === 0 ? "all checks pass" : `${fails} FAILED`);

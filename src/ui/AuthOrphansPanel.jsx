@@ -21,9 +21,11 @@ import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "./appStates.jsx";
 import {
-  ADOPTION_ROLES, adoptBody, adoptionBlockedReason, adoptionSuccessMessage,
+  adoptBody, adoptionBlockedReason, adoptionSuccessMessage,
   confirmAdoption, formatOrphanDate, orphanExplainer, orphanNote, orphanViews,
 } from "../lib/authOrphanActions.js";
+import { INITIAL_ACCESS_PRESETS, initialAccessNote, initialAccessSeeds }
+  from "../lib/userAccessActions.js";
 
 const btn = (variant) => ({
   padding: "5px 10px", borderRadius: 5, fontSize: 11, fontWeight: 600,
@@ -55,9 +57,14 @@ function AdoptForm({ view, plants, busy, onAdopt }) {
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
       <input value={displayName} onChange={e => setDisplayName(e.target.value)}
         placeholder="Display name" style={{ ...input, width: 180 }} />
-      <select value={role} onChange={e => setRole(e.target.value)} style={input}>
-        {ADOPTION_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-      </select>
+      {/* A starting preset, exactly as on creation - not a role, and not the
+          authority. The capability editor owns permissions afterwards. */}
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: C.slateM }}>
+        Initial access
+        <select value={role} onChange={e => setRole(e.target.value)} style={input}>
+          {INITIAL_ACCESS_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+        </select>
+      </label>
       {active.map(p => (
         <label key={p.plant_code} title={p.name}
           style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, color: C.slateM }}>
@@ -72,6 +79,9 @@ function AdoptForm({ view, plants, busy, onAdopt }) {
         {busy ? "Adopting…" : "Adopt account"}
       </button>
       {blocked && <span style={{ fontSize: 10.5, color: C.slateL }}>{blocked}</span>}
+      <div style={{ flexBasis: "100%", fontSize: 10, color: C.slateL }}>
+        Grants {initialAccessSeeds(role)}. {initialAccessNote()}
+      </div>
     </div>
   );
 }

@@ -192,6 +192,37 @@ export function staleStatusMessage(displayName) {
     + `want.`;
 }
 
+// ── creation and adoption: an INITIAL ACCESS PRESET, not a role ────────────
+//
+// `maker` / `checker` / `admin` survive on the creation and adoption paths
+// because app_private.admin_create_app_user takes them. They are NOT the
+// authority model and must not be presented as one: each is simply a shorthand
+// for a small starting capability set, which the capability editor then owns
+// outright. The wording below says exactly what each one seeds - read from that
+// function, not invented - so nobody can read the control as "this is what the
+// user IS".
+//
+// Retiring the argument itself is a separate change and is not attempted here.
+export const INITIAL_ACCESS_PRESETS = Object.freeze([
+  { value: "maker",   label: "Maker",
+    seeds: "Plant access + Make quotes at the chosen plants" },
+  { value: "checker", label: "Checker",
+    seeds: "Plant access + Check quotes at the chosen plants" },
+  { value: "admin",   label: "Administrator",
+    seeds: "Administer users, plus Plant access + Make quotes at the chosen plants" },
+]);
+
+export function initialAccessSeeds(preset) {
+  const found = INITIAL_ACCESS_PRESETS.find(p => p.value === preset);
+  return found ? found.seeds : "";
+}
+
+export function initialAccessNote() {
+  return "Starting access only. It seeds a small set of capabilities; permissions are the "
+    + "authority and are edited per user below. It is not a role, and it does not override "
+    + "the capability matrix.";
+}
+
 export function statusChangeSummary(user) {
   return user?.active
     ? { verb: "Deactivate", danger: true }

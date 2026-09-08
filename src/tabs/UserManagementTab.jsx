@@ -28,14 +28,13 @@ import CapabilityMatrix from "../ui/CapabilityMatrix.jsx";
 import AuthOrphansPanel from "../ui/AuthOrphansPanel.jsx";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import {
-  confirmCapabilityChange, confirmDeactivation, confirmReactivation,
+  INITIAL_ACCESS_PRESETS, confirmCapabilityChange, confirmDeactivation, confirmReactivation,
   deactivatesLastAdministrator, deactivationConsequence, deriveRoleLabel,
+  initialAccessNote, initialAccessSeeds,
   lastAdministratorDeactivationMessage, lastAdministratorMessage,
   refusalReason, removesLastAdministrator, sameCapabilityState, setCapabilitiesBody,
   setStatusBody, staleCapabilityMessage, staleStatusMessage, statusChangeSummary,
 } from "../lib/userAccessActions.js";
-
-const ROLES = ["maker", "checker", "admin"];
 
 const btnStyle = (variant) => ({
   padding: "5px 10px", borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: sans,
@@ -254,12 +253,20 @@ function NewUserForm({ plants, onCreated, showToast }) {
     <form onSubmit={submit} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: 12, background: C.cream, border: `1px solid ${C.border}`, borderRadius: 7, marginBottom: 12 }}>
       <input required type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{ ...inputStyle, width: 200 }} />
       <input required placeholder="Display name" value={displayName} onChange={e => setDisplayName(e.target.value)} style={{ ...inputStyle, width: 140 }} />
-      <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle}>
-        {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-      </select>
+      {/* Labelled as a PRESET, never as a role. The capability matrix is the
+          authority; this only decides what the new account starts with. */}
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: C.slateM }}>
+        Initial access
+        <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle}>
+          {INITIAL_ACCESS_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+        </select>
+      </label>
       <PlantPicker plants={plants} selected={selectedPlants} onChange={setSelectedPlants} />
       <button type="submit" disabled={busy || needsPlant} style={btnStyle("primary")}>{busy ? "Creating…" : "+ Add User"}</button>
       {needsPlant && <span style={{ fontSize: 11, color: C.red }}>A {role} needs at least one plant</span>}
+      <div style={{ flexBasis: "100%", fontSize: 10.5, color: C.slateL, marginTop: 2 }}>
+        Grants {initialAccessSeeds(role)}. {initialAccessNote()}
+      </div>
     </form>
   );
 }
