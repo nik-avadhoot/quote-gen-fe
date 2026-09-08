@@ -30,7 +30,7 @@
 // field. Formal selection belongs to U4's Delivery Group UI.
 // ═══════════════════════════════════════════════════════════════════════════
 import {
-  BATCH_TEXT_FIELDS, BROWSE_CAP, CREATE_CAPS, DIRECT_CUSTOMER_CREATE_AVAILABLE,
+  BATCH_TEXT_FIELDS, BROWSE_CAP, CREATE_CAPS,
   MATCH_THRESHOLD, applyLabelToProfile, cannotBrowseNotice, copyToBatchConfirmMessage,
   createProspectBody, createProspectConfirmMessage, createdButNotCopiedMessage,
   familyNameByPartyId, fieldTitle, identityCaveat, identityFromText,
@@ -488,9 +488,9 @@ ok("row: lifecycle falls back sensibly when the field is absent",
 
 // ── the create path, and the gap it refuses to simulate ───────────────────
 
-ok("create path: direct-Customer creation is recorded as UNAVAILABLE, not faked",
-   DIRECT_CUSTOMER_CREATE_AVAILABLE === false);
-
+// The create surface is proven by what the module OFFERS, not by a constant
+// asserting what it does not. There is one create body and it is the Prospect
+// one; nothing here can mint a Customer Code.
 ok("create path: the only create body this control sends is the Prospect one",
    eq(createProspectBody("Brand New Ltd", null), { display_name: "Brand New Ltd" }));
 
@@ -498,6 +498,17 @@ ok("create path: the create body carries no lifecycle or customer_code claim",
    (() => {
      const b = createProspectBody("Brand New Ltd", null);
      return !("lifecycle_state" in b) && !("customer_code" in b) && !("graduate" in b);
+   })());
+
+ok("create path: the module exposes NO graduate/customer-create helper at all — "
+   + "minting a permanent Customer Code is a Customer Master action, not a Batch one",
+   Object.keys(QC).every(k => !/graduate|createCustomer|customerCreate/i.test(k)));
+
+ok("create path: the confirm copy tells the user creation yields a Prospect and that "
+   + "graduation is separate, which is where the boundary is actually communicated",
+   (() => {
+     const m = createProspectConfirmMessage("Brand New Ltd", 0);
+     return /as a new Prospect/i.test(m) && /separate action in Customer Families/i.test(m);
    })());
 
 // ── capability distinction (ruling: no fake dropdown, no false governance) ─

@@ -344,20 +344,21 @@ export function familyNameByPartyId(memberships, families) {
   return out;
 }
 
-// ── the create path, and the gap it does not paper over ───────────────────
+// ── the create path ───────────────────────────────────────────────────────
 //
-// There is exactly ONE governed operation that creates a Party:
-// `create_minimal_prospect`, which produces a Party in the `prospect`
-// lifecycle. Graduating it to a Customer and minting the permanent Customer
-// Code is a SEPARATE operation (`graduate_customer_party`) requiring
-// `manage_customer_master`.
+// A genuinely new Batch-side client is created as a governed PROSPECT through
+// `create_minimal_prospect`. That is the whole of the create surface here.
 //
-// No governed direct-Customer creation exists — verified against pg_proc, not
-// assumed. So this control offers Prospect creation only. It does not simulate
-// "create as Customer" by creating a Prospect and immediately graduating it:
-// that would invent a compound operation the data model never approved, and
-// would mint a permanent Customer Code from a Batch Entry side panel.
-export const DIRECT_CUSTOMER_CREATE_AVAILABLE = false;
+// Graduation to a Customer — which mints the permanent Customer Code — is a
+// separate governed Customer Master action requiring `manage_customer_master`
+// (`graduate_customer_party`). It is deliberately not reachable from Batch
+// Entry: minting a permanent code is a Customer Master decision, not a side
+// effect of starting a quote (Product Owner decision, 2026-09-08; recorded in
+// data-model-frontend-design-plan.md §2.2).
+//
+// There is therefore no "create as Customer" option to expose, and no flag
+// saying so — the UI simply offers the supported governed action. See the
+// design plan for why, rather than a constant asserting it here.
 
 export function createProspectConfirmMessage(name, matchCount) {
   const dupe = matchCount > 0
