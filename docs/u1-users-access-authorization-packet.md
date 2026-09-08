@@ -1,7 +1,9 @@
 # U1 Users/Access — authorisation packet
 
-**Status:** proposal for Product Owner authorisation — **revision 2, corrected 2026-09-08**.
-Nothing in it is implemented. It authorises no code, no migration, no grant change, no deployment.
+**Status:** revision 2 authorised, and **UA-1 + UA-3 + UA-4 are CLOSED** — implemented,
+automated-test verified, browser verified, technically closed and **Product Owner validated on
+2026-09-08**. See §11. **UA-5, UA-6 and UA-7 remain open and unauthorised**; Users/Access as a whole
+is *not* closed, and neither is U1.
 
 Revision 2 applies the Product Owner's corrections A-J: a mandatory `content_version` concurrency
 contract (§2.1), the exact `p_plant_caps` payload (§2.2), a last-active-administrator invariant
@@ -456,3 +458,87 @@ U1 Users/Access. Not relabelled as S8–S13. Does not begin U2, S8 or U4. Touche
 `delivery` semantics, no feature flag, no live grant, no live user. Authorises no deployment and no
 push. `BatchProfileBar.jsx`'s user-owned hunk and `docs/commercial-intelligence-decisions.md` are
 untouched.
+
+
+---
+
+## 11. Closure record — UA-1 + UA-3 + UA-4 (2026-09-08)
+
+**Product Owner validation granted for this tranche only.**
+
+| Status | UA-1 | UA-3 | UA-4 |
+|---|---|---|---|
+| Implemented | yes | yes | yes |
+| Automated-test verified | yes | yes | yes |
+| Browser verified | yes | yes | yes |
+| Technically closed | yes | yes | yes |
+| Product Owner validated | yes | yes | yes |
+
+### What shipped
+
+- **UA-1** — shared loading/empty/error/stale/access-denied states; read-only display of each user's
+  actual group and plant capability sets; navigation gated on `administer_users` rather than on the
+  role string.
+- **UA-3** — `set_user_capabilities` (function, invoker wrapper, route), the last-active-administrator
+  invariant, and the **direct grant-table write bypass closed**: `authenticated` holds no INSERT or
+  UPDATE on either grant table and the four write policies are dropped, so a direct write is refused
+  by the database, not by a check in the route. Applied only after every application caller had
+  migrated, so no intermediate state existed in which the application depended on a revoked write.
+- **UA-4** — the capability editor wired exclusively to UA-3, replacing the COMPLETE capability set in
+  one operation carrying `expected_content_version`; the editable role field retired and
+  `_apply_role_and_plant` deleted. `role` is now a derived read-only label and is never an input.
+
+### Associated correction, accepted as in scope
+
+`caller_context.resolve_caller` fell back to `.limit(2)` over every row the caller could see when no
+auth uid was passed. An administrator sees everyone, so once a third user existed those two rows
+needn't include the administrator's own row: identity resolved to `None` and `/auth/refresh` returned
+403 "Account is not active" for a valid session. Pre-existing; it became reachable when the acceptance
+test user was created, and it blocked the authorised acceptance work. Fixed at all three call sites in
+`ce332e7`, with regression coverage in `tests/test_login_bootstrap.py`.
+
+### Evidence totals (re-run at closure)
+
+| Gate | Result |
+|---|---|
+| G-A migration correspondence | 151 local = 151 remote, fingerprint `67938d51` identical |
+| pgTAP `tests.run_all()` | 905 passed, 0 failed |
+| Backend hermetic suites (12) | 569 passed, 0 failed |
+| Frontend gates (10) | 555 checks, all pass — `user-access` 51 |
+| HTTP probe matrix | 226/226 |
+| ESLint | 66 errors, 0 new |
+
+Browser verified live: capability-gated nav; accurate group and plant display; grant; two plants with
+distinct sets; an unchanged submission as a true no-op (no version bump, no grant rows written, Save
+disabled); the two-tab stale conflict, reloaded and re-decided rather than retried; governed creation
+after the bypass closure; the loading state; the derived read-only role column with no selector; and
+Customer Families reachable with `read_party_master` and then genuinely 403 — not an empty success —
+after a governed revocation, using the same token, which is what proves the database decides per
+request.
+
+Verified by automated evidence only, at the Product Owner's direction: the last-active-administrator
+invariant (pgTAP, isolated subtransaction) and the `TRANSITION_NOT_ALLOWED` explanation. Direct-write
+rejection rests on BY-1..BY-11 and the probe matrix; the destructive experiments were not repeated.
+The Users-screen access-denied and server-error presentations are covered hermetically: observing
+them live would have required demoting an administrator or breaking the server.
+
+### Acceptance fixture, retained deliberately
+
+`app_users.id = 1375`, "UA Test User", `ua-test@fixture.invalid` — created through the governed
+application path, left **deactivated with zero active group and plant grants** (`content_version` 7,
+`deactivated_at` stamped). Its revoked grant rows are retained as the audit trail. Not deleted, by
+instruction. No live administrator was demoted, deactivated or otherwise manipulated at any point;
+`NikunjRL` ends at `content_version` 1 with no revoked rows in either grant table.
+
+Commits: `quote-gen-be` `0926c82`, `4eb3458`, `e3b9124`, `ce332e7`; `quote-gen-fe` `d740f95`,
+`b5298dd`, `d0f8d8e`. Nothing pushed.
+
+### Still open — Users/Access is NOT closed
+
+| # | Slice | State |
+|---|---|---|
+| **UA-5** | Activation/deactivation UX and consequence handling | Open, unauthorised |
+| **UA-6** | Orphan-account recovery screen | Open, unauthorised |
+| **UA-7** | Remove the duplicated embedded Plant Master panel | Open, unauthorised, **and gated on reliable standalone Producing Plants visibility (§5)** |
+
+Each needs its own authorisation. Nothing here begins S8 or U2.
