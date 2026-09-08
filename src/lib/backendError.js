@@ -22,16 +22,24 @@ export function classifyResponse({ ok, status, data }, { expectRows } = {}) {
   if (status === 401 || status === 403) return { kind: "access-denied", message: readMessage(data) };
   if (status === 409 || status === 412) return { kind: "stale", message: readMessage(data) };
   if (status === 400 || status === 422) return { kind: "validation", message: readMessage(data) };
-  // D2 — an upstream timeout (backend UPSTREAM_TIMEOUT → 504) is a retryable
+  // D2 — an upstream timeout (backend UPSTREAM_TIMEOUT → 504) is an
   // infrastructure answer, not an application fault. It stays kind 'error' so
   // no caller's handling changes, but it always carries an actionable message
   // rather than falling through to a bare "Request failed (504)".
+  //
+  // The fallback deliberately does NOT say "nothing was changed". A timeout
+  // means the RESPONSE was lost, not that the server did nothing — the write
+  // may already have committed. Telling the user it failed invites them to
+  // submit the same thing twice. The honest instruction is to refresh and look
+  // before acting, which is why `retryable` is not set here either: this is not
+  // safe to replay blindly.
   if (status === 502 || status === 503 || status === 504) {
     return {
       kind: "error",
-      retryable: true,
+      outcomeUnknown: true,
       message: readMessage(data)
-        || "The service did not respond in time. Nothing was changed — please try again.",
+        || "The service did not respond in time, so the outcome of this action is unknown — "
+           + "it may or may not have been saved. Refresh to see the current state before trying again.",
     };
   }
 
