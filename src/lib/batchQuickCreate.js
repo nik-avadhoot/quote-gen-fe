@@ -184,3 +184,195 @@ export function locationNotLinkedNotice() {
     + ` Delivery and does not affect freight — Delivery is a freight destination, and`
     + ` choosing a Location for a Batch arrives with Delivery Groups in a later stage.`;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CORRECTION 2 — Product Owner ruling, 2026-09-08. `client` is a GOVERNED
+// SELECTION, not unrestricted free text.
+//
+// Intended behaviour: free text is the STARTING POINT for creating a client
+// that does not exist yet. Once created — and for every client that already
+// exists — the control is a searchable Customer/Prospect Master dropdown, and
+// users select governed records instead of retyping arbitrary strings.
+//
+// WHAT IS STILL STORED, AND WHY IT IS ONLY THE DISPLAY NAME.
+//
+// The Batch keeps `client` as a plain string. That string is the TEMPORARY U1
+// REPRESENTATION of a governed selection. It is not a foreign key, must never
+// be described as one, and U4 introduces the durable Batch identity
+// relationship.
+//
+// It stays the bare `display_name` — not "name · code" — because that value is
+// consumed as customer-facing output and as an identifier prefix:
+//   export/pdf.js:30              "To: <client>" on the quote sent to the customer
+//   export/excel.js:275           written into the CBB+PP sheet
+//   export/excel.js:179           the downloaded filename
+//   state/useQuoteActions.js:396  first 4 characters become the SKU code prefix
+// Appending a Customer Code or lifecycle marker would corrupt all four.
+//
+// THE LIMITATION, RECORDED EXPLICITLY FOR U4 (do not paper over it):
+//   * a display name is NOT an identity. Two Parties may legitimately share
+//     one, and identityFromText() reports that as AMBIGUOUS rather than
+//     picking one;
+//   * a later rename of the governed Party does not reach a Batch string
+//     written earlier, and nothing here pretends otherwise;
+//   * therefore, on reload, text is resolved for USABILITY only — to show what
+//     it probably refers to — and never treated as proof of identity.
+// U4 must resolve identity itself from whatever text exists; it cannot assume
+// a U1 string uniquely designates a Party.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Legal-form noise that should not make two spellings look like two different
+// customers. Deliberately conservative: it folds suffixes, not words that
+// distinguish real businesses.
+const LEGAL_NOISE = /\b(pvt|private|ltd|limited|llp|inc|incorporated|co|company|corp|corporation|and)\b/g;
+
+export function normalizeForMatch(text) {
+  return (text || "")
+    .toLowerCase()
+    .replace(/[.,'"()[\]{}\-_/\\&+]+/g, " ")
+    .replace(LEGAL_NOISE, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function matchTokens(text) {
+  return normalizeForMatch(text).split(" ").filter(Boolean);
+}
+
+// 1.0 exact (after normalisation) · 0.8 one contains the other · otherwise the
+// Dice coefficient over word tokens. Deliberately simple and explainable: this
+// decides what to SHOW a user before they create a duplicate, never what to
+// store, and never identity.
+export function matchScore(text, candidateName) {
+  const a = normalizeForMatch(text), b = normalizeForMatch(candidateName);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.includes(b) || b.includes(a)) return 0.8;
+  const ta = matchTokens(text), tb = matchTokens(candidateName);
+  if (!ta.length || !tb.length) return 0;
+  const setB = new Set(tb);
+  const shared = ta.filter(t => setB.has(t)).length;
+  return (2 * shared) / (ta.length + tb.length);
+}
+
+export const MATCH_THRESHOLD = 0.34;
+
+// Ranked candidates for "did you mean?" — the duplicate guard required before
+// any create. Never auto-selects; the caller must show these and let a human
+// decide.
+export function likelyMatches(text, parties, { limit = 6, threshold = MATCH_THRESHOLD } = {}) {
+  if (!text || !Array.isArray(parties)) return [];
+  return parties
+    .map(party => ({ party, score: matchScore(text, party.display_name) }))
+    .filter(m => m.score >= threshold)
+    .sort((a, b) => b.score - a.score
+      || (a.party.display_name || "").localeCompare(b.party.display_name || ""))
+    .slice(0, limit);
+}
+
+// What a stored string can honestly be said to refer to. The `kind` values are
+// deliberately not booleans, because "one exact match" and "two exact matches"
+// demand different words on screen, and neither is proof of identity.
+//
+//   'unmatched' — no governed record resembles this text
+//   'possible'  — resembles one or more, none exactly
+//   'one'       — exactly one governed record has this name
+//   'ambiguous' — SEVERAL governed records share this name; text cannot choose
+export function identityFromText(text, parties) {
+  const t = (text || "").trim();
+  if (!t) return { kind: "unmatched", exact: [], matches: [] };
+  const rows = Array.isArray(parties) ? parties : [];
+  const norm = normalizeForMatch(t);
+  const exact = rows.filter(p => normalizeForMatch(p.display_name) === norm);
+  const matches = likelyMatches(t, rows);
+  if (exact.length === 1) return { kind: "one", exact, matches };
+  if (exact.length > 1) return { kind: "ambiguous", exact, matches };
+  if (matches.length) return { kind: "possible", exact, matches };
+  return { kind: "unmatched", exact: [], matches: [] };
+}
+
+// The words shown beside the field. Every one of them stops short of asserting
+// identity — that is the whole point of this function existing.
+export function identityCaveat(kind, count = 0) {
+  switch (kind) {
+    case "one":
+      return "Matches one Customer Master record by name. The Batch stores the name only, "
+        + "so this is a likely match, not a stored link.";
+    case "ambiguous":
+      return `${count} Customer Master records share this name — the text alone cannot say which. `
+        + "Select the intended record to be sure.";
+    case "possible":
+      return "No exact Customer Master match. Similar records exist — select one, or create a "
+        + "new Prospect.";
+    case "unmatched":
+    default:
+      return "Not a Customer Master record. Create it as a Prospect, or select an existing record.";
+  }
+}
+
+// ── result rows — enough to tell two records apart safely ──────────────────
+
+export function partyLifecycleLabel(party) {
+  const state = (party?.lifecycle_state || "").trim();
+  if (state) return state.charAt(0).toUpperCase() + state.slice(1);
+  return party?.customer_code ? "Customer" : "Prospect";
+}
+
+// display name · lifecycle · Customer Code where present · Family where known.
+// Returned as parts, not one string, so the UI can weight them and so the
+// fixtures can assert each piece independently.
+export function partyOptionParts(party, familyName) {
+  return {
+    name: (party?.display_name || "").trim(),
+    lifecycle: partyLifecycleLabel(party),
+    code: (party?.customer_code || "").trim() || null,
+    family: (familyName || "").trim() || null,
+    inactive: party?.status === "inactive",
+  };
+}
+
+// Family context for each Party, from the CURRENT membership only — a
+// superseded membership is history and must not be shown as present context.
+export function familyNameByPartyId(memberships, families) {
+  const byId = Object.fromEntries((families || []).map(f => [f.id, f]));
+  const out = {};
+  for (const m of memberships || []) {
+    if (!m.is_current) continue;
+    const fam = byId[m.family_id];
+    if (fam) out[m.party_id] = fam.name;
+  }
+  return out;
+}
+
+// ── the create path, and the gap it does not paper over ───────────────────
+//
+// There is exactly ONE governed operation that creates a Party:
+// `create_minimal_prospect`, which produces a Party in the `prospect`
+// lifecycle. Graduating it to a Customer and minting the permanent Customer
+// Code is a SEPARATE operation (`graduate_customer_party`) requiring
+// `manage_customer_master`.
+//
+// No governed direct-Customer creation exists — verified against pg_proc, not
+// assumed. So this control offers Prospect creation only. It does not simulate
+// "create as Customer" by creating a Prospect and immediately graduating it:
+// that would invent a compound operation the data model never approved, and
+// would mint a permanent Customer Code from a Batch Entry side panel.
+export const DIRECT_CUSTOMER_CREATE_AVAILABLE = false;
+
+export function createProspectConfirmMessage(name, matchCount) {
+  const dupe = matchCount > 0
+    ? ` ${matchCount} similar record${matchCount === 1 ? "" : "s"} already `
+      + `exist${matchCount === 1 ? "s" : ""} — check the list above before creating a duplicate.`
+    : "";
+  return `Create "${name}" as a new Prospect in the Customer Master?` + dupe
+    + " It is created as a Prospect; graduating it to a Customer with a permanent Customer Code"
+    + " is a separate action in Customer Families.";
+}
+
+// Shown wherever the caller may create but may NOT browse. It must not imply
+// that typed text is already governed.
+export function cannotBrowseNotice() {
+  return "You cannot search the Customer Master, so this text is not known to be a governed "
+    + "record. You can create it as a new Prospect; selecting an existing one needs the "
+    + "read_party_master capability.";
+}

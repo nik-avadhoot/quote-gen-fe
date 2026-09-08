@@ -30,10 +30,13 @@
 // field. Formal selection belongs to U4's Delivery Group UI.
 // ═══════════════════════════════════════════════════════════════════════════
 import {
-  BATCH_TEXT_FIELDS, BROWSE_CAP, CREATE_CAPS, applyLabelToProfile,
-  copyToBatchConfirmMessage, createProspectBody, createdButNotCopiedMessage,
-  fieldTitle, locationCreatedNotLinkedMessage, locationLabel,
-  locationNotLinkedNotice, partyLabel, proposeLocationBody, quickPickAbilities,
+  BATCH_TEXT_FIELDS, BROWSE_CAP, CREATE_CAPS, DIRECT_CUSTOMER_CREATE_AVAILABLE,
+  MATCH_THRESHOLD, applyLabelToProfile, cannotBrowseNotice, copyToBatchConfirmMessage,
+  createProspectBody, createProspectConfirmMessage, createdButNotCopiedMessage,
+  familyNameByPartyId, fieldTitle, identityCaveat, identityFromText,
+  likelyMatches, locationCreatedNotLinkedMessage, locationLabel,
+  locationNotLinkedNotice, matchScore, normalizeForMatch, partyLabel,
+  partyLifecycleLabel, partyOptionParts, proposeLocationBody, quickPickAbilities,
 } from "../src/lib/batchQuickCreate.js";
 
 // Every helper the module exports, so a re-added freight/delivery helper
@@ -311,6 +314,231 @@ ok("no delivery/freight write helper survives in the module's exports",
 
 ok("no exported helper names `delivery` as something this slice writes",
    Object.keys(QC).every(k => !/^delivery/i.test(k)));
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CORRECTION 2 — Product Owner ruling, 2026-09-08: `client` is a GOVERNED
+// SELECTION, not unrestricted free text.
+//
+// Free text is the starting point for creating a client that does not exist;
+// thereafter the control is a searchable Customer/Prospect Master dropdown.
+// What is STORED is unchanged — one plain display_name string, the temporary
+// U1 representation of that selection. It is not a foreign key and these
+// fixtures assert, repeatedly, that nothing pretends it is one.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const PARTIES = [
+  { id: 1, display_name: "Acme Boxes Ltd", lifecycle_state: "customer",
+    customer_code: "C-0007", status: "active" },
+  { id: 2, display_name: "Acme Boxes Private Limited", lifecycle_state: "prospect",
+    customer_code: null, status: "active" },
+  { id: 3, display_name: "Zenith Foods", lifecycle_state: "prospect",
+    customer_code: null, status: "active" },
+  { id: 4, display_name: "Nagpur Distillers", lifecycle_state: "customer",
+    customer_code: "G0080-001", status: "active" },
+  { id: 5, display_name: "Nagpur Distillers", lifecycle_state: "prospect",
+    customer_code: null, status: "active" },   // a deliberate duplicate NAME
+];
+const FAMILIES = [{ id: 10, name: "Acme Group" }, { id: 11, name: "Zenith Group" }];
+const MEMBERSHIPS = [
+  { party_id: 1, family_id: 10, is_current: true },
+  { party_id: 2, family_id: 10, is_current: false },  // history, must not show
+  { party_id: 3, family_id: 11, is_current: true },
+];
+
+// ── normalisation: spelling variations must not read as different customers ─
+
+ok("normalize: case, punctuation and legal suffixes fold together",
+   normalizeForMatch("Acme Boxes Pvt. Ltd.") === normalizeForMatch("acme boxes private limited"));
+ok("normalize: genuinely different names do NOT fold together",
+   normalizeForMatch("Acme Boxes") !== normalizeForMatch("Zenith Foods"));
+ok("normalize: an empty or absent value is the empty string, never a crash",
+   normalizeForMatch(null) === "" && normalizeForMatch(undefined) === ""
+   && normalizeForMatch("   ") === "");
+
+ok("score: an exact normalised match scores 1",
+   matchScore("Acme Boxes Ltd", "acme boxes limited") === 1);
+ok("score: unrelated names score below the threshold",
+   matchScore("Zenith Foods", "Acme Boxes Ltd") < MATCH_THRESHOLD);
+
+// ── the duplicate guard (ruling item 6) ───────────────────────────────────
+
+ok("duplicates: a spelling variation surfaces the existing records BEFORE creation",
+   (() => {
+     const m = likelyMatches("Acme Boxs Pvt Ltd", PARTIES);
+     return m.length >= 2 && m.slice(0, 2).every(x => x.party.display_name.startsWith("Acme Boxes"));
+   })());
+
+ok("duplicates: matches are ranked, best first",
+   (() => {
+     const m = likelyMatches("Acme Boxes Ltd", PARTIES);
+     return m.length > 0 && m[0].party.id === 1 && m[0].score >= m[m.length - 1].score;
+   })());
+
+ok("duplicates: an unrelated name surfaces nothing to confuse the user",
+   likelyMatches("Kolkata Paper Mills", PARTIES).length === 0);
+
+ok("duplicates: empty text and a missing party list are both safe",
+   likelyMatches("", PARTIES).length === 0 && likelyMatches("Acme", null).length === 0);
+
+ok("create confirm: names the record, and says how many similar ones exist",
+   (() => {
+     const msg = createProspectConfirmMessage("Acme Boxs", 2);
+     return msg.includes('"Acme Boxs"') && /2 similar records already exist/i.test(msg);
+   })());
+ok("create confirm: with no similar records, it does not invent a duplicate warning",
+   !/similar/i.test(createProspectConfirmMessage("Brand New Ltd", 0)));
+ok("create confirm: states this creates a PROSPECT and that graduating is separate",
+   (() => {
+     const msg = createProspectConfirmMessage("Brand New Ltd", 0);
+     return /as a new Prospect/i.test(msg) && /graduating it to a Customer/i.test(msg)
+       && /separate action/i.test(msg);
+   })());
+
+// ── identity from text: usability, never proof (ruling items 7 and 8) ─────
+
+ok("identity: exactly one governed record with that name reads as 'one'",
+   (() => {
+     const r = identityFromText("Zenith Foods", PARTIES);
+     return r.kind === "one" && r.exact.length === 1 && r.exact[0].id === 3;
+   })());
+
+// This is the conservative behaviour, deliberately pinned. "Acme Boxes Ltd"
+// and "Acme Boxes Private Limited" are two DIFFERENT governed rows whose names
+// normalise identically once the legal suffix is folded. The control must not
+// pick one — it reports AMBIGUOUS and asks the user to select, which is the
+// whole point of refusing to assert identity from text.
+ok("identity: two rows differing only by legal suffix are AMBIGUOUS, never auto-resolved",
+   (() => {
+     const r = identityFromText("Acme Boxes Ltd", PARTIES);
+     return r.kind === "ambiguous" && r.exact.length === 2
+       && r.exact.map(p => p.id).sort().join(",") === "1,2";
+   })());
+
+ok("identity: TWO records sharing a name is AMBIGUOUS — text cannot choose",
+   (() => {
+     const r = identityFromText("Nagpur Distillers", PARTIES);
+     return r.kind === "ambiguous" && r.exact.length === 2;
+   })());
+
+ok("identity: a near miss reads as 'possible', not as a match",
+   identityFromText("Acme Boxs", PARTIES).kind === "possible");
+
+ok("identity: text resembling nothing reads as 'unmatched'",
+   identityFromText("Kolkata Paper Mills", PARTIES).kind === "unmatched");
+
+ok("identity: blank text is unmatched, and never claims a record",
+   identityFromText("", PARTIES).kind === "unmatched"
+   && identityFromText("   ", PARTIES).exact.length === 0);
+
+ok("identity: with no master list loaded, nothing is asserted",
+   identityFromText("Acme Boxes Ltd", []).kind === "unmatched"
+   && identityFromText("Acme Boxes Ltd", null).kind === "unmatched");
+
+ok("identity: the result carries NO partyId or id claim — it returns rows, not an identity",
+   (() => {
+     const r = identityFromText("Acme Boxes Ltd", PARTIES);
+     return !("partyId" in r) && !("party_id" in r) && !("id" in r)
+       && Array.isArray(r.exact) && Array.isArray(r.matches);
+   })());
+
+// The caveat wording is the promise this slice makes to the user. If it ever
+// starts asserting identity, these fail.
+ok("caveat 'one': says likely match and stores the NAME only — never a link",
+   (() => {
+     const c = identityCaveat("one");
+     return /likely match/i.test(c) && /not a stored link/i.test(c)
+       && !/\bis the\b.*\brecord\b/i.test(c);
+   })());
+ok("caveat 'ambiguous': says the text cannot say which, and asks for a selection",
+   (() => {
+     const c = identityCaveat("ambiguous", 2);
+     return c.includes("2") && /cannot say which/i.test(c) && /Select/i.test(c);
+   })());
+ok("caveat 'possible': offers select-or-create rather than assuming",
+   /select one, or create/i.test(identityCaveat("possible")));
+ok("caveat 'unmatched': says plainly it is not a Customer Master record",
+   /Not a Customer Master record/i.test(identityCaveat("unmatched")));
+ok("caveat: no wording anywhere claims the Batch stores a link or a key",
+   ["one", "ambiguous", "possible", "unmatched"]
+     .every(k => !/foreign key|linked to|stores a link|is linked/i.test(identityCaveat(k, 2))));
+
+// ── result rows carry enough to tell records apart (ruling item 3) ─────────
+
+const famOf = familyNameByPartyId(MEMBERSHIPS, FAMILIES);
+
+ok("row: a Customer shows its name, lifecycle, Customer Code and Family",
+   (() => {
+     const p = partyOptionParts(PARTIES[0], famOf[1]);
+     return p.name === "Acme Boxes Ltd" && p.lifecycle === "Customer"
+       && p.code === "C-0007" && p.family === "Acme Group";
+   })());
+
+ok("row: a Prospect shows no Customer Code rather than an empty string",
+   partyOptionParts(PARTIES[1], famOf[2]).code === null);
+
+ok("row: family context comes from the CURRENT membership only — history is not shown",
+   famOf[2] === undefined && famOf[1] === "Acme Group");
+
+ok("row: an inactive party is flagged so it cannot be picked unknowingly",
+   partyOptionParts({ display_name: "X", status: "inactive" }).inactive === true);
+
+ok("row: lifecycle falls back sensibly when the field is absent",
+   partyLifecycleLabel({ customer_code: "C-1" }) === "Customer"
+   && partyLifecycleLabel({}) === "Prospect");
+
+// ── the create path, and the gap it refuses to simulate ───────────────────
+
+ok("create path: direct-Customer creation is recorded as UNAVAILABLE, not faked",
+   DIRECT_CUSTOMER_CREATE_AVAILABLE === false);
+
+ok("create path: the only create body this control sends is the Prospect one",
+   eq(createProspectBody("Brand New Ltd", null), { display_name: "Brand New Ltd" }));
+
+ok("create path: the create body carries no lifecycle or customer_code claim",
+   (() => {
+     const b = createProspectBody("Brand New Ltd", null);
+     return !("lifecycle_state" in b) && !("customer_code" in b) && !("graduate" in b);
+   })());
+
+// ── capability distinction (ruling: no fake dropdown, no false governance) ─
+
+ok("capability notice: a non-browsing caller is told the text is NOT known to be governed",
+   (() => {
+     const n = cannotBrowseNotice();
+     return /not known to be a governed record/i.test(n) && /read_party_master/.test(n);
+   })());
+ok("capability notice: it still offers the create path that caller DOES hold",
+   /create it as a new Prospect/i.test(cannotBrowseNotice()));
+ok("capability notice: it never claims a dropdown or a match is available",
+   !/dropdown|matches|select an existing record below/i.test(cannotBrowseNotice()));
+
+// ── the storage boundary, restated against the new control ────────────────
+
+ok("storage: selecting a governed record writes the display_name ONLY",
+   partyLabel(PARTIES[0]) === "Acme Boxes Ltd");
+
+ok("storage: the written label never embeds the Customer Code or lifecycle",
+   (() => {
+     const l = partyLabel(PARTIES[0]);
+     return !l.includes("C-0007") && !/customer/i.test(l);
+   })());
+
+ok("storage: a selection writes to `client` and adds no identity field",
+   (() => {
+     const before = { ...PROFILE, client: "old" };
+     const after = applyLabelToProfile(before, "client", partyLabel(PARTIES[0]));
+     return after.client === "Acme Boxes Ltd"
+       && eq(keys(after), keys(before))
+       && ["partyId", "party_id", "clientPartyId", "clientLink", "partyRef", "governedId"]
+            .every(k => !(k in after));
+   })());
+
+ok("storage: `delivery` remains unwritable by the Client control",
+   applyLabelToProfile(PROFILE, "delivery", "Acme Boxes Ltd") === PROFILE);
+
+ok("storage: two records sharing a name produce the SAME string — which is exactly why "
+   + "the string is not an identity, and why U4 must resolve it",
+   partyLabel(PARTIES[3]) === partyLabel(PARTIES[4]));
 
 console.log();
 console.log(fails === 0 ? "all checks pass" : `${fails} FAILED`);
