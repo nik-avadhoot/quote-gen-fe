@@ -265,8 +265,13 @@ would mint a permanent Customer Code from a Batch Entry side panel.
 
 > **Product Owner / backend decision required:** whether a governed direct-Customer creation
 > operation should exist at all, or whether Prospect-then-graduate remains the only sanctioned route.
-> Nothing is implemented pending that decision. `DIRECT_CUSTOMER_CREATE_AVAILABLE = false` records the
-> current answer in code, and a fixture asserts it.
+> Nothing is implemented pending that decision.
+>
+> **Answered 2026-09-08 — see the closure section at the end of this document.** The Product Owner
+> ruled that direct "create as Customer" is NOT added to Batch Entry. The `DIRECT_CUSTOMER_CREATE_
+> AVAILABLE` constant that recorded this in code has since been removed: it asserted an architectural
+> position rather than proving one. The reasoning now lives in `data-model-frontend-design-plan.md`
+> §2.2, and the fixtures prove the boundary by behaviour instead.
 
 ## Capability, shown as two different answers
 
@@ -330,3 +335,86 @@ governed operation that exists today.
 | Product Owner validated | **No** |
 
 Slice E remains open until this correction is reviewed.
+
+---
+
+# Slice D / E closure — Product Owner acceptance, 2026-09-08
+
+The Customer/Prospect combobox behaviour is **accepted as the correct U1 interaction pattern**. This
+section supersedes the "not technically closed / not Product Owner validated" rows above, **for the
+limited scope stated below and no wider**.
+
+## Product Owner decisions recorded
+
+1. **No direct "create as Customer" from Batch Entry.** A genuinely new Batch-side client is created
+   as a governed Prospect through `create_minimal_prospect`. Graduation remains a separate governed
+   Customer Master action requiring `manage_customer_master`, and is what assigns the permanent
+   Customer Code.
+2. **Development rows 314 and 315 and their Locations are retained** as acceptable private-development
+   data. No deletion or deactivation behaviour is to be created merely to clean up acceptance
+   fixtures — and none was.
+3. **The bare display-name string remains necessary** for legacy PDF, Excel and filename
+   compatibility. **It is not an identity and must not be treated as one.**
+4. **The SKU prefix derived from the first four characters of `client`
+   (`state/useQuoteActions.js`) is legacy technical debt.** It is not canonical code authority and
+   must not be used to justify future identity design.
+5. **Slice D closes only for the U1 master-backed interaction behaviour** — search, suggest, select,
+   duplicate warning, and governed Prospect creation. Durable Party/Family linkage and historical
+   attribution remain open for U4/U5.
+
+`DIRECT_CUSTOMER_CREATE_AVAILABLE` has been removed. It was a hard-coded architectural assertion and
+its fixture only restated it. The UI now simply exposes the supported governed action, and the
+reasoning lives in `data-model-frontend-design-plan.md` §2.2. Two replacement fixtures assert
+behaviour instead: the module exposes no graduate/customer-create helper of any kind, and the confirm
+copy tells the user that creation yields a Prospect and that graduation is a separate action in
+Customer Families. No speculative Customer-create option was introduced.
+
+## Status classification
+
+| | Slice D |
+|---|---|
+| Implemented | **Yes** |
+| Tested | **Yes** — 102 fixture checks, eight standing gates, build, lint ceiling |
+| Feature-enabled / currently visible | **Yes**, localhost only, behind `u1_batch_party_link`; `.env.production` untouched |
+| Authenticated browser walkthrough | **Passed** — Product Owner's own Chrome, live backend and Supabase project |
+| Technically closed | **Yes — for the U1 master-backed interaction scope only** |
+| Product Owner validated | **Yes — for that limited scope only** |
+
+**Slice E is closed on the same limited basis:** the end-to-end acceptance flow was performed and
+passed under an authenticated session.
+
+## What is closed, precisely
+
+Search, suggestion, selection, duplicate warning before creation, and governed Prospect creation, for
+Customer/Prospect — plus the corrected Customer Location create convenience. Nothing else.
+
+- The **Location-create convenience does not link or modify the Batch.** Verified live:
+  `cbb_batchprofile` was byte-identical across the create.
+- **Freight behaviour is unchanged.** `delivery` is byte-for-byte identical to its pre-Slice-D form
+  (verified against `1ec94a3`); the walkthrough moved Nagpur → Kolkata and `freightOverride` resolved
+  to `4` = `freight['Nagpur']['Kolkata']`, with 13 options and no synthetic entry.
+
+## What explicitly remains open
+
+Closing Slice D closes an *interaction pattern*, not the data relationship underneath it.
+
+- **Durable Customer / Family linkage** — no Party or Family ID is persisted anywhere in Batch state.
+  U4.
+- **Durable Bill-to and Ship-to Location references** — need their own fields and relationships in
+  U4, separate from `delivery` and from each other.
+- **SKU and SKU Version linkage** — U2 for the selector, U4 for durable persistence.
+- **Historical traceability and attribution** — U5 for immutable Quote references and snapshots, U6
+  for audit/history presentation.
+- **`client` text cannot prove Party identity after reload.** Any match the UI shows is a
+  **suggestion**, never evidence of linkage, and no automatic identity inference is authorised.
+- **The legacy client-derived SKU prefix must be retired** when governed SKU/code authority is
+  connected.
+- Everything already listed in the U1 register: Party deactivation/reactivation, post-proposal
+  Location eligibility change, Location-to-Party reassignment, Party external references, Party
+  lifecycle history, cross-Family third-party Location selection, Party merge, and the Users/Access
+  frontend.
+
+The settled architectural principle governing all of the above is now recorded once, as the
+**Master-backed selector contract** in `data-model-frontend-design-plan.md` §2.2, with its
+per-master mapping (§2.2.1), cross-stage implementation map (§2.2.2) and the specific records it
+fixes (§2.2.3).

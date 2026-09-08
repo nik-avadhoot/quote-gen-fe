@@ -90,6 +90,99 @@ the next useful, visible increment to ship.
     checks, exposing privileged credentials, rewriting migration history, silently crossing `S`/`U`
     scope, deploying, or pushing code without the separately required approval.
 
+### 2.2 The Master-backed selector contract
+
+> **Product Owner decision — 2026-09-08.** Settled architectural principle, established while
+> correcting U1 Slice D's Batch Entry Client control and now binding on every master-backed control
+> in U1–U6. Where an existing screen disagrees with this contract, the screen is wrong.
+
+A **master-backed selector** is any control whose value designates a row in a governed master. It is
+not a text box that happens to hold a name. Eleven rules govern all of them.
+
+1. **Free text begins a search.** Typing filters the governed master. It is the entry point to
+   finding a record, not a way of asserting one.
+2. **Free text may initiate explicit governed creation when the record is genuinely new** — through
+   the governed operation that exists for that master, never a client-side invention, and never
+   silently. Unmatched text that is simply accepted as a final value is a defect.
+3. **Existing records are selected from the relevant governed master**, not retyped. Retyping an
+   existing record's name is the failure this contract exists to prevent.
+4. **Newly created records become immediately selectable** — the control re-reads the master after a
+   successful create, so the new row is genuinely there rather than assumed.
+5. **Suggestions show sufficient identity context, not only the editable label**: permanent code
+   where one exists, lifecycle or status, and parent/scope context. A list of bare names is not a
+   safe selector, because two rows may share a name.
+6. **Labels are presentation values, never relationship keys.** A display name, a code rendered for
+   humans, or any concatenation of them is something to read — never something to resolve identity
+   from.
+7. **Temporary legacy string storage must be disclosed and must never be presented as durable
+   linkage.** Where a stage stores a string for legacy compatibility, the UI says so plainly and the
+   documentation records the limitation. "It looks linked" is not linked.
+8. **Durable workflows persist permanent entity IDs and, where the entity is versioned, the
+   applicable immutable version ID.** A durable relationship is an ID pair, not a rendered string.
+9. **Historical Quotes preserve those references plus the accepted display and calculation
+   snapshots.** A Quote records what was referenced *and* what was shown and computed at the time.
+10. **Renames, reassignment and later master changes must not rewrite historical Quotes.** History is
+    what happened, not what the master says today.
+11. **Ambiguous normalized matches must never be selected automatically.** Where normalisation makes
+    two or more governed rows indistinguishable from the text, the control reports ambiguity and
+    requires a human choice. Silence, or picking the first, is prohibited.
+
+**Capability and scope determine browse, create and select behaviour independently.** Holding the
+capability to create a record does not imply the capability to browse the master, and vice versa. A
+caller who may create but not browse must be shown the create path and told plainly that their text
+is not known to be a governed record — never a dropdown that will be refused, and never an
+implication that what they typed is already governed. Plant, Family and other scope restrictions
+narrow what may be selected independently of both. These are usability aids; the backend and RLS
+remain the authority (§2 item 1).
+
+#### 2.2.1 Mapping the contract to each master
+
+| # | Master | Selector behaviour under this contract |
+|---|---|---|
+| 1 | **Customer Family and Party** | Search the governed Party/Family master; select an existing Customer or Prospect; create a genuinely new one as a governed **Prospect** via `create_minimal_prospect`. Suggestions show display name, lifecycle, Customer Code where present, and current Family. Graduation to Customer — which mints the permanent Customer Code — is a **separate** Customer Master action requiring `manage_customer_master`, deliberately not reachable from Batch Entry. Browse needs `read_party_master`; create needs `manage_customer_master` OR `make_quote`. |
+| 2 | **Customer Location** | Search a Party's governed Locations; select by permanent Location Code where minted; propose a new one via `propose_customer_location`. Suggestions show code, Bill-to/Ship-to eligibility, status, incomplete-details state and the owning Party. Eligibility is fixed at proposal. Durable Bill-to/Ship-to references are U4 (§2.2.3). |
+| 3 | **SKU and SKU Version** | Search within the applicable Customer and Plant scope; select an SKU **and** the applicable immutable SKU Version. Suggestions show permanent SKU code, version number, status and applicability. A genuinely new SKU is created as a governed **Proposed** SKU. Durable Batch and Quote references persist SKU ID **plus** SKU Version ID. |
+| 4 | **Construction and Construction Version** | Search the Construction Library within plant adoption scope; select a Construction and its approved, immutable Construction Version. Suggestions show the construction identity, version, status and adopting plants. Never resolved from a rendered construction name. |
+| 5 | **Pricing Basis Release and governed commercial masters** | Select an approved, effective Release for the plant and date; suggestions show release identity, effective window, status and eligibility reason. Durable workflows persist the Release ID; a Quote records which Release priced it and never re-resolves it later. |
+| 6 | **Bill-to and Ship-to selection** | Two independent selections over eligible Customer Locations, each honouring its own eligibility flag and scope. They are **not** the freight destination (§2.2.3) and are not one field. Cross-Family third-party selection is a U4 Delivery Group concern. |
+| 7 | **Any similar master-backed control introduced in U1–U6** | Same eleven rules, same capability independence, same disclosure obligation for any temporary string storage. A new control does not get an exemption because its master is small or its screen is minor. |
+
+#### 2.2.2 Cross-stage implementation map
+
+| Stage | What the contract requires there |
+|---|---|
+| **U1** | Customer/Prospect and Customer Location master search, suggestion, selection and governed creation. Storage remains a temporary legacy string, disclosed as such. |
+| **U2** | Customer-scoped and Plant-scoped SKU search and suggestion; governed Proposed SKU creation; SKU **Version** selection as a first-class act, not an afterthought of picking an SKU. |
+| **U3** | Governed commercial-master and Pricing Basis Release selection, with eligibility for plant and date shown rather than assumed. |
+| **U4** | **Durable Batch persistence** of Party, Family, Bill-to Location, Ship-to Location, SKU and SKU Version relationships as permanent IDs — while keeping the freight destination conceptually separate from Customer Location. |
+| **U5** | Formal Quote references — the persisted IDs and version IDs — plus immutable historical snapshots of what was displayed and calculated. |
+| **U6** | Audit and history presentation over those references and snapshots, showing what was true then rather than what the master says now. |
+
+#### 2.2.3 Specific records this contract fixes
+
+These are recorded because each one has already been got wrong once, or is a known trap.
+
+- **Batch `delivery` is currently a freight-destination lookup key and must not also represent a
+  Customer Location.** `BatchProfileBar` resolves `freight[plant][delivery]` from it to price the
+  Batch. Writing a Customer Location label into it made that lookup return `0` — a misleading and
+  commercially unsafe pricing state that a confirmation dialog did not redeem. One field cannot carry
+  two incompatible commercial meanings.
+- **Durable Bill-to and Ship-to Location references require separate fields and relationships in
+  U4.** They are not `delivery`, they are not each other, and they are not a single "location" field.
+- **The current `client` text cannot prove Party identity after reload.** It is a display name. Two
+  Parties may share one, and a later rename never reaches a string written earlier.
+- **No automatic identity inference from matching text is authorised.** Not on load, not on export,
+  not during a future migration.
+- **Any current UI match shown after reload is a suggestion, not evidence of linkage.** The wording
+  in the UI must stop short of asserting identity, and does.
+- **The legacy client-derived SKU prefix must be retired when governed SKU/code authority is
+  connected.** `state/useQuoteActions.js` derives an SKU prefix from the first four characters of
+  `batchProfile.client`. This is **legacy technical debt**. It is not canonical code authority and
+  must not be cited to justify any future identity design.
+- **The bare display-name string persisted by U1 remains only for legacy PDF, Excel and filename
+  compatibility** (`export/pdf.js`, `export/excel.js`). That compatibility requirement is real, and it
+  is *not* an argument that the string means anything more than a label.
+
 ## 3. Terminology
 
 ### 3.1 Producing Plant
