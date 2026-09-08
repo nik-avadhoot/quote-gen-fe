@@ -129,3 +129,57 @@ the full list of what remains open.
 `src/tabs/batch/BatchProfileBar.jsx`'s pre-existing uncommitted hunk and `docs/commercial-intelligence-
 decisions.md` are both unstaged and unmodified by this slice — confirmed by `git status` immediately
 before this commit.
+
+---
+
+# Closure status update — 2026-09-08 (post-validation)
+
+This section supersedes the "Feature-enabled" and "Product Owner validated" rows of the status table
+above, which recorded those two statuses as *pending at the time of that record*. Nothing else is
+revised — in particular, the narrowed scope stands: this slice still does not close "Customer
+Locations" as a requirement, and the three named exclusions above remain excluded.
+
+## Technical closure
+
+**Technically closed** under `data-model-frontend-design-plan.md` §2.1, **for the narrowed scope
+only** — every gate required for this tranche passed (§2.1 item 3), and G-B is a milestone gate, not
+a per-slice requirement (§2.1 item 4).
+
+## Feature-enabled and visible
+
+**Feature-enabled / currently visible: yes, on localhost.** `.env.local` (gitignored; localhost only,
+`.env.production` untouched) carries `VITE_FEATURE_FLAGS=u1_producing_plants,u1_customer_families`.
+The Locations sub-list renders inside the Customer Families screen, so it shares that screen's flag
+and that screen's `read_party_master` requirement — the flag grants no capability. Vercel enablement
+remains separately authorised and has not been performed.
+
+## Product Owner validation
+
+**Product Owner browser validation: completed and accepted.** The Location propose / edit / approve /
+retire / assign-code flows were exercised interactively in a real browser under the Product Owner's
+own development login.
+
+## Defects raised during validation — both closed
+
+Both defects were raised against the shared mutation path this screen uses, so they are recorded
+identically in `u1-slice-a-closure-evidence.md`:
+
+| Defect | Fix | Commits |
+|---|---|---|
+| D2 — stale CAS surfaced as `40001`, indistinguishable from a genuine serialization failure; upstream timeout reported as `500` | Stale CAS raises `PT409` → `409 STALE_VERSION`; genuine `40001` still separately classified; upstream timeout → `504 UPSTREAM_TIMEOUT`, stating the outcome may be unknown rather than that the write failed | be `98e43f9`, `75840a4`; fe `1ec94a3` |
+| D3 — a "disabled" button was still clickable; a blank Family name failed only server-side | Genuinely disabled control; blank-name rule extracted to a tested pure function driving both the disabled state and the inline message. Usability pre-check only — the route and the DB function still refuse a blank name | fe `1e8d6cf` |
+
+## Accepted, non-blocking performance debt
+
+Customer Master loads measure approximately **2.4–3.6 s**, after `98e43f9`/`75840a4` bounded the
+upstream timeout, removed redundant round-trips, and parallelised the six independent master reads
+(one client per worker). The remaining latency is **accepted by the Product Owner as non-blocking
+performance debt** — not an open defect, not a gate failure. This slice's two additive arrays
+(`locations`, `location_versions`) are part of that parallel read set and did not add a round-trip.
+
+## G-B
+
+**Explicitly deferred to a future milestone boundary** by Product Owner decision, per §2.1 item 4 —
+a Product-Owner-approved deferral, neither a passed gate nor a failed implementation. The earlier
+record of G-B as "prepared but deferred" (`da56b76`) stands; no G-B preparation is in progress and
+none is to be resumed without a separate instruction.

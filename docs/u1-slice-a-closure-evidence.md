@@ -107,3 +107,54 @@ Product Owner decision.
 `src/tabs/batch/BatchProfileBar.jsx`'s pre-existing uncommitted hunk and `docs/commercial-intelligence-
 decisions.md` are both unstaged and unmodified by this slice — confirmed by `git status` immediately
 before this commit.
+
+---
+
+# Closure status update — 2026-09-08 (post-validation)
+
+This section supersedes the "Feature-enabled" and "Product Owner validated" rows of the status table
+above, which recorded those two statuses as *pending at the time of that record*. Nothing else in this
+document is revised: the test, probe and gate numbers above remain the numbers this slice was closed
+on, and are not restated here as if re-earned.
+
+## Technical closure
+
+**Technically closed** under `data-model-frontend-design-plan.md` §2.1 — every gate required for this
+tranche passed (§2.1 item 3), and G-B is a milestone gate, not a per-slice requirement (§2.1 item 4).
+
+## Feature-enabled and visible
+
+**Feature-enabled / currently visible: yes, on localhost.** `.env.local` (gitignored; localhost only,
+`.env.production` untouched) carries `VITE_FEATURE_FLAGS=u1_producing_plants,u1_customer_families`.
+The flag makes the screen mountable; it grants no capability — the caller's own `read_party_master`
+is still required by `GET /masters/customer-families` and is still the decisive authority. Vercel
+enablement remains separately authorised and has not been performed.
+
+## Product Owner validation
+
+**Product Owner browser validation: completed and accepted.** The Party display-name edit flow was
+exercised interactively in a real browser under the Product Owner's own development login, closing
+the gap the earlier U1-CF slice recorded as "no test credentials were available … to exercise the
+mutation flows interactively".
+
+## Defects raised during validation — both closed
+
+| Defect | Fix | Commits |
+|---|---|---|
+| D2 — a deliberate stale-CAS conflict surfaced as a serialization failure (`40001`), indistinguishable from a genuine database serialization error, and an upstream timeout was reported as a `500` | Stale CAS now raises `PT409` and is classified `409 STALE_VERSION`; genuine `40001` serialization failures remain separately classified; upstream timeouts return `504 UPSTREAM_TIMEOUT` and state that the outcome may be unknown rather than that the write failed | be `98e43f9`, `75840a4`; fe `1ec94a3` |
+| D3 — a "disabled" action button was styled as disabled but still clickable, and a blank Family name failed only at the server | The control is genuinely disabled, and the blank-name rule has a testable pure surface (`familyNameIsBlank`) used for both the disabled state and the inline message, so the two cannot disagree. It remains a usability pre-check: the route and `app_private.propose_customer_family` still refuse a blank name regardless | fe `1e8d6cf` |
+
+## Accepted, non-blocking performance debt
+
+Customer Master loads measure approximately **2.4–3.6 s**. `98e43f9` and `75840a4` reduced this by
+bounding the upstream timeout, removing redundant round-trips, and running the six independent master
+reads with bounded parallelism (one client per worker — supabase-py multiplexes over one HTTP/2
+connection, so a shared client wedges). The remaining latency is **accepted by the Product Owner as
+non-blocking performance debt**, not an open defect and not a gate failure. Authority is unchanged by
+that work: every read still carries the caller's own token and RLS still decides visibility.
+
+## G-B
+
+**Explicitly deferred to a future milestone boundary** by Product Owner decision, per §2.1 item 4.
+Recorded as a Product-Owner-approved deferral: it is neither a passed gate nor a failed
+implementation, and no G-B preparation is in progress.
