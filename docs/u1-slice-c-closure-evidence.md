@@ -25,8 +25,31 @@ front and the suite passed on the first run.
 
 ## G-B
 
-Run once, at the closure boundary now that both A and C are individually green — see the dedicated
-closure report below.
+**Prepared, not executed. Deferred by explicit Product Owner decision - neither passed nor failed for
+this tranche.**
+
+A complete fail-closed G-B package was produced and reviewed: a single-transaction replay file
+(guarded drop of `public`/`app_private`/`tests`/`ref_private`, all 140 committed migrations in exact
+version order, post-replay structural assertions, one `tests.run_all()` invocation inside the same
+transaction, and fixture-cleanliness assertions), together with a separate single-transaction
+governed-identity restoration file. All 140 embedded migrations were verified byte-for-byte against
+their committed bytes, and the package was validated as transaction-safe (no psql meta-commands, no
+`BEGIN`/`COMMIT`/`ROLLBACK`, no `CONCURRENTLY`, balanced dollar-quoting).
+
+It was not executed. No PostgreSQL client (`psql`, `pg_dump`) exists in this workspace, and the
+Supabase MCP channel cannot carry the 1,267,980-byte payload as one atomic request. On 2026-09-08 the
+Product Owner superseded the requirement: under `data-model-frontend-design-plan.md` section 2.1
+(commit `95d9fd0`), G-B is a **milestone gate** - required at major backend/stage closure, before
+deployment, where migration drift or replay integrity is in doubt, or on explicit Product Owner
+request - and is **not** automatically repeated after every intermediate frontend-enablement slice.
+That section requires an approved deferral to be recorded explicitly, which this is: G-B for this
+tranche is **neither a passed gate nor a failed implementation**.
+
+The preparation artefacts were generated outside both repositories and have since been deleted. No
+governed-data capture file was ever generated, so no live identity data was written to disk.
+
+Every gate actually required for this tranche passed - G-A, database tests, route tests, HTTP probes
+and the standing frontend gate set, all recorded in this document.
 
 ## Database tests
 
@@ -77,13 +100,16 @@ held), `npm run test:costing`, `npm run test:blanket`, `npm run test:draft`, `np
 
 ## Status, distinguished as requested
 
+Statuses below use the vocabulary fixed by `data-model-frontend-design-plan.md` section 2.1 item 7 (commit `95d9fd0`): implemented, tested, technically closed, feature-enabled/currently visible, and Product Owner validated are distinct and not interchangeable.
+
 | | Status |
 |---|---|
 | Code implemented | Yes, for the narrowed scope only |
 | Automated tests passed | Yes (DB 859/859, route 82/82, backend hermetic total 476/476, frontend fixtures 12/12, all 8 standing gates) |
 | Live probes passed | Yes (204/204 against the real Supabase project) |
-| Technically closed | Yes, for the scope authorised — **not** complete Customer Locations, per the acceptance matrix |
-| Product Owner / browser validated | **No** — not attempted in this tranche, same posture as Slice A |
+| Technically closed | Yes, for the scope authorised — **not** complete Customer Locations, per the acceptance matrix — under the revised policy: every gate required for this tranche passed, and G-B is a milestone gate deferred by explicit Product Owner decision rather than an outstanding failure |
+| Feature-enabled / currently visible | Separate and **pending** at the time of this record — gated behind `VITE_FEATURE_FLAGS`; enabling localhost configuration and caller capability is a distinct step from technical closure |
+| Product Owner / browser validated | Separate and **pending** at the time of this record — a real-browser walkthrough under the Product Owner's development login is required and is not satisfied by automated gates |
 
 ## What this slice does not do (restated, not merely implied)
 
