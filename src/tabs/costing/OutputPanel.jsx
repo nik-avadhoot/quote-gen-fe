@@ -14,6 +14,7 @@ import { KN } from "../../ui/primitives.jsx";
 import { useAppState } from "../../state/AppStateContext.js";
 import BoxDieline from "../../components/BoxDieline.jsx";
 import { C, T, mono } from "../../theme.js";
+import { useEffect, useRef } from "react";
 
 // Kept at module scope so moving the table near the top does not create a
 // component during render. Its row order is the engine's existing order.
@@ -89,6 +90,35 @@ const disclosurePopover={position:"absolute",zIndex:20,left:"calc(100% + 8px)",b
   padding:"8px 9px",background:C.white,border:`1px solid ${C.border}`,borderRadius:6,
   boxShadow:"0 6px 18px rgba(32,49,68,.16)",color:C.slateL,textAlign:"left",lineHeight:1.4};
 
+const FloatingDisclosure=({summary,children,style})=>{
+  const detailsRef=useRef(null);
+  useEffect(()=>{
+    const closeOutside=event=>{
+      const details=detailsRef.current;
+      if(details?.open&&!details.contains(event.target))details.open=false;
+    };
+    const closeOnEscape=event=>{
+      const details=detailsRef.current;
+      if(event.key==="Escape"&&details?.open){
+        details.open=false;
+        details.querySelector("summary")?.focus();
+      }
+    };
+    document.addEventListener("pointerdown",closeOutside);
+    document.addEventListener("keydown",closeOnEscape);
+    return()=>{
+      document.removeEventListener("pointerdown",closeOutside);
+      document.removeEventListener("keydown",closeOnEscape);
+    };
+  },[]);
+  return(
+    <details ref={detailsRef} style={style}>
+      <summary style={{cursor:"pointer",whiteSpace:"nowrap"}}>{summary}</summary>
+      <div style={disclosurePopover}>{children}</div>
+    </details>
+  );
+};
+
 const MarginControl=({spec,s,r,card,marginSugg})=>(
   <div style={{...card,marginBottom:0,padding:"8px 7px",minWidth:0,textAlign:"center",position:"relative"}}>
     <div style={{fontSize:T.label,fontWeight:700,color:C.slateM,textTransform:"uppercase",
@@ -110,14 +140,11 @@ const MarginControl=({spec,s,r,card,marginSugg})=>(
         style={{width:"100%",marginTop:5,padding:"3px 2px",borderRadius:5,fontSize:T.micro,cursor:"pointer",
           border:`1px solid ${C.green}`,background:C.greenL,color:C.green,fontWeight:700}}>
         ✦ Use {marginSugg.suggested}%</button>)}
-    {marginSugg.adjustments.length>0&&<details style={{marginTop:4,fontSize:T.micro,color:C.slateL,
-      lineHeight:1.3,textAlign:"left"}}>
-      <summary style={{cursor:"pointer",whiteSpace:"nowrap"}}>Why {marginSugg.suggested}%?</summary>
-      <div style={disclosurePopover}>
+    {marginSugg.adjustments.length>0&&<FloatingDisclosure summary={`Why ${marginSugg.suggested}%?`}
+      style={{marginTop:4,fontSize:T.micro,color:C.slateL,lineHeight:1.3,textAlign:"left"}}>
         Base 8%{marginSugg.adjustments.map(a=>" · "+a).join("")}
         {marginSugg.risk&&<span style={{color:C.amberD,fontWeight:600}}> · {marginSugg.risk}</span>}
-      </div>
-    </details>}
+    </FloatingDisclosure>}
   </div>
 );
 
@@ -147,13 +174,10 @@ const BsControl=({spec,s,card})=>{
             background:current===pct?C.amberL:C.white,
             color:current===pct?C.amberD:C.slateL,fontWeight:current===pct?700:400}}>{pct}%</button>)}
       </div>
-      <details style={{fontSize:T.micro,color:C.slateL,marginTop:"auto",paddingTop:5,
-        lineHeight:1.25,textAlign:"left"}}>
-        <summary style={{cursor:"pointer",whiteSpace:"nowrap"}}>BS formula</summary>
-        <div style={disclosurePopover}>
-          Liner BCF = 1. Flute BCF = slider. BS = Σ(BF_adj × BCF × GSM ÷ 1000).
-        </div>
-      </details>
+      <FloatingDisclosure summary="BS formula" style={{fontSize:T.micro,color:C.slateL,
+        marginTop:"auto",paddingTop:5,lineHeight:1.25,textAlign:"left"}}>
+        Liner BCF = 1. Flute BCF = slider. BS = Σ(BF_adj × BCF × GSM ÷ 1000).
+      </FloatingDisclosure>
     </div>
   );
 };
