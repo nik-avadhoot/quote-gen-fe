@@ -28,12 +28,12 @@ import { resolveBatchCommercialDefaults } from "../engine/resolveAuthority.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
 import {
   constructionLayerIssues, findUsableConstructionMatch,
-  findUsableStandardConstructionMatch,
+  findUsableStandardConstructionMatch, isUsableConstruction, sameConstruction,
 } from "../lib/constructionIdentity.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useCostingBatchBridge(st){
-  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, sectors, setAutoFill, setBatchProfile, setDurableBatch, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setNewBatchDialogOpen, setSetAutoFill, setTab, showToast, spec, specRaw } = st;
+  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, sectors, setAutoFill, setBatchProfile, setDurableBatch, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setNewBatchDialogOpen, setSetAutoFill, setSpec, setTab, showToast, spec, specRaw } = st;
   const batchCommercialDefaults=resolveBatchCommercialDefaults(batchProfile,
     sectors.find(sector=>sector.code===batchProfile.sector));
 
@@ -633,7 +633,14 @@ export function useCostingBatchBridge(st){
     // `existingSTD` below is deliberately NOT routed through it — that is the
     // board-specs-match-but-layers-differ case, and its Cancel branch is a
     // SANCTIONED duplication route ruled by the product owner.
-    const existingFull=findUsableConstructionMatch(constructionLib,spec);
+    // A deliberate Costing selection wins among exact duplicates. If the Maker
+    // changed any construction-defining field it is no longer exact, so normal
+    // matching creates/reuses the correct construction without editing the
+    // originally selected shared entry.
+    const selectableConstructionLib=constructionLib.filter(c=>(c.status||'active')==='active');
+    const selectedFull=selectableConstructionLib.find(c=>c.code===spec.constructionCode&&
+      isUsableConstruction(c)&&sameConstruction(c,spec));
+    const existingFull=selectedFull||findUsableConstructionMatch(selectableConstructionLib,spec);
 
     if(existingFull){
       // Exact match including layers — reuse silently
@@ -641,7 +648,7 @@ export function useCostingBatchBridge(st){
       showToast(`✅ Matched existing construction [${constrCode}]`,'success',3000);
     } else {
       // C1: also check for STD-only match (layers differ) — confirm before reusing
-      const existingSTD=findUsableStandardConstructionMatch(constructionLib,spec);
+      const existingSTD=findUsableStandardConstructionMatch(selectableConstructionLib,spec);
       if(existingSTD){
         // STDs match but paper layers differ — must not silently reuse
         const reuse=window.confirm(
@@ -683,6 +690,11 @@ export function useCostingBatchBridge(st){
         constrCode=nextCode;
       }
     }
+    // Keep the surviving START draft visibly linked to what Send actually used,
+    // including a different exact match or a newly-created construction.
+    if(spec.constructionCode!==constrCode)
+      setSpec(current=>({...current,constructionCode:constrCode}));
+
     // ── Build new batch row pre-populated from spec ───────────────────────────
     const newId=Date.now();
     const matCode=spec.material_code||"";

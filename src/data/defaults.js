@@ -76,6 +76,7 @@ export const BOX_TYPES=["RSC","Die-R","Die-S","HRSC-L","HRSC-R","HRSC-O","Board"
 export const PRINTING_TECHNOLOGIES=["Flexo","CMYK","Offset"];
 export const INIT_SPEC={
   client:"",product:"",material_code:"",sector:"",
+  constructionCode:"",
   L:"",W:"",H:"",dimType:"ID",boxType:"RSC",ply:5,ups:1,
   printing_technology:"",number_of_colours:"",
   flute_F1:"B",flute_F2:"A",

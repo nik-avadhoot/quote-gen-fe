@@ -2,9 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  constructionLayerIssues, findUsableConstructionMatch,
+  applyConstructionToSpec, constructionLayerIssues, findUsableConstructionMatch,
   findUsableStandardConstructionMatch, isUsableConstruction,
-  requiredConstructionLayers,
+  requiredConstructionLayers, sameConstruction,
 } from "../src/lib/constructionIdentity.js";
 import { calcCosting, checkMissingInfo } from "../src/engine/costing.js";
 
@@ -13,6 +13,9 @@ const root = path.resolve(here, "..");
 const bridge = fs.readFileSync(path.join(root, "src/state/useCostingBatchBridge.js"), "utf8");
 const resultState = fs.readFileSync(path.join(root, "src/state/useCostingResult.js"), "utf8");
 const overlay = fs.readFileSync(path.join(root, "src/tabs/batch/ConstructionOverlay.jsx"), "utf8");
+const picker = fs.readFileSync(path.join(root, "src/components/ConstructionPicker.jsx"), "utf8");
+const costingTab = fs.readFileSync(path.join(root, "src/tabs/costing/CostingTab.jsx"), "utf8");
+const specForm = fs.readFileSync(path.join(root, "src/tabs/costing/SpecForm.jsx"), "utf8");
 const batchGrid = fs.readFileSync(path.join(root, "src/tabs/batch/BatchGrid.jsx"), "utf8");
 const quoteActions = fs.readFileSync(path.join(root, "src/state/useQuoteActions.js"), "utf8");
 
@@ -55,17 +58,33 @@ check(findUsableStandardConstructionMatch([incomplete5, complete5], {
   ...complete5, code: "INCOMING", layers: { ...layers5, TOP: { code: "24", gsm: 180 } },
 })?.code === "GOOD-5",
   "CON-SAFE-6 standard matching skips incomplete candidates and chooses a usable one");
+const draft={client:"ACME",sector:"PAINTS",material_code:"SKU-1",product:"Carton",
+  L:400,W:300,H:250,margin:11,waste:4,layers:{}};
+const applied=applyConstructionToSpec(draft,{...complete5,spec_cobb:125});
+check(applied.constructionCode==="GOOD-5"&&sameConstruction(applied,complete5),
+  "CON-SAFE-6a Costing selection carries an exact reusable construction reference");
+check(applied.client===draft.client&&applied.sector===draft.sector&&applied.material_code===draft.material_code
+  &&applied.product===draft.product&&applied.L===draft.L&&applied.margin===draft.margin
+  &&applied.waste===draft.waste&&applied.spec_cobb===125,
+  "CON-SAFE-6b Costing selection changes construction/spec fields but not Batch, SKU or commercial context");
+applied.layers.TOP.gsm=999;
+check(complete5.layers.TOP.gsm===180,
+  "CON-SAFE-6c Costing selection deep-copies layers instead of mutating the shared library entry");
 check(bridge.includes("constructionLayerIssues(spec)")
-  && bridge.includes("findUsableConstructionMatch(constructionLib,spec)")
-  && bridge.includes("findUsableStandardConstructionMatch(constructionLib,spec)"),
-  "CON-SAFE-7 Start Costing send uses the shared completeness and safe-match boundary");
+  && bridge.includes("selectableConstructionLib=constructionLib.filter")
+  && bridge.includes("findUsableConstructionMatch(selectableConstructionLib,spec)")
+  && bridge.includes("findUsableStandardConstructionMatch(selectableConstructionLib,spec)"),
+  "CON-SAFE-7 Start Costing send uses the shared completeness, active-only and safe-match boundary");
 check(resultState.includes("const _sendLayerIssues=constructionLayerIssues(spec)")
   && resultState.includes("_sendLayerIssues.length===0"),
   "CON-SAFE-8 Send readiness blocks incomplete required layers");
-check(overlay.includes("constructionLib.filter(c=>(c.status||'active')==='active')")
-  && overlay.includes("activeConstructions.filter(isUsableConstruction)")
-  && overlay.includes("incomplete hidden"),
-  "CON-SAFE-9 Batch construction selection hides unfinished library rows transparently");
+check(picker.includes("filter(c=>(c.status||'active')==='active')")
+  && picker.includes("activeConstructions.filter(isUsableConstruction)")
+  && picker.includes("incomplete hidden")
+  && overlay.includes("<ConstructionPicker")&&costingTab.includes("<ConstructionPicker")
+  && specForm.includes("Paper Construction")&&specForm.includes('aria-label="Detach construction"')
+  && !specForm.includes(">Existing Construction</div>"),
+  "CON-SAFE-9 shared picker is compact in the Paper Construction header and hides unfinished rows");
 check(checkMissingInfo({
   L: 100, W: 100, H: 100, ply: 5, boxType: "RSC", layers: incomplete5.layers,
   delivery: "Nagpur", volume: 1000, sector: "PAINTS", flute_F1: "B",

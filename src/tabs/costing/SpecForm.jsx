@@ -18,6 +18,8 @@ import { isPPType, sameSetCode } from "../../engine/rowType.js";
 import { Btn, Inp, SH, Sel } from "../../ui/primitives.jsx";
 import { inputSt } from "../../ui/styles.js";
 import { useAppState } from "../../state/AppStateContext.js";
+import { sameConstruction } from "../../lib/constructionIdentity.js";
+import { constrAutoName } from "../../lib/constructionName.js";
 import { C, mono, sans } from "../../theme.js";
 
 // Sub-header: matches Paper Construction column header style exactly —
@@ -27,7 +29,7 @@ const SubHdr=({title})=>(
   <div style={{fontSize:9,fontWeight:700,color:C.slateL,textTransform:"uppercase",
     letterSpacing:"0.09em",marginBottom:4,textAlign:"center"}}>{title}</div>);
 
-export default function SpecForm(){
+export default function SpecForm({onChooseConstruction}){
   const {
     spec, s, setAutoFill, setSetAutoFill, activeBatchRowId,
     aiNotes, setAiNotes, showToast, card,
@@ -64,6 +66,16 @@ export default function SpecForm(){
   // profile with no interest set is not read as a row override.
   const _intFromRow=!!activeBatchRowId
     &&+(spec.interest??0.5)!==+(_bdC.interest??0.5);
+  const _selectedConstruction=spec.constructionCode
+    ?constructionLib.find(c=>c.code===spec.constructionCode):null;
+  const _selectedConstructionExact=!!_selectedConstruction&&sameConstruction(_selectedConstruction,spec);
+  const _constructionStatusTitle=_selectedConstruction
+    ?_selectedConstructionExact
+      ?`[${_selectedConstruction.code}] ${constrAutoName(_selectedConstruction)} — linked; Send will reuse this exact construction.`
+      :`[${_selectedConstruction.code}] ${constrAutoName(_selectedConstruction)} — modified; Send will match or create without changing the library entry.`
+    :spec.constructionCode
+      ?`[${spec.constructionCode}] is no longer available. Choose another construction or detach it.`
+      :'Choose an existing Construction Library entry, or build manually below.';
 
   return(
     <div style={{overflowY:"auto",height:"100%",padding:"10px 10px 24px"}}>
@@ -306,7 +318,34 @@ export default function SpecForm(){
         </div>
       </div>
       <div style={card}>
-        <SH title="Paper Construction"/>
+        <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"center",
+          borderBottom:`1px solid ${C.amber}`,paddingBottom:3,marginBottom:8,minHeight:18}}>
+          <div style={{fontSize:9,fontWeight:700,color:C.amber,textTransform:"uppercase",
+            letterSpacing:"0.09em"}}>Paper Construction</div>
+          {/* START-only library selector lives in the existing header row, so it
+              consumes no additional vertical card space. REVIEW remains unchanged. */}
+          {!activeBatchRowId&&<div style={{position:"absolute",right:0,top:0,
+            display:"flex",alignItems:"center",gap:4}}>
+            <button type="button" onClick={onChooseConstruction} title={_constructionStatusTitle}
+              style={{maxWidth:120,padding:"2px 6px",borderRadius:4,
+                border:`1px solid ${_selectedConstructionExact?C.green:
+                  spec.constructionCode&&!_selectedConstruction?C.red:C.amber}`,
+                background:_selectedConstructionExact?C.greenL:C.amberL,
+                color:_selectedConstructionExact?C.green:
+                  spec.constructionCode&&!_selectedConstruction?C.red:C.amberD,
+                fontSize:8.5,cursor:"pointer",fontWeight:700,whiteSpace:"nowrap",
+                overflow:"hidden",textOverflow:"ellipsis"}}>
+              📚 {_selectedConstruction
+                ?`[${_selectedConstruction.code}] ${_selectedConstructionExact?'Linked':'Modified'}`
+                :spec.constructionCode?`[${spec.constructionCode}] unavailable`:'Choose existing'}
+            </button>
+            {spec.constructionCode&&<button type="button" onClick={()=>s('constructionCode','')}
+              aria-label="Detach construction" title="Keep the populated values but remove the library selection"
+              style={{padding:0,width:16,height:16,lineHeight:"14px",borderRadius:3,
+                border:`1px solid ${C.border}`,background:C.white,color:C.slateL,
+                fontSize:11,cursor:"pointer"}}>×</button>}
+          </div>}
+        </div>
         <div style={{display:"grid",gridTemplateColumns:"72px 1fr 80px 52px",gap:"3px 5px",
           fontSize:9,color:C.slateL,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>
           <div style={{textAlign:"center"}}>Layer</div><div style={{textAlign:"center"}}>Grade</div><div style={{textAlign:"center"}}>GSM</div><div style={{textAlign:"center"}}>Flute</div>

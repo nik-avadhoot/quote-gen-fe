@@ -61,6 +61,26 @@ export const constructionLayerIssues=x=>{
 
 export const isUsableConstruction=x=>constructionLayerIssues(x).length===0;
 
+// Apply one library construction to a Costing draft. Only construction and
+// board-spec fields move: customer/sector metadata are search hints, never
+// construction identity, and SKU identity/dimensions/commercials remain owned
+// by the draft. A deep layer copy prevents later Costing edits from mutating the
+// shared library entry through an aliased object.
+export const applyConstructionToSpec=(spec,construction)=>({
+  ...spec,
+  constructionCode:construction?.code||'',
+  boxType:construction?.boxType||'RSC',
+  ply:+construction?.ply||5,
+  flute_F1:construction?.flute_F1||'B',
+  flute_F2:construction?.flute_F2||'',
+  layers:JSON.parse(JSON.stringify(construction?.layers||{})),
+  board_gsm:construction?.board_gsm??'',
+  spec_bs:construction?.spec_bs??'',
+  spec_bct:construction?.spec_bct??'',
+  spec_ect:construction?.spec_ect??'',
+  spec_cobb:construction?.spec_cobb??'',
+});
+
 // Normalise BOTH sides the same way. The original compared `+c.ply` against
 // `(+spec.ply||5)` — applying the default to the incoming side only, so an entry
 // with no ply produced NaN and could never match anything, not even itself.

@@ -34,9 +34,12 @@
 import SpecForm from "./SpecForm.jsx";
 import OutputPanel from "./OutputPanel.jsx";
 import BatchContextBar from "./BatchContextBar.jsx";
+import ConstructionPicker from "../../components/ConstructionPicker.jsx";
 import { Btn } from "../../ui/primitives.jsx";
 import { useState } from "react";
 import { useAppState } from "../../state/AppStateContext.js";
+import { applyConstructionToSpec, isUsableConstruction } from "../../lib/constructionIdentity.js";
+import { constrAutoName } from "../../lib/constructionName.js";
 import { C, sans } from "../../theme.js";
 
 // One subtab. Same visual language as the panel-header tab label this strip
@@ -51,13 +54,36 @@ const Subtab=({label,active,onClick,title})=>(
 export default function CostingTab(){
   const {
     activeBatchRowId, batchRows, discardNewDraft, exitReview,
-    newDraftKeepClient, newDraftNewClient, profileDraft, reviewDirty,
-    sendCostingToBatch, startNewSku, _sendReady,
+    constructionLib, newDraftKeepClient, newDraftNewClient, profileDraft, reviewDirty,
+    sendCostingToBatch, setSpec, setTab, showToast, spec, startNewSku, _sendReady,
   } = useAppState();
   const inReview=!!activeBatchRowId;
   // C5: new-batch is DERIVED from the draft profile's existence, not a flag.
   const newBatch=profileDraft!==null;
   const [draftMenu,setDraftMenu]=useState(false);
+  const [constructionPickerOpen,setConstructionPickerOpen]=useState(false);
+  const [constructionQuery,setConstructionQuery]=useState('');
+  const [constructionFilter,setConstructionFilter]=useState({sector:'',client:''});
+
+  const closeConstructionPicker=()=>{
+    setConstructionPickerOpen(false);
+    setConstructionQuery('');
+  };
+  const openConstructionPicker=()=>{
+    const candidates=constructionLib.filter(c=>(c.status||'active')==='active'&&isUsableConstruction(c));
+    const sector=spec.sector&&candidates.some(c=>(c.sector||'')===spec.sector)?spec.sector:'';
+    const clientPool=sector?candidates.filter(c=>(c.sector||'')===sector):candidates;
+    const client=spec.client&&clientPool.some(c=>(c.client||'')===spec.client)?spec.client:'';
+    setConstructionQuery('');
+    setConstructionFilter({sector,client});
+    setConstructionPickerOpen(true);
+  };
+  const selectConstruction=construction=>{
+    setSpec(current=>applyConstructionToSpec(current,construction));
+    showToast(`✅ [${construction.code}] ${constrAutoName(construction)} applied to Costing START`,'success',4500);
+    closeConstructionPicker();
+  };
+  const openFullLibrary=()=>{closeConstructionPicker();setTab('constrlib');};
 
   // C4 - X1. The ONE exit path, shared by the Unlink button and the START
   // subtab. Confirms only when the review copy has unpushed changes; the
@@ -152,13 +178,20 @@ export default function CostingTab(){
             onClick={activeBatchRowId?undefined:discardNewDraft}/>}
         </div>
       </div>
+      <ConstructionPicker open={constructionPickerOpen&&!inReview} constructions={constructionLib}
+        query={constructionQuery} onQueryChange={setConstructionQuery}
+        filter={constructionFilter} onFilterChange={setConstructionFilter}
+        selectedCode={spec.constructionCode||''}
+        contextLabel={`Applying to Costing START: ${spec.material_code||spec.product||'new SKU'}`}
+        onClose={closeConstructionPicker} onOpenLibrary={openFullLibrary}
+        onSelect={selectConstruction}/>
       {/* C5 · Batch Context — the relocated batch-level fields, sticky by
           structure: outside both scroll containers, so it stays put while the
           SKU form and the output panel scroll. */}
       <BatchContextBar/>
       <div style={{display:"grid",gridTemplateColumns:"380px 1fr",flex:1,minHeight:0,overflow:"hidden"}}>
         <div style={{borderRight:`1px solid ${C.border}`,overflow:"hidden",
-          display:"flex",flexDirection:"column"}}><SpecForm/></div>
+          display:"flex",flexDirection:"column"}}><SpecForm onChooseConstruction={openConstructionPicker}/></div>
         <div style={{overflow:"hidden",display:"flex",flexDirection:"column"}}><OutputPanel/></div>
       </div>
     </div>
