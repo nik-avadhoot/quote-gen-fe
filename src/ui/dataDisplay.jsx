@@ -1,12 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// src/ui/dataDisplay.jsx — permanent-code, lifecycle/status and version-
-// history display primitives.
+// src/ui/dataDisplay.jsx — permanent-code, lifecycle/status, summary-
+// disclosure and version-history display primitives.
 //
-// U1 shared foundation (post-S7 handover §9.2). Stateless and hook-free.
+// U1 shared foundation (post-S7 handover §9.2). Presentation-only.
 // Every governed master (Plants, Families, Constructions, SKUs, ...) carries
 // a permanent code and a lifecycle status; this is the one rendering for
 // both, so a future screen does not reinvent the badge colours per table.
 // ═══════════════════════════════════════════════════════════════════════════
+import { useId, useState } from "react";
 import { C, mono, sans } from "../theme.js";
 
 // A permanent internal code (Plant Code, Family Code, SKU code, ...) is
@@ -40,6 +41,97 @@ export const LifecycleBadge = ({ status }) => {
       <span style={{ width: 6, height: 6, borderRadius: "50%", background: color }} />
       {status || "unknown"}
     </span>
+  );
+};
+
+const SUMMARY_STATUS_TONES = {
+  neutral: { color: C.slateM, background: C.paper },
+  positive: { color: C.green, background: C.greenL },
+  warning: { color: C.amberD, background: C.amberL },
+  danger: { color: C.red, background: C.redL },
+};
+
+// A compact, reusable disclosure row for master-screen summaries. It owns
+// only presentation and disclosure state; callers retain all domain state,
+// resolution rules and mutation guards rendered inside the expanded content.
+export const SummaryRow = ({
+  title,
+  facts = [],
+  status,
+  statusTone = "neutral",
+  badge,
+  children,
+  defaultExpanded = false,
+  expanded: controlledExpanded,
+  onExpandedChange,
+  style: sx = {},
+  contentStyle = {},
+}) => {
+  const contentId = useId();
+  const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
+  const isControlled = controlledExpanded !== undefined;
+  const expanded = isControlled ? controlledExpanded : internalExpanded;
+  const tone = SUMMARY_STATUS_TONES[statusTone] || SUMMARY_STATUS_TONES.neutral;
+
+  const toggle = () => {
+    const nextExpanded = !expanded;
+    if (!isControlled) setInternalExpanded(nextExpanded);
+    onExpandedChange?.(nextExpanded);
+  };
+
+  return (
+    <div style={{
+      border: `1px solid ${C.border}`, borderRadius: 7, background: C.white,
+      overflow: "hidden", fontFamily: sans, ...sx,
+    }}>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={contentId}
+        onClick={toggle}
+        style={{
+          width: "100%", minHeight: 38, padding: "7px 10px", border: 0,
+          background: "transparent", color: C.slate, cursor: "pointer",
+          display: "flex", alignItems: "center", gap: 9, textAlign: "left",
+          fontFamily: sans,
+        }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{title}</span>
+        <span style={{
+          display: "flex", alignItems: "center", gap: 6, minWidth: 0,
+          flex: 1, overflow: "hidden", color: C.slateL, fontSize: 10,
+          whiteSpace: "nowrap",
+        }}>
+          {facts.map((fact, index) => (
+            <span key={index} style={{ display: "inline-flex", alignItems: "center", minWidth: 0 }}>
+              {index > 0 && <span aria-hidden="true" style={{ marginRight: 6, color: C.border }}>·</span>}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{fact}</span>
+            </span>
+          ))}
+        </span>
+        {badge || (status != null && (
+          <span style={{
+            borderRadius: 999, padding: "2px 7px", flexShrink: 0,
+            color: tone.color, background: tone.background,
+            fontSize: 9, fontWeight: 800, lineHeight: 1.4,
+          }}>
+            {status}
+          </span>
+        ))}
+        <span aria-hidden="true" style={{
+          color: C.slateL, fontSize: 16, lineHeight: 1, flexShrink: 0,
+          transform: expanded ? "rotate(90deg)" : "none",
+          transition: "transform 120ms ease",
+        }}>›</span>
+      </button>
+      {expanded && (
+        <div id={contentId} style={{
+          borderTop: `1px solid ${C.border}`, padding: "10px 12px", ...contentStyle,
+        }}>
+          {children}
+        </div>
+      )}
+    </div>
   );
 };
 
