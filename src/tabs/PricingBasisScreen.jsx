@@ -11,8 +11,8 @@ import {
   releaseResolutionLadders,
 } from "../lib/pricingBasisModel.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
-import { LifecycleBadge, PermanentCode } from "../ui/dataDisplay.jsx";
-import { C, mono, sans } from "../theme.js";
+import { LifecycleBadge, PermanentCode, SummaryRow } from "../ui/dataDisplay.jsx";
+import { C, T, mono, sans } from "../theme.js";
 import BatchPricingCard from "./batch/BatchPricingCard.jsx";
 
 const panel = { border: `1px solid ${C.border}`, borderRadius: 8, background: C.white };
@@ -23,26 +23,33 @@ function value(value, suffix = "") {
     : `${value}${suffix}`;
 }
 
-function componentState(component) {
-  if (!component) return <span style={{ color: C.amberD, fontWeight: 700 }}>Details unavailable</span>;
-  return <LifecycleBadge status={component.status} />;
-}
-
-function BasisPart({ title, eyebrow, component, children }) {
+function BasisPart({ title, eyebrow, component, historyLabel, children, drilldownLabel, drilldown }) {
+  const [drilldownOpen, setDrilldownOpen] = useState(false);
+  const positive = ["active", "approved", "current", "published"].includes(component?.status);
   return (
-    <div style={{ ...panel, padding: "10px 12px", minWidth: 0 }}>
-      <div style={{ fontSize: 9, color: C.slateL, fontWeight: 800, textTransform: "uppercase",
-        letterSpacing: ".05em", marginBottom: 3 }}>{eyebrow}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5 }}>
-        <div style={{ fontSize: 11.5, color: C.slate, fontWeight: 750, flex: 1 }}>{title}</div>
-        {componentState(component)}
-      </div>
+    <SummaryRow title={eyebrow}
+      facts={[title]}
+      status={component?.status || "Unavailable"}
+      statusTone={!component ? "warning" : positive ? "positive" : "neutral"}
+      style={{ minWidth: 0 }}
+    >
       {component
-        ? <div style={{ fontSize: 10, color: C.slateM, lineHeight: 1.55 }}>{children}</div>
-        : <div style={{ fontSize: 10, color: C.slateL, lineHeight: 1.45 }}>
+        ? <div style={{ fontSize: T.body, color: C.slateM, lineHeight: 1.55 }}>{children}</div>
+        : <div style={{ fontSize: T.body, color: C.slateL, lineHeight: 1.45 }}>
             This governed source was not visible in the current caller-scoped read. No value is guessed.
           </div>}
-    </div>
+      <VersionHistory label={historyLabel} versions={component?.history} />
+      {drilldown && <div style={{ marginTop: 9 }}>
+        <button type="button" onClick={() => setDrilldownOpen(open => !open)}
+          aria-expanded={drilldownOpen}
+          style={{ border: `1px solid ${C.border}`, borderRadius: 5,
+            background: C.white, color: C.slate, fontSize: T.label, fontWeight: 750,
+            padding: "6px 9px", cursor: "pointer" }}>
+          {drilldownOpen ? `Hide ${drilldownLabel}` : `View ${drilldownLabel}`}
+        </button>
+        {drilldownOpen && <div style={{ marginTop: 8 }}>{drilldown}</div>}
+      </div>}
+    </SummaryRow>
   );
 }
 
@@ -154,7 +161,6 @@ function RateDrilldown({ rate }) {
       <div style={{ marginTop: 7, fontSize: 9.5, color: C.slateL }}>
         This schema gives Rate versions no independent effective date; the Pricing Basis Release effective period governs selection.
       </div>
-      <VersionHistory label="Rate version" versions={rate.history} />
     </section>
   );
 }
@@ -240,7 +246,6 @@ function FreightDrilldown({ freight }) {
       {freight.destination_details_partial && <div style={{ marginTop: 7 }}><DrilldownNotice>
         One or more destination/customer identities are not visible to this caller; the lane rate is not relabelled or guessed.
       </DrilldownNotice></div>}
-      <VersionHistory label="Freight version" versions={freight.history} />
     </section>
   );
 }
@@ -307,7 +312,6 @@ function SectorDefaultDrilldown({ sector, defaults }) {
           {!sector && <div style={{ marginTop: 7 }}><DrilldownNotice>
             Sector details are unavailable to this caller. The screen does not fill them from fixture or fallback data.
           </DrilldownNotice></div>}
-          <VersionHistory label="Sector version" versions={sector?.history} />
         </div>
         <div style={{ ...panel, padding: 9 }}>
           <div style={{ display: "flex", gap: 7, alignItems: "flex-start" }}>
@@ -324,7 +328,6 @@ function SectorDefaultDrilldown({ sector, defaults }) {
           {!defaults && <div style={{ marginTop: 7 }}><DrilldownNotice>
             Calculation Default details are unavailable. Any chain that reaches this tier remains unresolved here.
           </DrilldownNotice></div>}
-          <VersionHistory label="Calculation Default" versions={defaults?.history} />
         </div>
       </div>
 
@@ -446,7 +449,6 @@ function ReleaseChronology({ release }) {
 }
 
 function ReleaseCard({ release, asOf }) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [policyOpen, setPolicyOpen] = useState(false);
   const eligibility = releaseEligibility(release, asOf);
   const parts = release.components || {};
@@ -503,16 +505,20 @@ function ReleaseCard({ release, asOf }) {
           The Release, Rate version and Freight version share composite plant foreign keys; this is not frontend filtering.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-          <BasisPart eyebrow="Material rates" component={rate}
-            title={rate ? `${rate.set_name} · v${rate.version_no}` : "Rate Set version"}>
+          <BasisPart eyebrow="Rate" component={rate}
+            title={rate ? `${rate.set_name} · v${rate.version_no}` : "Rate Set version"}
+            historyLabel="Rate version" drilldownLabel="Rate details"
+            drilldown={<RateDrilldown rate={rate} />}>
             <div>Owning plant: {rate?.owning_plant
               ? `${rate.owning_plant.plant_code} · ${rate.owning_plant.name}`
               : "unavailable"}</div>
             <div>The governed material-rate version used by this release.</div>
           </BasisPart>
 
-          <BasisPart eyebrow="Delivery cost" component={freight}
-            title={freight ? `${freight.set_name} · v${freight.version_no}` : "Freight Set version"}>
+          <BasisPart eyebrow="Freight" component={freight}
+            title={freight ? `${freight.set_name} · v${freight.version_no}` : "Freight Set version"}
+            historyLabel="Freight version" drilldownLabel="Freight details"
+            drilldown={<FreightDrilldown freight={freight} />}>
             <div>Owning plant: {freight?.owning_plant
               ? `${freight.owning_plant.plant_code} · ${freight.owning_plant.name}`
               : "unavailable"}</div>
@@ -520,15 +526,17 @@ function ReleaseCard({ release, asOf }) {
             Missing routes remain missing; an explicit zero remains zero.
           </BasisPart>
 
-          <BasisPart eyebrow="Commercial defaults" component={sector}
-            title={sector ? `${sector.name} · v${sector.version_no}` : "Sector version"}>
+          <BasisPart eyebrow="Sector" component={sector}
+            title={sector ? `${sector.name} · v${sector.version_no}` : "Sector version"}
+            historyLabel="Sector version">
             <div>Waste: CBB {value(sector?.waste_cbb_pct, "%")} · PP {value(sector?.waste_pp_pct, "%")}</div>
             <div>Conversion: Box {value(sector?.conv_box_rate, "/kg")} · PP {value(sector?.conv_pp_rate, "/kg")}</div>
             <div>Target margin: {value(sector?.margin_pct, "%")}</div>
           </BasisPart>
 
-          <BasisPart eyebrow="Calculation policy" component={defaults}
-            title={defaults ? `Calculation basis · v${defaults.version_no}` : "Calculation Default version"}>
+          <BasisPart eyebrow="Calculation" component={defaults}
+            title={defaults ? `Calculation basis · v${defaults.version_no}` : "Calculation Default version"}
+            historyLabel="Calculation Default">
             <div>Annual interest: {value(defaults?.annual_interest_pct, "%")} / {value(defaults?.day_count_basis, " days")}</div>
             <div>Rounding: nearest {value(defaults?.rounding_step)}</div>
             <div title={defaults?.engine_version} style={{ fontFamily: mono, fontSize: 9,
@@ -538,13 +546,6 @@ function ReleaseCard({ release, asOf }) {
           </BasisPart>
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 9 }}>
-          <button type="button" onClick={() => setDetailsOpen(open => !open)}
-            aria-expanded={detailsOpen}
-            style={{ border: `1px solid ${C.border}`, borderRadius: 5,
-              background: C.white, color: C.slate, fontSize: 10, fontWeight: 750,
-              padding: "6px 9px", cursor: "pointer" }}>
-            {detailsOpen ? "Hide Rate & Freight details" : "View Rate & Freight details"}
-          </button>
           <button type="button" onClick={() => setPolicyOpen(open => !open)}
             aria-expanded={policyOpen}
             style={{ border: `1px solid ${C.border}`, borderRadius: 5,
@@ -553,13 +554,6 @@ function ReleaseCard({ release, asOf }) {
             {policyOpen ? "Hide Sector & Default details" : "View Sector & Default details"}
           </button>
         </div>
-        {detailsOpen && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))",
-            gap: 8, marginTop: 8 }}>
-            <RateDrilldown rate={rate} />
-            <FreightDrilldown freight={freight} />
-          </div>
-        )}
         {policyOpen && <div style={{ marginTop: 8 }}>
           <SectorDefaultDrilldown sector={sector} defaults={defaults} />
         </div>}
@@ -702,7 +696,8 @@ export default function PricingBasisScreen({ fixtureOnly = false, onExitFixture 
   }
 
   return (
-    <div style={{ height: "100%", overflowY: "auto", padding: 16, fontFamily: sans, boxSizing: "border-box" }}>
+    <div className="screen-end-padded"
+      style={{ height: "100%", overflowY: "auto", padding: 16, fontFamily: sans, boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
         <div style={{ flex: 1, minWidth: 260 }}>
           <h2 style={{ margin: 0, fontSize: 16, color: C.slate }}>Pricing Basis</h2>

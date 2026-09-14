@@ -31,7 +31,7 @@
 // eligibility-change action — post-proposal eligibility change is
 // Product-Owner-blocked, not designed.
 // ═══════════════════════════════════════════════════════════════════════════
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
@@ -51,11 +51,11 @@ import {
   retireLocationConfirmMessage, hasIncompleteDetails, LOCATION_TYPE_OPTS,
 } from "../lib/customerLocationActions.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
-import { LifecycleBadge, PermanentCode, VersionHistory } from "../ui/dataDisplay.jsx";
+import { LifecycleBadge, PermanentCode, SummaryRow, VersionHistory } from "../ui/dataDisplay.jsx";
 import CapabilityGate from "../ui/CapabilityGate.jsx";
 import { Btn, Inp, Sel } from "../ui/primitives.jsx";
 import { inputSt } from "../ui/styles.js";
-import { C, mono, sans } from "../theme.js";
+import { C, T, mono, sans } from "../theme.js";
 
 const MANAGE = "manage_customer_master";
 const CREATE_CAPS = [MANAGE, "make_quote"]; // mirrors the DB's own OR condition (propose / prospect)
@@ -163,7 +163,7 @@ export default function CustomerFamiliesScreen({ showToast }) {
           </div>
         ))}
       </div>
-      <div style={{ flex: 1, padding: 20, overflowY: "auto" }}>
+      <div className="screen-end-padded" style={{ flex: 1, padding: 20, overflowY: "auto" }}>
         {!selected ? (
           <EmptyState title="Select a family" />
         ) : (
@@ -600,49 +600,82 @@ function EditLocationModal({ location, currentVersion, onClose, onDone, showToas
 // proposal), status, incomplete-details indication, and the actions this
 // slice authorises (Propose/Edit/Approve/Retire/Assign-Code). No eligibility
 // action exists — post-proposal eligibility change is Product-Owner-blocked.
-function LocationsList({ party, locations, locationVersions, profile, currentFamilyId, openModal }) {
+function LocationsList({ party, locations, locationVersions, profile, currentFamilyId, openModal,
+  defaultExpanded = false }) {
+  const activeCount = locations.filter(location => location.status === "active").length;
+  const incompleteCount = locations.filter(location => {
+    const currentVersion = locationVersions.find(version => version.location_id === location.id
+      && version.status === "current");
+    return hasIncompleteDetails(currentVersion);
+  }).length;
   return (
-    <div style={{ marginLeft: 24, marginTop: 4 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ fontSize: 9, fontWeight: 700, color: C.slateL, textTransform: "uppercase" }}>
-          Locations — {locations.length}
-        </div>
+    <SummaryRow title="Locations"
+      facts={[
+        `${locations.length} ${locations.length === 1 ? "location" : "locations"}`,
+        `${activeCount} active`,
+        ...(incompleteCount ? [`${incompleteCount} incomplete`] : []),
+      ]}
+      status={locations.length ? "Recorded" : "None"}
+      statusTone={incompleteCount ? "warning" : locations.length ? "positive" : "neutral"}
+      defaultExpanded={defaultExpanded}
+    >
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: locations.length ? 8 : 0 }}>
         <CapabilityGate profile={profile} capability={CREATE_CAPS}>
           <Btn ch="+ Location" sm v="ghost" onClick={() => openModal({ kind: "propose-location", party, currentFamilyId })} />
         </CapabilityGate>
       </div>
-      {locations.map(loc => {
-        const currentVersion = locationVersions.find(v => v.location_id === loc.id && v.status === "current");
-        const incomplete = hasIncompleteDetails(currentVersion);
-        const eligibility = [loc.bill_to_eligible && "Bill-to", loc.ship_to_eligible && "Ship-to"]
-          .filter(Boolean).join(" / ");
-        return (
-          <div key={loc.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.slateM, padding: "2px 0" }}>
-            <PermanentCode code={loc.location_code} style={{ fontSize: 11 }} />
-            <span>{eligibility}</span>
-            <LifecycleBadge status={loc.status} />
-            {incomplete && <span style={{ fontSize: 9, color: C.amber }}>(details incomplete)</span>}
-            <CapabilityGate profile={profile} capability={MANAGE}>
-              <Btn ch="Edit" sm v="ghost"
-                onClick={() => openModal({ kind: "edit-location", location: loc, currentVersion, currentFamilyId })} />
-              {loc.status === "proposed" && (
-                <Btn ch="Approve" sm v="ghost"
-                  onClick={() => openModal({ kind: "approve-location", location: loc, currentFamilyId })} />
-              )}
-              {loc.status === "active" && (
-                <Btn ch="Retire" sm v="ghost"
-                  onClick={() => openModal({ kind: "retire-location", location: loc, currentFamilyId })} />
-              )}
-              {!loc.location_code && party.customer_code && (
-                <Btn ch="Assign Code" sm v="ghost"
-                  onClick={() => openModal({ kind: "assign-location-code", location: loc, currentFamilyId })} />
-              )}
-            </CapabilityGate>
-          </div>
-        );
-      })}
-      {!locations.length && <div style={{ fontSize: 10, color: C.slateL }}>None yet.</div>}
-    </div>
+      {locations.length ? (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", minWidth: 620, borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: C.paper, color: C.slateM, textAlign: "left", fontSize: T.label }}>
+                <th style={{ padding: "7px 8px" }}>Code</th>
+                <th style={{ padding: "7px 8px" }}>Eligibility</th>
+                <th style={{ padding: "7px 8px" }}>Status</th>
+                <th style={{ padding: "7px 8px" }}>Detail</th>
+                <th style={{ padding: "7px 8px" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>{locations.map(loc => {
+              const currentVersion = locationVersions.find(v => v.location_id === loc.id && v.status === "current");
+              const incomplete = hasIncompleteDetails(currentVersion);
+              const eligibility = [loc.bill_to_eligible && "Bill-to", loc.ship_to_eligible && "Ship-to"]
+                .filter(Boolean).join(" / ");
+              return (
+                <tr key={loc.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td style={{ padding: "7px 8px" }}><PermanentCode code={loc.location_code} style={{ fontSize: T.body }} /></td>
+                  <td style={{ padding: "7px 8px", fontSize: T.body, color: C.slateM }}>{eligibility}</td>
+                  <td style={{ padding: "7px 8px" }}><LifecycleBadge status={loc.status} /></td>
+                  <td style={{ padding: "7px 8px", fontSize: T.label, color: incomplete ? C.amberD : C.slateL }}>
+                    {incomplete ? "Details incomplete" : "Complete"}
+                  </td>
+                  <td style={{ padding: "4px 8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                      <CapabilityGate profile={profile} capability={MANAGE}>
+                        <Btn ch="Edit" sm v="ghost"
+                          onClick={() => openModal({ kind: "edit-location", location: loc, currentVersion, currentFamilyId })} />
+                        {loc.status === "proposed" && (
+                          <Btn ch="Approve" sm v="ghost"
+                            onClick={() => openModal({ kind: "approve-location", location: loc, currentFamilyId })} />
+                        )}
+                        {loc.status === "active" && (
+                          <Btn ch="Retire" sm v="ghost"
+                            onClick={() => openModal({ kind: "retire-location", location: loc, currentFamilyId })} />
+                        )}
+                        {!loc.location_code && party.customer_code && (
+                          <Btn ch="Assign Code" sm v="ghost"
+                            onClick={() => openModal({ kind: "assign-location-code", location: loc, currentFamilyId })} />
+                        )}
+                      </CapabilityGate>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        </div>
+      ) : <div style={{ fontSize: T.body, color: C.slateL }}>None yet.</div>}
+    </SummaryRow>
   );
 }
 
@@ -660,22 +693,22 @@ function LocationsList({ party, locations, locationVersions, profile, currentFam
 // infer it.
 function ExternalReferencesList({ refs }) {
   return (
-    <div style={{ marginLeft: 24, marginTop: 4 }}>
-      <div style={{ fontSize: 9, fontWeight: 700, color: C.slateL, textTransform: "uppercase" }}>
-        External references — {refs.length}
-      </div>
+    <SummaryRow title="External references"
+      facts={[`${refs.length} ${refs.length === 1 ? "reference" : "references"}`, "Recognition only"]}
+      status="Read-only"
+    >
       {refs.map(r => (
-        <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.slateM, padding: "2px 0" }}>
+        <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: T.body, color: C.slateM, padding: "2px 0" }}>
           <span style={{ color: C.slateL }}>{externalRefKindLabel(r.ref_kind)}</span>
-          <span style={{ fontFamily: mono, fontSize: 11, color: C.slate }}>{r.ref_value}</span>
+          <span style={{ fontFamily: mono, fontSize: T.body, color: C.slate }}>{r.ref_value}</span>
         </div>
       ))}
       {refs.length
-        ? <div style={{ fontSize: 9, color: C.slateL, marginTop: 2 }}>
+        ? <div style={{ fontSize: T.label, color: C.slateL, marginTop: 2 }}>
             Recorded for recognition only — not a Customer Code, and not a Batch link.
           </div>
-        : <div style={{ fontSize: 10, color: C.slateL }}>None recorded.</div>}
-    </div>
+        : <div style={{ fontSize: T.body, color: C.slateL }}>None recorded.</div>}
+    </SummaryRow>
   );
 }
 
@@ -694,6 +727,7 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
   const [partyBusy, setPartyBusy] = useState(false);
   const [newSectorId, setNewSectorId] = useState("");
   const [sectorBusy, setSectorBusy] = useState(false);
+  const [expandedPartyId, setExpandedPartyId] = useState(null);
 
   const partyById = useMemo(() => Object.fromEntries(parties.map(p => [p.id, p])), [parties]);
   // Grouped once per payload, not per Party row: the deterministic ordering
@@ -809,11 +843,17 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
         )}
       </div>
 
-      <div style={{ marginTop: 16, padding: 12, border: `1px solid ${attachedSectors.length ? C.border : C.red}`,
-        borderRadius: 7, background: attachedSectors.length ? C.white : "#fff5f3" }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: C.slateM, textTransform: "uppercase", marginBottom: 6 }}>
-          Sectors — {attachedSectors.length}
-        </div>
+      <SummaryRow title="Sectors"
+        facts={[
+          `${attachedSectors.length} attached`,
+          attachedSectors[0]?.sector?.sector_code
+            ? `${attachedSectors[0].sector.sector_code} first` : "Classification required",
+        ]}
+        status={attachedSectors.length ? "Classified" : "Required"}
+        statusTone={attachedSectors.length ? "positive" : "danger"}
+        style={{ marginTop: 16, borderColor: attachedSectors.length ? C.border : C.red,
+          background: attachedSectors.length ? C.white : "#fff5f3" }}
+      >
         <div style={{ fontSize: 11, color: C.slateL, lineHeight: 1.45, marginBottom: 7 }}>
           A Customer Family needs at least one Sector and may have more. Each Batch uses exactly one attached Sector; its guidance and inheritance follow only that selected Sector.
         </div>
@@ -838,12 +878,16 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
               onClick={addSector} />
           </div>
         </CapabilityGate>}
-      </div>
+      </SummaryRow>
 
-      <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: C.slateM, textTransform: "uppercase", marginBottom: 4 }}>
-          Aliases
-        </div>
+      <SummaryRow title="Aliases"
+        facts={[
+          `${familyAliases.length} ${familyAliases.length === 1 ? "alias" : "aliases"}`,
+          familyAliases[0]?.alias || "None recorded",
+        ]}
+        status={familyAliases.length ? "Recorded" : "None"}
+        style={{ marginTop: 12 }}
+      >
         {familyAliases.map(a => (
           <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.slateM, padding: "3px 0" }}>
             {editingAliasId === a.id ? (
@@ -882,58 +926,96 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
             )}
           </CapabilityGate>
         )}
-      </div>
+      </SummaryRow>
 
       <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: C.slateM, textTransform: "uppercase", marginBottom: 4 }}>
+        <div style={{ fontSize: T.label, fontWeight: 800, color: C.slateM, textTransform: "uppercase", marginBottom: 6 }}>
           Current Customers / Prospects — {current.length}
         </div>
-        {!current.length && <div style={{ fontSize: 11, color: C.slateL }}>None currently.</div>}
-        {current.map(m => {
+        {!current.length && <div style={{ fontSize: T.body, color: C.slateL }}>None currently.</div>}
+        {!!current.length && <div style={{ overflowX: "auto", border: `1px solid ${C.border}`, borderRadius: 7 }}>
+          <table style={{ width: "100%", minWidth: 720, borderCollapse: "collapse", background: C.white }}>
+            <thead>
+              <tr style={{ background: C.slate, color: C.white, textAlign: "left", fontSize: T.label }}>
+                <th style={{ padding: "8px 9px" }}>Code</th>
+                <th style={{ padding: "8px 9px" }}>Name</th>
+                <th style={{ padding: "8px 9px" }}>Status</th>
+                <th style={{ padding: "8px 9px" }}>Locations</th>
+                <th style={{ padding: "8px 9px" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>{current.map(m => {
           const party = partyById[m.party_id];
           if (!party) return null;
           const isEditingParty = editingPartyId === party.id;
           const partyLocations = locations.filter(l => l.party_id === party.id);
           const partyRefs = refsByParty[party.id] || [];
+          const isExpanded = expandedPartyId === party.id;
           return (
-            <div key={m.id} style={{ padding: "4px 0" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.slateM }}>
-                <PermanentCode code={party.customer_code} />
-                {isEditingParty ? (
-                  <>
-                    <Inp value={editPartyDraft} onChange={setEditPartyDraft} st={{ width: 180 }} />
-                    <Btn ch="Save" sm disabled={partyBusy} onClick={() => saveParty(party)} />
-                    <Btn ch="Cancel" sm v="secondary" disabled={partyBusy} onClick={() => setEditingPartyId(null)} />
-                  </>
-                ) : (
-                  <>
-                    — {party.display_name}
-                    <LifecycleBadge status={party.lifecycle_state} />
-                    <CapabilityGate profile={profile} capability={MANAGE}>
-                      <Btn ch="Edit" sm v="ghost"
-                        onClick={() => { setEditPartyDraft(party.display_name); setEditingPartyId(party.id); }} />
-                      <Btn ch="Reassign" sm v="ghost"
-                        onClick={() => openModal({ kind: "reassign", party, membership: m, currentFamilyId: family.id })} />
-                      {party.lifecycle_state === "prospect" && (
-                        <Btn ch="Graduate" sm v="ghost"
-                          onClick={() => openModal({ kind: "graduate", party, currentFamilyId: family.id })} />
-                      )}
-                    </CapabilityGate>
-                  </>
-                )}
-              </div>
-              <LocationsList party={party} locations={partyLocations} locationVersions={locationVersions}
-                profile={profile} currentFamilyId={family.id} openModal={openModal} />
-              <ExternalReferencesList refs={partyRefs} />
-            </div>
+            <Fragment key={m.id}>
+              <tr style={{ borderTop: `1px solid ${C.border}` }}>
+                <td style={{ padding: "8px 9px" }}><PermanentCode code={party.customer_code} /></td>
+                <td style={{ padding: "8px 9px", fontSize: T.body, color: C.slateM }}>
+                  {isEditingParty
+                    ? <Inp value={editPartyDraft} onChange={setEditPartyDraft} st={{ width: 190 }} />
+                    : party.display_name}
+                </td>
+                <td style={{ padding: "8px 9px" }}><LifecycleBadge status={party.lifecycle_state} /></td>
+                <td style={{ padding: "5px 9px" }}>
+                  <button type="button" aria-expanded={isExpanded}
+                    onClick={() => setExpandedPartyId(isExpanded ? null : party.id)}
+                    style={{ border: `1px solid ${C.border}`, background: C.white, borderRadius: 5,
+                      padding: "5px 8px", color: C.slateM, fontSize: T.label, fontWeight: 750,
+                      cursor: "pointer", whiteSpace: "nowrap" }}>
+                    {partyLocations.length} {partyLocations.length === 1 ? "location" : "locations"} {isExpanded ? "▴" : "▾"}
+                  </button>
+                </td>
+                <td style={{ padding: "4px 9px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                    {isEditingParty ? (
+                      <>
+                        <Btn ch="Save" sm disabled={partyBusy} onClick={() => saveParty(party)} />
+                        <Btn ch="Cancel" sm v="secondary" disabled={partyBusy} onClick={() => setEditingPartyId(null)} />
+                      </>
+                    ) : (
+                      <CapabilityGate profile={profile} capability={MANAGE}>
+                        <Btn ch="Edit" sm v="ghost"
+                          onClick={() => { setEditPartyDraft(party.display_name); setEditingPartyId(party.id); }} />
+                        <Btn ch="Reassign" sm v="ghost"
+                          onClick={() => openModal({ kind: "reassign", party, membership: m, currentFamilyId: family.id })} />
+                        {party.lifecycle_state === "prospect" && (
+                          <Btn ch="Graduate" sm v="ghost"
+                            onClick={() => openModal({ kind: "graduate", party, currentFamilyId: family.id })} />
+                        )}
+                      </CapabilityGate>
+                    )}
+                  </div>
+                </td>
+              </tr>
+              {isExpanded && <tr style={{ background: C.cream }}>
+                <td colSpan={5} style={{ padding: 9, borderTop: `1px solid ${C.border}` }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                    <LocationsList party={party} locations={partyLocations} locationVersions={locationVersions}
+                      profile={profile} currentFamilyId={family.id} openModal={openModal} defaultExpanded />
+                    <ExternalReferencesList refs={partyRefs} />
+                  </div>
+                </td>
+              </tr>}
+            </Fragment>
           );
-        })}
+        })}</tbody>
+          </table>
+        </div>}
       </div>
 
-      <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: C.slateM, textTransform: "uppercase", marginBottom: 4 }}>
-          Effective-dated membership history
-        </div>
+      <SummaryRow title="Membership history"
+        facts={[
+          `${familyMemberships.length} ${familyMemberships.length === 1 ? "period" : "periods"}`,
+          `${current.length} current`,
+        ]}
+        status="Effective-dated"
+        style={{ marginTop: 12 }}
+      >
         <VersionHistory entries={familyMemberships} renderEntry={m => {
           const party = partyById[m.party_id];
           return (
@@ -945,7 +1027,7 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
             </>
           );
         }} />
-      </div>
+      </SummaryRow>
     </div>
   );
 }
