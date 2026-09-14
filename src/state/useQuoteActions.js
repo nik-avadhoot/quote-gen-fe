@@ -478,6 +478,7 @@ export function useQuoteActions(st){
       return[...prev,{
         id,matCode,product:"",itemType,setCode,setCodeAssumed,constructionCode:"",setAutoFill:true,
         L:"",W:"",H:"",ups:1,
+        printing_technology:"",number_of_colours:"",
         boxType:itemType==="Box"?"RSC":"PP",
         spec_bs:"",spec_bct:"",nosPerSet:1,
         salesMOQ:"",volume:"",marginOverride:"",remarks:"",

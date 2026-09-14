@@ -71,6 +71,9 @@ export const DEFAULT_FREIGHT={
   Kolkata:{Nagpur:4.0,Pune:4.2,Kolkata:1.5,Haldia:2.0,Howrah:1.5,Guwahati:3.5,Delhi:4.0,Ahmedabad:5.0,Hyderabad:4.5},
 };
 export const BOX_TYPES=["RSC","Die-R","Die-S","HRSC-L","HRSC-R","HRSC-O","Board","PP","Custom"];
+// Controlled frontend vocabulary approved for printing specification capture.
+// These values are descriptive SKU metadata only; no pricing rule is inferred.
+export const PRINTING_TECHNOLOGIES=["Flexo","CMYK","Offset"];
 export const INIT_SPEC={
   client:"",product:"",material_code:"",sector:"",
   L:"",W:"",H:"",dimType:"ID",boxType:"RSC",ply:5,ups:1,

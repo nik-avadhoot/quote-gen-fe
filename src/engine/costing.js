@@ -323,6 +323,10 @@ export const buildSpecFromRow=(row,constEntry,prof)=>{
     // 3) construction library boxType for Box rows, 4) RSC fallback.
     boxType:row.boxType||(isPartType?"PP":(constEntry.boxType||"RSC")),
     ply:constEntry.ply||5,ups:row.ups||1,
+    // Row-owned descriptive SKU metadata. Preserve 0 colours distinctly from blank;
+    // neither field participates in calculation until an approved mechanism consumes it.
+    printing_technology:row.printing_technology??"",
+    number_of_colours:row.number_of_colours??"",
     flute_F1:constEntry.flute_F1||"B",flute_F2:constEntry.flute_F2||"A",
     layers:constEntry.layers||{TOP:{code:"",gsm:""},F1:{code:"",gsm:""},L1:{code:"",gsm:""},F2:{code:"",gsm:""},L2:{code:"",gsm:""}},
     board_gsm:constEntry.board_gsm||row.board_gsm||"",

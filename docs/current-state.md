@@ -59,6 +59,10 @@ record—not another documentation reorganisation.
   worktree is implementation evidence, not deployment or Product Owner closure.
 - The U4 My Batches read-only increment is locally and fixture verified; authenticated-live browser
   verification and Product Owner validation remain deferred in its record.
+- The local Costing/Batch Builder bridge carries Printing Technology and number of colours as
+  row-owned descriptive metadata. They remain outside shared Construction confirmation and every
+  calculation path; governed persistence, Send snapshots, exports, and SKU Master search remain
+  follow-up work.
 - S10 and later S-tranche work are not made current merely by appearing in an older roadmap.
 
 ## Durable guardrails

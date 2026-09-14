@@ -320,6 +320,10 @@ export function useCostingBatchBridge(st){
     const rowPatch={
       // H and ups are untouched: autoCalcPPDims derives only L and W.
       L:_dimBack("L"),W:_dimBack("W"),H:spec.H||"",ups:spec.ups||1,
+      // Printing specification belongs to this SKU row, never to shared Construction.
+      // Nullish fallback preserves an explicit 0-colour value separately from blank.
+      printing_technology:spec.printing_technology??"",
+      number_of_colours:spec.number_of_colours??"",
       // G5: SKU/Product is editable in REVIEW and must be pushed back so the grid reflects the correction
       product:spec.product||"",
       // B1: nosPerSet was missing — a Maker correcting partition count in deep-dive lost it on Calculate All
@@ -376,7 +380,7 @@ export function useCostingBatchBridge(st){
     _mark("product",rowPatch.product===spec.product);
     _mark("qtyPerSet",rowPatch.nosPerSet===spec.qtyPerSet);
     _mark("skuType",rowPatch.glassSKUType===spec.skuType);
-    ["board_gsm","spec_bs","spec_bct","spec_ect","reqBoxWt","salesMOQ","volume"]
+    ["printing_technology","number_of_colours","board_gsm","spec_bs","spec_bct","spec_ect","reqBoxWt","salesMOQ","volume"]
       .forEach(k=>_mark(k,rowPatch[k]===spec[k]));
     // L/W follow _dimBack: a typed value is always carried, and a BLANK dim is
     // formalised only when nothing derives into it - otherwise the row goes on
@@ -731,6 +735,10 @@ export function useCostingBatchBridge(st){
       constructionCode:constrCode,
       L:spec.L||"",W:spec.W||"",H:spec.H||"",
       ups:spec.ups||1,
+      // Row-owned descriptive metadata; deliberately outside Construction matching
+      // and calculation. Preserve 0 colours distinctly from an unresolved blank.
+      printing_technology:spec.printing_technology??"",
+      number_of_colours:spec.number_of_colours??"",
       boxType:spec.boxType||"RSC",
       spec_bs:spec.spec_bs||"",
       spec_bct:spec.spec_bct||"",

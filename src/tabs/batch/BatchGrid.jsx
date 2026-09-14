@@ -20,7 +20,7 @@
 // Never reflow this file, never run Prettier or eslint --fix over it.
 // ═══════════════════════════════════════════════════════════════════════════
 import { Fragment, useMemo, useRef } from "react";
-import { BOX_TYPES } from "../../data/defaults.js";
+import { BOX_TYPES, PRINTING_TECHNOLOGIES } from "../../data/defaults.js";
 import { buildSpecFromRow, checkSpecCompliance } from "../../engine/costing.js";
 import { isPPType, sameSetCode } from "../../engine/rowType.js";
 import { findDivergence, isDiverged } from "../../lib/overrideDivergence.js";
@@ -34,7 +34,7 @@ import { durableRowToLocalPreview } from "../../lib/batchRowModel.js";
 import { C, T, mono, sans } from "../../theme.js";
 import { useAppState } from "../../state/AppStateContext.js";
 
-const BASE_GRID_COLUMN_COUNT=35;
+const BASE_GRID_COLUMN_COUNT=37;
 
 function DeliverySectionHeader({ section, colSpan, onManage, onWorkspace }) {
   const itemCount = deliverySectionItemCount(section);
@@ -238,9 +238,9 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                       "SKU / Product":{left:140, width:118},
                       "SET Role":{left:258, width:78, borderRight:true},
                     };
-                    const CENTER_COLS=["L","W","H","Ups","Nos/Set","Std GSM","Std BS","Std BCT","Std ECT","Std Cobb","Std Box Wt","Sales MOQ","Vol/mo","Waste%","Conv Rs/kg","Margin%","Sheet Wt","Rate/SET (₹)","MOQ","Rate/kg (₹)","Calc GSM","Calc BS","Est Box Wt"];
+                    const CENTER_COLS=["L","W","H","Ups","Colours","Print Tech","Nos/Set","Std GSM","Std BS","Std BCT","Std ECT","Std Cobb","Std Box Wt","Sales MOQ","Vol/mo","Waste%","Conv Rs/kg","Margin%","Sheet Wt","Rate/SET (₹)","MOQ","Rate/kg (₹)","Calc GSM","Calc BS","Est Box Wt"];
                     return ["St","#","Mat Code","SKU / Product","SET Role","SET Code","Nos/Set","Box Type","Paper Construction","L","W","H","Ups",
-                      "Std GSM","Std BS","Std BCT","Std ECT","Std Cobb","Std Box Wt",
+                      "Colours","Print Tech","Std GSM","Std BS","Std BCT","Std ECT","Std Cobb","Std Box Wt",
                       "Sales MOQ","Vol/mo","Waste%","Conv Rs/kg","Margin%","Remarks",
                       "Sheet Wt","Final Rate (₹)","Rate/SET (₹)","MOQ","Rate/kg (₹)","Calc GSM","Calc BS","Est Box Wt","All Spec OK"
                     ].map(h=>{
@@ -559,6 +559,30 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                                     color:dimInvalid?C.red:undefined}}/>}
                           </td>);
                       })}
+                      {/* Descriptive SKU printing specification — row-owned and
+                          intentionally non-calculation-driving. Placement is fixed
+                          after Ups and before the standard output specifications. */}
+                      <td style={{padding:"3px 4px",textAlign:"center",minWidth:54}}>
+                        <input type="number" min="0" step="1" value={row.number_of_colours??""}
+                          aria-label="Number of colours"
+                          onChange={e=>{
+                            const raw=e.target.value;
+                            if(raw===""){upd("number_of_colours","");return;}
+                            if(/^\d+$/.test(raw))upd("number_of_colours",+raw);
+                          }}
+                          style={{width:44,padding:"2px 4px",border:`1px solid ${C.border}`,
+                            borderRadius:3,fontSize:10,textAlign:"center",fontFamily:mono}}/>
+                      </td>
+                      <td style={{padding:"3px 4px",textAlign:"center",minWidth:72}}>
+                        <select value={row.printing_technology??""}
+                          aria-label="Print technology"
+                          onChange={e=>upd("printing_technology",e.target.value)}
+                          style={{width:68,padding:"2px 3px",border:`1px solid ${C.border}`,
+                            borderRadius:3,fontSize:9,background:C.white,color:C.slate}}>
+                          <option value="">—</option>
+                          {PRINTING_TECHNOLOGIES.map(technology=><option key={technology} value={technology}>{technology}</option>)}
+                        </select>
+                      </td>
                       {/* Std specs: Board GSM, BS, BCT, ECT, Cobb, Box Wt */}
                       {["board_gsm","spec_bs","spec_bct","spec_ect"].map(k=>(
                         <td key={k} style={{padding:"3px 4px",textAlign:"center",minWidth:50}}>

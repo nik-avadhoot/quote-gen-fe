@@ -326,6 +326,11 @@ available in Costing and Batch Entry, included in Send snapshots, carried into e
 in SKU Master. They may appear in an expanded grid sub-row if the main Batch row would become too
 wide.
 
+The transitional local frontend places `Colours` and `Print Tech` directly after `Ups` and before
+`Std GSM` in Batch Entry. They are row-owned fields in both Costing→Batch Send and explicit
+REVIEW→Batch Push, and return to Costing on Deep Dive. They remain outside shared Construction
+confirmation and do not invalidate or influence a calculation.
+
 This direction amends the earlier deferral of colour-count capture. The new rule is:
 
 > Number of colours is captured as specification data. It does not by itself create a mechanical

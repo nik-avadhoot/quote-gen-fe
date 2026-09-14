@@ -13,7 +13,7 @@
 // reads, and the waste/conv override inputs Case 4 depends on. Extraction here
 // is STRUCTURAL ONLY — no behaviour changed.
 // ═══════════════════════════════════════════════════════════════════════════
-import { BOX_TYPES } from "../../data/defaults.js";
+import { BOX_TYPES, PRINTING_TECHNOLOGIES } from "../../data/defaults.js";
 import { isPPType, sameSetCode } from "../../engine/rowType.js";
 import { Btn, Inp, SH, Sel } from "../../ui/primitives.jsx";
 import { inputSt } from "../../ui/styles.js";
@@ -276,35 +276,31 @@ export default function SpecForm(){
           <div>
             <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>Colours</div>
             <input type="number" min="0" step="1" value={spec.number_of_colours??""}
-              disabled={!!activeBatchRowId} aria-label="Number of colours"
+              aria-label="Number of colours"
               title={activeBatchRowId
-                ?"Printing specification cannot be pushed to a Batch row yet"
-                :"Saved in the Costing draft; backend persistence follows separately"}
+                ?"Row-owned printing specification; Push applies it to this Batch row"
+                :"Saved in the Costing draft and carried into Batch Entry on Send"}
               onChange={e=>{
                 const raw=e.target.value;
                 if(raw===""){s("number_of_colours","");return;}
                 if(/^\d+$/.test(raw))s("number_of_colours",+raw);
               }}
               style={{...inputSt,width:"100%",boxSizing:"border-box",textAlign:"center",
-                background:activeBatchRowId?"#F5F5F5":C.white,
-                cursor:activeBatchRowId?"not-allowed":"text"}}/>
+                background:C.white,cursor:"text"}}/>
           </div>
           <div>
             <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>Print Tech</div>
             <select value={spec.printing_technology??""}
-              disabled={!!activeBatchRowId} aria-label="Print technology"
+              aria-label="Print technology"
               title={activeBatchRowId
-                ?"Printing specification cannot be pushed to a Batch row yet"
-                :"Saved in the Costing draft; backend persistence follows separately"}
+                ?"Row-owned printing specification; Push applies it to this Batch row"
+                :"Saved in the Costing draft and carried into Batch Entry on Send"}
               onChange={e=>s("printing_technology",e.target.value)}
               style={{...inputSt,width:"100%",boxSizing:"border-box",
                 color:spec.printing_technology?C.slate:C.slateL,
-                background:activeBatchRowId?"#F5F5F5":C.white,
-                cursor:activeBatchRowId?"not-allowed":"pointer"}}>
+                background:C.white,cursor:"pointer"}}>
               <option value="">— select —</option>
-              <option value="Flexo">Flexo</option>
-              <option value="CMYK">CMYK</option>
-              <option value="Offset">Offset</option>
+              {PRINTING_TECHNOLOGIES.map(technology=><option key={technology} value={technology}>{technology}</option>)}
             </select>
           </div>
         </div>
