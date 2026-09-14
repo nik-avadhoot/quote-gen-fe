@@ -15,7 +15,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { BOX_TYPES } from "../../data/defaults.js";
 import { isPPType, sameSetCode } from "../../engine/rowType.js";
-import BoxDieline from "../../components/BoxDieline.jsx";
 import { Btn, Inp, SH, Sel } from "../../ui/primitives.jsx";
 import { inputSt } from "../../ui/styles.js";
 import { useAppState } from "../../state/AppStateContext.js";
@@ -283,25 +282,6 @@ export default function SpecForm(){
           </div>
         </div>
       </div>
-      {/* ── Live Die-line Preview ── */}
-      {(spec.L&&spec.W&&spec.H)&&(
-      <div style={{background:"#FAFAFA",borderRadius:6,border:"1px solid #E8E0D4",padding:"8px 10px",marginBottom:4}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-          <span style={{fontSize:9,fontWeight:700,color:"#9A7B4A",textTransform:"uppercase",letterSpacing:"0.07em"}}>
-            Die-Line Preview
-          </span>
-          <span style={{fontSize:8,color:"#AAA"}}>
-            {spec.boxType==="Die-R"||spec.boxType==="Die-S"
-              ? "⚠ Approximation only — use customer KLD for die-cut SKUs"
-              : `Flat blank: ${Math.round(2*(+spec.L||0)+(2*(+spec.W||0))+Math.max((+spec.W||0)*0.1,15))}×${Math.round((+spec.H||0)+2*Math.min((+spec.W||0)/2,(+spec.H||0)))} mm (RSC est.)`
-            }
-          </span>
-        </div>
-        <div style={{overflowX:"auto"}}>
-          <BoxDieline L={spec.L} W={spec.W} H={spec.H}
-            boxType={spec.boxType||"RSC"} dimType={spec.dimType} ups={spec.ups}/>
-        </div>
-      </div>)}
       <div style={card}>
         <SH title="Paper Construction"/>
         <div style={{display:"grid",gridTemplateColumns:"72px 1fr 80px 52px",gap:"3px 5px",
