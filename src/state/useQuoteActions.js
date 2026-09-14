@@ -13,17 +13,19 @@
 // Extracted verbatim from QuotationApp.jsx (Phase 4). The bodies below are
 // byte-identical to the monolith; only the surrounding closure changed.
 // ═══════════════════════════════════════════════════════════════════════════
-import { buildSpecFromRow, calcCosting, checkSpecCompliance } from "../engine/costing.js";
+import { buildSpecFromRow, calcCostingOutcome, checkSpecCompliance, freightBlockerText } from "../engine/costing.js";
+import { isFeatureEnabled } from "../lib/featureFlags.js";
 import { resolveField, resolveInterest } from "../engine/resolveAuthority.js";
+import { materializeEffectiveRates } from "../engine/rateMaster.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
-import { findDuplicate } from "../lib/constructionIdentity.js";
+import { findDuplicate, isUsableConstruction } from "../lib/constructionIdentity.js";
 import { parseImportedExcel } from "../export/importExcel.js";
 import { toB64 } from "../export/toB64.js";
 import { C } from "../theme.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useQuoteActions(st){
-  const { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchProfile, batchResults, batchRows, boxTrim, constructionLib, freight, items, locations, missing, partitionsMaster, r, rates, restoreRef, sectors, setAiNotes, setAutoCodeSeq, setBatchResults, setBatchRows, setConstructionLib, setItems, setSavedQuotes, setTab, setTemplateB64, setTemplateLoaded, showToast, spec } = st;
+  const { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchFreight, batchProfile, batchResults, batchRows, boxTrim, constructionLib, freight, items, locations, missing, partitionsMaster, r, rates, restoreRef, sectors, setAiNotes, setAutoCodeSeq, setBatchFreight, setBatchResults, setBatchRows, setConstructionLib, setItems, setQuoteView, setSavedQuotes, setTab, setTemplateB64, setTemplateLoaded, showToast, spec } = st;
 
 
   // ── BACKUP & RESTORE ──────────────────────────────────────────────────────
@@ -215,7 +217,7 @@ export function useQuoteActions(st){
   // standalone and auto-dims are disabled — user must enter L/W manually.
   const calcBatchRow=(row)=>{
     const constEntry=constructionLib.find(c=>c.code===row.constructionCode);
-    if(!constEntry)return null;
+    if(!constEntry||!isUsableConstruction(constEntry))return null;
     const dimRow=autoCalcPPDims(row);
     const isPP=isPPType(dimRow.itemType); // R-2
     // Unified waste/conv: single column interpreted by row type
@@ -254,7 +256,12 @@ export function useQuoteActions(st){
     // canonical Batch figures from buildSpecFromRow, and calcCosting resolves
     // freight as override-else-matrix (getFreightRate, engine/costing.js:29-32).
     applyAddOns(sp,row); // R-1: single injection point
-    return calcCosting(sp,rates,freight,boxTrim);
+    // S8(a). The second application boundary, and it injects the SAME flag as
+    // the Costing screen so the two surfaces cannot price freight differently -
+    // which is the whole reason the resolver exists. Returns the outcome pair;
+    // calculateAll splits it so batchResults keeps holding a bare result.
+    return calcCostingOutcome(sp,materializeEffectiveRates(rates),freight,boxTrim,
+      {authorityV2:isFeatureEnabled("freight_authority_v2")});
   };
 
   const calculateAll=()=>{
@@ -265,9 +272,26 @@ export function useQuoteActions(st){
       showToast(`⚠️ Confirm SET Codes first: ${list}`,'error',5000);
       return;
     }
-    const newResults={};
-    batchRows.forEach(row=>{newResults[row.id]=calcBatchRow(row);});
+    const incompleteConstructions=batchRows.filter(row=>{
+      const entry=constructionLib.find(c=>c.code===row.constructionCode);
+      return entry&&!isUsableConstruction(entry);
+    });
+    if(incompleteConstructions.length>0){
+      const list=incompleteConstructions.map(row=>
+        `Row ${batchRows.indexOf(row)+1}${row.matCode?` [${row.matCode}]`:""}`).join(", ");
+      showToast(`❌ Incomplete construction — paper grade/BF and positive GSM are required on every structural layer: ${list}`,
+        'error',7000);
+      return;
+    }
+    const newResults={},newFreight={};
+    batchRows.forEach(row=>{
+      // Destructured on the line it is created: the wrapper never enters state.
+      const outcome=calcBatchRow(row);
+      newResults[row.id]=outcome?outcome.result:null;
+      newFreight[row.id]=outcome?outcome.freightResolution:null;
+    });
     setBatchResults(newResults);
+    setBatchFreight(newFreight);
     setBatchRows(prev=>prev.map(r=>({...r,status:newResults[r.id]?"draft":"incomplete"})));
   };
 
@@ -275,7 +299,7 @@ export function useQuoteActions(st){
     const dimRow=autoCalcPPDims(row);
     if(!dimRow.L||!dimRow.W||!row.constructionCode)return"incomplete";
     const constEntry=constructionLib.find(c=>c.code===row.constructionCode);
-    if(!constEntry)return"incomplete";
+    if(!constEntry||!isUsableConstruction(constEntry))return"incomplete";
     // Plate/Partition rows are flat pieces — H not required
     const isFlatPiece=isPPType(row.itemType); // R-2
     if(!isFlatPiece&&!row.H)return"incomplete";
@@ -294,6 +318,17 @@ export function useQuoteActions(st){
   const sendAllToQuoteItems=()=>{
     if(!batchProfile.plant||!batchProfile.delivery){
       showToast("❌ Select Avadhoot Plant and Client Plant in the Batch Profile before sending to Quote Items",'error',5000);
+      return;
+    }
+    const incompleteConstructions=batchRows.filter(row=>{
+      const entry=constructionLib.find(c=>c.code===row.constructionCode);
+      return entry&&!isUsableConstruction(entry);
+    });
+    if(incompleteConstructions.length>0){
+      const list=incompleteConstructions.map(row=>
+        `Row ${batchRows.indexOf(row)+1}${row.matCode?` [${row.matCode}]`:""}`).join(", ");
+      showToast(`❌ Cannot send: incomplete construction on ${list}. Select a construction with grade/BF and positive GSM on every structural layer.`,
+        'error',7000);
       return;
     }
     // Fix 5: client-mismatch guard — if Quote Items already has items for a different client, warn
@@ -344,7 +379,13 @@ export function useQuoteActions(st){
     const skippedRows=[]; // Fix 4: collect skipped row numbers for toast
     batchRows.forEach((row,ri)=>{
       const res=batchResults[row.id];
-      if(!res){skippedRows.push(`Row ${ri+1}${row.matCode?` [${row.matCode}]`:""}`);return;}
+      if(!res){
+        // S8(a). The row was already refused - Calculate All produced no result,
+        // so it cannot become a Quote Item. What changes is that the Maker is
+        // told WHY, from the same resolution that refused it. No recomputation.
+        const _fr=batchFreight?.[row.id];
+        const _why=_fr&&_fr.source==="unresolved"?` — ${freightBlockerText(spec,_fr)}`:"";
+        skippedRows.push(`Row ${ri+1}${row.matCode?` [${row.matCode}]`:""}${_why}`);return;}
       const constEntry=constructionLib.find(c=>c.code===row.constructionCode);
       if(!constEntry){skippedRows.push(`Row ${ri+1}${row.matCode?` [${row.matCode}]`:""} (no construction)`);return;}
       const dimRow=autoCalcPPDims(row); // A1-01: use SET-Code-aware dim resolution
@@ -389,6 +430,7 @@ export function useQuoteActions(st){
     if(skippedRows.length>0){
       showToast(`⚠️ ${skippedRows.length} row(s) skipped (no result): ${skippedRows.join(", ")}`,'error',7000);
     }
+    setQuoteView("working-items");
     setTab("items");
   };
 
@@ -511,6 +553,7 @@ export function useQuoteActions(st){
     const f=e.target.files[0];if(!f)return;
     try{const parsed=await parseImportedExcel(f,rates,freight,boxTrim);
       setItems(prev=>[...prev,...parsed]);
+      setQuoteView("working-items");
       setTab("items");setAiNotes(`✅ Imported ${parsed.length} item(s) from Excel.`);
     }catch(err){setAiNotes("❌ Import failed: "+err.message);}
     e.target.value="";

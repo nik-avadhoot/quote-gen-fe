@@ -2,8 +2,7 @@
 // src/engine/calcDefaults.js
 //
 // The application's mirror of ONE approved `calculation_default_versions` row
-// (Family D, S5-1) plus the supplier credit cost from `rate_set_versions`
-// (CDM-41, S7-3). Pure data, no side effects, no React.
+// (Family D, S5-1). Pure data, no side effects, no React.
 //
 // WHY THIS FILE EXISTS AT ALL. The frontend has no Supabase client - every call
 // goes through the Flask backend, and the backend exposes no route for any
@@ -18,14 +17,7 @@
 // `versionLabel` becomes a real `calculation_default_version_id`. Until then it
 // is the honest statement of what the app is actually using.
 //
-// THE ONE VALUE THAT IS NOT DUPLICATED. Supplier credit cost is derived from
-// `CREDIT_PCT` in data/defaults.js rather than restated, because restating it
-// would create exactly the two-answers problem this slice exists to remove.
-// 0.015 * 100 is 1.5 exactly in IEEE-754 - asserted by the resolver fixtures, so
-// the conversion cannot rot silently.
 // ═══════════════════════════════════════════════════════════════════════════
-import { CREDIT_PCT } from '../data/defaults.js';
-
 export const CALC_DEFAULTS = {
   // Provenance. A real id once the Pricing Basis Release is resolvable.
   versionLabel: 'app-mirror/amendment-01',
@@ -51,10 +43,4 @@ export const CALC_DEFAULTS = {
 
   // ── engine constants that Send has to freeze with the rest (CDM-22) ──
   roundingStep: 0.05,
-
-  // ── supplier paper-credit cost (CDM-41, Amendment 01 A-05) ──
-  // A DIFFERENT number on a different tier from customer interest: what we pay a
-  // mill for taking credit, entering the Effective Paper Rate as an input cost.
-  // Percent form, because that is how the Rate Master presents and stores it.
-  supplierCreditCostPct: +(CREDIT_PCT * 100).toFixed(6),
 };

@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState } from "react";
 import { buildBlanketConfirm, gyAffected } from "../lib/blanketConfirm.js";
-import { CREDIT_PCT } from "../data/defaults.js";
+import { establishEffectiveMaterialRate, resolveSupplierCreditCost } from "../engine/rateMaster.js";
 import { useAppState } from "../state/AppStateContext.js";
 import { C, mono, sans } from "../theme.js";
 
@@ -184,8 +184,8 @@ export default function RateMasterTab(){
               textAlign:["Paper Price","Paper Credit %","Discount","Freight","Eff Rate"].includes(h)?"center":"left"}}>{h}</th>))}
         </tr></thead>
         <tbody>{rates.map((row,i)=>{
-          const gCreditPct=(row.interest!=null&&row.interest!=='')?+row.interest/100:CREDIT_PCT;
-          const eff=row.price?+(row.price+row.price*gCreditPct-(row.disc||0)+(row.freight||0)).toFixed(2):0;
+          const supplierCreditPct=resolveSupplierCreditCost({rateEntry:row}).value;
+          const eff=row.price?+establishEffectiveMaterialRate(row).toFixed(2):0;
           const fld=(k,w,step=0.5)=>role==="admin"
             ?<input value={row[k]??0} type="number" step={step}
                onChange={e=>{setRates(prev=>prev.map((r,j)=>j===i?{...r,[k]:+e.target.value}:r));touchRateDate();}}
@@ -209,7 +209,7 @@ export default function RateMasterTab(){
             <td style={{padding:"4px 8px",textAlign:"center"}}>{fld("disc",55,0.25)}</td>
             <td style={{padding:"4px 8px",textAlign:"center"}}>{fld("freight",52,0.25)}</td>
             <td style={{padding:"4px 8px",textAlign:"center",fontWeight:700,color:C.green,fontFamily:mono,fontSize:12}}
-              title={`${row.price} + credit(${row.interest??1.5}%)${(row.price*gCreditPct).toFixed(2)} - disc${row.disc||0} + fr${row.freight||0}`}>
+              title={`${row.price} + credit(${supplierCreditPct}%)${(row.price*supplierCreditPct/100).toFixed(2)} - disc${row.disc||0} + fr${row.freight||0}`}>
               {eff}</td>
             {role==="admin"&&<td style={{padding:"3px 4px",textAlign:"center"}}>
               <button onClick={()=>{

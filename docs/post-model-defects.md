@@ -137,6 +137,12 @@ concludes it was dropped. Full entry: **D-26** in
 
 ### PM-5 — the add-on pin control LOOKS disabled at the limit and silently destroys a pin
 
+> **Resolved locally 2026-09-13.** The third unpinned control is now genuinely disabled when two
+> columns are pinned, and the state transition independently refuses a third pin instead of evicting
+> the oldest one. Existing pins remain actionable so the user can make room deliberately. A visible
+> checkmark plus `aria-pressed` distinguishes pinned state without relying on colour alone. Focused
+> fixtures cover the limit, refusal, unpin and re-pin journey.
+
 **Not a styling note. A control that reads as unavailable and, when clicked, discards something the
 user cannot see being discarded.**
 
@@ -425,4 +431,3 @@ distinguishes them today.
 > profile (`useCostingBatchBridge.js:673-675`), silently converting a set value into an inherited
 > one and dropping the grid's override marker. That has its own proposal and is not covered by this
 > ruling.
-

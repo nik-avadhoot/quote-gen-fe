@@ -6,12 +6,16 @@ import FreightTab from "./tabs/FreightTab.jsx";
 import RateMasterTab from "./tabs/RateMasterTab.jsx";
 import DefaultsTab from "./tabs/DefaultsTab.jsx";
 import ConstructionLibTab from "./tabs/ConstructionLibTab.jsx";
-import QuoteItemsTab from "./tabs/QuoteItemsTab.jsx";
+import QuotesWorkspace from "./tabs/QuotesWorkspace.jsx";
+import QuoteCatalogueScreen from "./tabs/QuoteCatalogueScreen.jsx";
+import MyBatchesScreen from "./tabs/MyBatchesScreen.jsx";
 import CostingTab from "./tabs/costing/CostingTab.jsx";
 import BatchEntryTab from "./tabs/batch/BatchEntryTab.jsx";
 import UserManagementTab from "./tabs/UserManagementTab.jsx";
 import ProducingPlantsScreen from "./tabs/ProducingPlantsScreen.jsx";
+import ConstructionLibraryScreen from "./tabs/ConstructionLibraryScreen.jsx";
 import CustomerFamiliesScreen from "./tabs/CustomerFamiliesScreen.jsx";
+import PricingBasisScreen from "./tabs/PricingBasisScreen.jsx";
 
 // ── Shell chrome (Phase 8 refactor) ──────────────────────────────────────
 import Sidebar from "./ui/Sidebar.jsx";
@@ -45,7 +49,7 @@ export default function App(){
 // useAppState() directly. Do not reintroduce prop-drilling from here.
 function QuotationApp(){
   const st = useAppState();
-  const { profile, role, setShowChangePassword, setShowProfile,
+  const { profile, setShowChangePassword, setShowProfile,
     showChangePassword, showProfile, showToast, tab } = st;
 
   // ── MAIN RENDER ───────────────────────────────────────────────────────────
@@ -58,15 +62,19 @@ function QuotationApp(){
         <TopBar/>
         <div style={{flex:1,overflow:"hidden",position:"relative"}}>
           {tab==="costing"&&<CostingTab/>}
-          {tab==="items"&&<QuoteItemsTab/>}
+          {tab==="items"&&<QuotesWorkspace/>}
+          {tab==="approvalinbox"&&<QuoteCatalogueScreen mode="inbox"/>}
+          {tab==="mybatches"&&<MyBatchesScreen/>}
           {tab==="batch"&&<BatchEntryTab/>}
           {tab==="constrlib"&&<ConstructionLibTab/>}
           {tab==="rates"&&<RateMasterTab/>}
           {tab==="defaults"&&<DefaultsTab/>}
           {tab==="freight"&&<FreightTab/>}
-          {tab==="users"&&role==="admin"&&<UserManagementTab showToast={showToast}/>}
+          {tab==="users"&&hasCapability(profile,"administer_users")&&<UserManagementTab showToast={showToast}/>}
           {tab==="plants"&&isFeatureEnabled("u1_producing_plants")&&<ProducingPlantsScreen/>}
           {tab==="families"&&isFeatureEnabled("u1_customer_families")&&hasCapability(profile,"read_party_master")&&<CustomerFamiliesScreen showToast={showToast}/>}
+          {tab==="conlib"&&isFeatureEnabled("u2_construction_library")&&hasCapability(profile,"read_construction_library")&&<ConstructionLibraryScreen/>}
+          {tab==="pricingbasis"&&isFeatureEnabled("u3_pricing_basis")&&<PricingBasisScreen/>}
         </div>
       </div>
     </div>

@@ -29,6 +29,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { existsSync, readFileSync } from 'node:fs';
 import { calcCosting } from '../src/engine/costing.js';
+import { materializeEffectiveRates } from '../src/engine/rateMaster.js';
 import { INIT_SPEC, DEFAULT_RATES, DEFAULT_FREIGHT, DEFAULT_BOX_TRIM_DATA }
   from '../src/data/defaults.js';
 
@@ -74,7 +75,7 @@ const PART_L = { ...INIT_SPEC, L:360, W:240, H:"", boxType:"PP", ply:3, ups:2,
   convRatePP:12.5, margin:8, interest:0.5, rowType:"Part-L" };
 
 const arm = (wastePP) => {
-  const r = calcCosting({ ...PART_L, wastePP }, rates.value, freight.value, boxTrim.value);
+  const r = calcCosting({ ...PART_L, wastePP }, materializeEffectiveRates(rates.value), freight.value, boxTrim.value);
   if (!r) throw new Error(`calcCosting returned null for wastePP=${wastePP}`);
   return r;
 };

@@ -39,9 +39,11 @@ import { runMutation } from "../lib/runMutation.js";
 import {
   familyNameIsBlank,
   proposeFamilyBody, createProspectBody, updateFamilyNameBody, approveFamilyBody,
-  addAliasBody, updateAliasBody, retireAliasBody, mergeBody, reassignBody, graduateBody,
+  addFamilySectorBody, addAliasBody, updateAliasBody, retireAliasBody, mergeBody,
+  reassignBody, graduateBody,
   mergeConfirmMessage, reassignConfirmMessage, graduateConfirmMessage, retireAliasConfirmMessage,
   effectiveDatePrecedesMembership,
+  groupExternalReferencesByParty, externalRefKindLabel,
 } from "../lib/customerFamilyActions.js";
 import { updatePartyBody } from "../lib/partyActions.js";
 import {
@@ -64,7 +66,7 @@ const labelSt = { fontSize: 10, fontWeight: 700, color: C.slateM, textTransform:
 
 export default function CustomerFamiliesScreen({ showToast }) {
   const { isActive, profile } = useAuth();
-  const [state, setState] = useState({ status: "loading", families: [], aliases: [], memberships: [], parties: [], locations: [], locationVersions: [] });
+  const [state, setState] = useState({ status: "loading", families: [], aliases: [], memberships: [], parties: [], locations: [], locationVersions: [], externalReferences: [], familySectors: [], sectors: [] });
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [selectedId, setSelectedId] = useState(null);
@@ -88,7 +90,10 @@ export default function CustomerFamiliesScreen({ showToast }) {
         memberships: data.memberships || [],
         parties: data.parties || [],
         locations: data.locations || [],
+        externalReferences: data.external_references || [],
         locationVersions: data.location_versions || [],
+        familySectors: data.family_sectors || [],
+        sectors: data.sectors || [],
       });
       if (selectAfter !== undefined) setSelectedId(selectAfter);
     } else if (outcome.kind === "access-denied") {
@@ -163,18 +168,20 @@ export default function CustomerFamiliesScreen({ showToast }) {
           <EmptyState title="Select a family" />
         ) : (
           <FamilyDetail key={selected.id} family={selected} aliases={state.aliases} memberships={state.memberships}
-            parties={state.parties} families={state.families} locations={state.locations}
-            locationVersions={state.locationVersions} profile={profile}
+            parties={state.parties} families={state.families} locations={state.locations} externalReferences={state.externalReferences}
+            locationVersions={state.locationVersions} familySectors={state.familySectors}
+            sectors={state.sectors} profile={profile}
             showToast={showToast} onReload={load} openModal={setModal} />
         )}
       </div>
       {modal?.kind === "propose" && (
-        <ProposeFamilyModal showToast={showToast}
+        <ProposeFamilyModal sectors={state.sectors} showToast={showToast}
           onClose={() => setModal(null)}
           onDone={(id) => { setModal(null); load(id); }} />
       )}
       {modal?.kind === "prospect" && (
-        <CreateProspectModal families={state.families} showToast={showToast}
+        <CreateProspectModal families={state.families} sectors={state.sectors}
+          familySectors={state.familySectors} showToast={showToast}
           onClose={() => setModal(null)}
           onDone={(familyId) => { setModal(null); load(familyId); }} />
       )}
@@ -308,8 +315,9 @@ function ConfirmModal({ message, confirmLabel, danger, onConfirm, onClose }) {
   );
 }
 
-function ProposeFamilyModal({ onClose, onDone, showToast }) {
+function ProposeFamilyModal({ sectors, onClose, onDone, showToast }) {
   const [name, setName] = useState("");
+  const [sectorId, setSectorId] = useState("");
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   // D3 - a blank or whitespace-only name is refused here, visibly. The guard in
@@ -318,9 +326,9 @@ function ProposeFamilyModal({ onClose, onDone, showToast }) {
   // name regardless of what any client sends.
   const blank = familyNameIsBlank(name);
   const submit = async () => {
-    if (blank) { setTouched(true); return; }
+    if (blank || !sectorId) { setTouched(true); return; }
     setBusy(true);
-    const data = await runMutation("/masters/customer-families", proposeFamilyBody(name),
+    const data = await runMutation("/masters/customer-families", proposeFamilyBody(name, sectorId),
       { showToast, successMessage: `"${name.trim()}" proposed.` });
     setBusy(false);
     if (data) onDone(data.id);
@@ -337,8 +345,20 @@ function ProposeFamilyModal({ onClose, onDone, showToast }) {
             A Family name is required — it cannot be blank or only spaces.
           </div>
         )}
+        <label style={labelSt}>First Sector</label>
+        <Sel value={sectorId} onChange={setSectorId}
+          opts={(sectors || []).filter(s => s.status === "active").map(s => ({
+            v: s.id, l: `${s.sector_code} — ${s.name}`,
+          }))}
+          ph="Select the Family's first Sector…" />
+        {touched && !sectorId && <div style={{ marginTop: 6, fontSize: 11, color: C.red }}>
+          Every Customer Family requires at least one Sector.
+        </div>}
+        <div style={{ marginTop: 6, fontSize: 10, color: C.slateL, lineHeight: 1.45 }}>
+          More Sectors can be attached from the Family workspace after proposal.
+        </div>
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-          <Btn ch={busy ? "Proposing…" : "Propose"} full disabled={busy || blank} onClick={submit} />
+          <Btn ch={busy ? "Proposing…" : "Propose"} full disabled={busy || blank || !sectorId} onClick={submit} />
           <Btn ch="Cancel" v="secondary" onClick={onClose} disabled={busy} />
         </div>
       </div>
@@ -346,17 +366,25 @@ function ProposeFamilyModal({ onClose, onDone, showToast }) {
   );
 }
 
-function CreateProspectModal({ families, onClose, onDone, showToast }) {
+function CreateProspectModal({ families, sectors, familySectors, onClose, onDone, showToast }) {
   const [displayName, setDisplayName] = useState("");
   const [familyId, setFamilyId] = useState("");
+  const [sectorId, setSectorId] = useState("");
   const [busy, setBusy] = useState(false);
   const options = families.filter(f => f.status !== "retired")
     .map(f => ({ v: f.id, l: `${f.group_customer_code} — ${f.name}` }));
+  const selectedFamilySectorIds = familySectors
+    .filter(item => String(item.family_id) === String(familyId))
+    .map(item => String(item.sector_id));
+  const availableSectors = sectors.filter(sector => sector.status === "active"
+    && (!familyId || selectedFamilySectorIds.includes(String(sector.id))));
+  const needsNewFamilySector = !familyId;
+  const selectedFamilyIsClassified = !familyId || selectedFamilySectorIds.length > 0;
   const submit = async () => {
-    if (!displayName.trim()) return;
+    if (!displayName.trim() || !selectedFamilyIsClassified || (needsNewFamilySector && !sectorId)) return;
     setBusy(true);
     const data = await runMutation("/masters/customer-families/prospects",
-      createProspectBody(displayName, familyId || null),
+      createProspectBody(displayName, familyId || null, sectorId || null),
       { showToast, successMessage: `"${displayName.trim()}" created.` });
     setBusy(false);
     if (data) onDone(data.family_id);
@@ -371,9 +399,24 @@ function CreateProspectModal({ families, onClose, onDone, showToast }) {
         <label style={labelSt}>Display name</label>
         <Inp value={displayName} onChange={setDisplayName} placeholder="Prospect name" />
         <label style={labelSt}>Family (optional)</label>
-        <Sel value={familyId} onChange={setFamilyId} opts={options} ph="— propose a new Family —" />
+        <Sel value={familyId} onChange={value => { setFamilyId(value); setSectorId(""); }}
+          opts={options} ph="— propose a new Family —" />
+        <label style={labelSt}>{needsNewFamilySector ? "First Sector" : "Family Sector (optional context)"}</label>
+        <Sel value={sectorId} onChange={setSectorId}
+          opts={availableSectors.map(s => ({ v: s.id, l: `${s.sector_code} — ${s.name}` }))}
+          ph={needsNewFamilySector ? "Select the new Family's first Sector…" : "— no Batch context yet —"} />
+        <div style={{ marginTop: 6, fontSize: 10, color: C.slateL, lineHeight: 1.45 }}>
+          {needsNewFamilySector
+            ? "The implicit Customer Family and its first Sector are created atomically."
+            : "The Prospect joins the selected Family; this does not choose a Sector for a Batch."}
+        </div>
+        {!selectedFamilyIsClassified && <div style={{ marginTop: 6, fontSize: 11, color: C.red }}>
+          This existing Family must be classified in the Family workspace before another Prospect can join it.
+        </div>}
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-          <Btn ch={busy ? "Creating…" : "Create"} full disabled={busy || !displayName.trim()} onClick={submit} />
+          <Btn ch={busy ? "Creating…" : "Create"} full
+            disabled={busy || !displayName.trim() || !selectedFamilyIsClassified
+              || (needsNewFamilySector && !sectorId)} onClick={submit} />
           <Btn ch="Cancel" v="secondary" onClick={onClose} disabled={busy} />
         </div>
       </div>
@@ -603,7 +646,41 @@ function LocationsList({ party, locations, locationVersions, profile, currentFam
   );
 }
 
-function FamilyDetail({ family, aliases, memberships, parties, families, locations, locationVersions, profile, showToast, onReload, openModal }) {
+// U1 external references — READ-ONLY. Whatever legacy or customer-side
+// identifiers were recorded against this Party, shown so an operator can
+// recognise the record. There is no create/edit/retire/delete control here
+// and no route behind one: propose/edit are Deferred
+// (u1-customer-foundation-authorization-packet.md).
+//
+// `ref_value` is rendered as plain monospace text, deliberately NOT through
+// <PermanentCode>. That component denotes a GOVERNED permanent code
+// (customer_code, location_code); an external reference is neither a Customer
+// Code nor a Batch linkage, and borrowing its styling would assert exactly
+// that. The caption says so in words rather than relying on the reader to
+// infer it.
+function ExternalReferencesList({ refs }) {
+  return (
+    <div style={{ marginLeft: 24, marginTop: 4 }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: C.slateL, textTransform: "uppercase" }}>
+        External references — {refs.length}
+      </div>
+      {refs.map(r => (
+        <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.slateM, padding: "2px 0" }}>
+          <span style={{ color: C.slateL }}>{externalRefKindLabel(r.ref_kind)}</span>
+          <span style={{ fontFamily: mono, fontSize: 11, color: C.slate }}>{r.ref_value}</span>
+        </div>
+      ))}
+      {refs.length
+        ? <div style={{ fontSize: 9, color: C.slateL, marginTop: 2 }}>
+            Recorded for recognition only — not a Customer Code, and not a Batch link.
+          </div>
+        : <div style={{ fontSize: 10, color: C.slateL }}>None recorded.</div>}
+    </div>
+  );
+}
+
+function FamilyDetail({ family, aliases, memberships, parties, families, locations, locationVersions,
+  externalReferences, familySectors, sectors, profile, showToast, onReload, openModal }) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(family.name);
   const [nameBusy, setNameBusy] = useState(false);
@@ -615,9 +692,22 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
   const [editingPartyId, setEditingPartyId] = useState(null);
   const [editPartyDraft, setEditPartyDraft] = useState("");
   const [partyBusy, setPartyBusy] = useState(false);
+  const [newSectorId, setNewSectorId] = useState("");
+  const [sectorBusy, setSectorBusy] = useState(false);
 
   const partyById = useMemo(() => Object.fromEntries(parties.map(p => [p.id, p])), [parties]);
+  // Grouped once per payload, not per Party row: the deterministic ordering
+  // lives in the helper so it is provable by fixture rather than by eye.
+  const refsByParty = useMemo(
+    () => groupExternalReferencesByParty(externalReferences), [externalReferences]);
   const familyAliases = aliases.filter(a => a.family_id === family.id);
+  const attachedSectors = familySectors
+    .filter(item => item.family_id === family.id)
+    .map(item => ({ ...item, sector: sectors.find(sector => sector.id === item.sector_id) || null }))
+    .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || ""))
+      || Number(a.sector_id) - Number(b.sector_id));
+  const unattachedSectors = sectors.filter(sector => sector.status === "active"
+    && !attachedSectors.some(item => item.sector_id === sector.id));
   const familyMemberships = memberships
     .filter(m => m.family_id === family.id)
     .sort((a, b) => (b.effective_from || "").localeCompare(a.effective_from || ""));
@@ -668,6 +758,16 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
     if (data !== null) { setEditingPartyId(null); onReload(family.id); }
   };
 
+  const addSector = async () => {
+    if (!newSectorId) return;
+    setSectorBusy(true);
+    const data = await runMutation(`/masters/customer-families/${family.id}/sectors`,
+      addFamilySectorBody(newSectorId, family.content_version),
+      { showToast, successMessage: "Sector attached to Customer Family." });
+    setSectorBusy(false);
+    if (data !== null) { setNewSectorId(""); onReload(family.id); }
+  };
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
@@ -698,7 +798,8 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         {family.status === "proposed" && (
           <CapabilityGate profile={profile} capability={MANAGE}>
-            <Btn ch="Approve" sm onClick={() => openModal({ kind: "approve", family })} />
+            <Btn ch="Approve" sm disabled={!attachedSectors.length}
+              onClick={() => openModal({ kind: "approve", family })} />
           </CapabilityGate>
         )}
         {!isRetired && (
@@ -706,6 +807,37 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
             <Btn ch="Merge into…" sm v="secondary" onClick={() => openModal({ kind: "merge", family })} />
           </CapabilityGate>
         )}
+      </div>
+
+      <div style={{ marginTop: 16, padding: 12, border: `1px solid ${attachedSectors.length ? C.border : C.red}`,
+        borderRadius: 7, background: attachedSectors.length ? C.white : "#fff5f3" }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.slateM, textTransform: "uppercase", marginBottom: 6 }}>
+          Sectors — {attachedSectors.length}
+        </div>
+        <div style={{ fontSize: 11, color: C.slateL, lineHeight: 1.45, marginBottom: 7 }}>
+          A Customer Family needs at least one Sector and may have more. Each Batch uses exactly one attached Sector; its guidance and inheritance follow only that selected Sector.
+        </div>
+        {attachedSectors.map((item, index) => <div key={item.sector_id}
+          style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", fontSize: 12 }}>
+          <span style={{ fontFamily: mono, fontWeight: 700, color: C.slate }}>
+            {item.sector?.sector_code || `Sector #${item.sector_id}`}
+          </span>
+          <span style={{ color: C.slateM }}>{item.sector?.name || "Identity details unavailable"}</span>
+          <span style={{ color: C.slateL }}>#{item.sector_id}</span>
+          {index === 0 && <span style={{ fontSize: 9, color: C.amber, fontWeight: 700 }}>FIRST / BATCH SUGGESTION</span>}
+        </div>)}
+        {!attachedSectors.length && <div style={{ fontSize: 11, color: C.red, fontWeight: 700 }}>
+          Sector classification required before Family approval or Batch creation.
+        </div>}
+        {!isRetired && <CapabilityGate profile={profile} capability={MANAGE}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 8 }}>
+            <Sel value={newSectorId} onChange={setNewSectorId}
+              opts={unattachedSectors.map(s => ({ v: s.id, l: `${s.sector_code} — ${s.name}` }))}
+              ph={unattachedSectors.length ? "Add another Sector…" : "No other active Sector available"} />
+            <Btn ch={sectorBusy ? "Adding…" : "Add Sector"} sm disabled={sectorBusy || !newSectorId}
+              onClick={addSector} />
+          </div>
+        </CapabilityGate>}
       </div>
 
       <div style={{ marginTop: 16 }}>
@@ -762,6 +894,7 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
           if (!party) return null;
           const isEditingParty = editingPartyId === party.id;
           const partyLocations = locations.filter(l => l.party_id === party.id);
+          const partyRefs = refsByParty[party.id] || [];
           return (
             <div key={m.id} style={{ padding: "4px 0" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.slateM }}>
@@ -791,6 +924,7 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
               </div>
               <LocationsList party={party} locations={partyLocations} locationVersions={locationVersions}
                 profile={profile} currentFamilyId={family.id} openModal={openModal} />
+              <ExternalReferencesList refs={partyRefs} />
             </div>
           );
         })}

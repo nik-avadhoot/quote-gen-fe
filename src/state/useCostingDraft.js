@@ -128,7 +128,18 @@ export function useCostingDraft(st){
     if(!inReview){
       const cv=contextValues||{};
       out.interest=cv.interest===undefined||cv.interest===null?INIT_SPEC.interest:cv.interest;
-      out.freightOverride=cv.freightOverride||"";
+      // S8(a). Was `cv.freightOverride||""`, which turned an explicit ZERO into
+      // a blank one layer ABOVE the engine - so the legacy_batch tier could
+      // never express a zero from the UI no matter what the resolver did. Same
+      // defect class as `if(override&&+override>0)`, just displaced. Now the
+      // same null-check the line above already uses for interest, which S7
+      // fixed and freight was left out of.
+      //
+      // Parity-safe with the flag OFF: the legacy getFreightRate discards 0
+      // and "" identically (`0 && +0>0` is false), so both still fall to the
+      // matrix and no pre-S8 number moves.
+      out.freightOverride=(cv.freightOverride===undefined||cv.freightOverride===null)
+        ?"":cv.freightOverride;
     }
     return out;
   })();

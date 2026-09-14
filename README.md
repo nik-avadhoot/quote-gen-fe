@@ -1,58 +1,78 @@
-# CFB Quotation Master — Frontend
+# CFB Quotation Master — frontend
 
-React + Vite frontend for the CFB Quotation Operating System (APSPL, CFB Division).
+React 19 + Vite frontend for the CFB Quotation Operating System. The companion Flask/Supabase
+repository is [`../quote-gen-be`](../quote-gen-be).
 
-Backend repo: https://github.com/nik-avadhoot/quote-gen-be
-
-## Structure
-
-```
-├── src/
-│   ├── QuotationApp.jsx     # Main application component
-│   ├── data/defaults.js     # Master data constants (rates, freight, partitions)
-│   └── engine/costing.js    # Pure-JS costing engine
-├── index.html
-├── vite.config.js
-└── package.json
-```
+For project status and authority, start with [`docs/README.md`](docs/README.md). In particular,
+[`docs/current-state.md`](docs/current-state.md) records the incomplete S9 activation boundary.
 
 ## Local development
 
-```bash
+```powershell
 npm install
-npm run dev                 # → http://localhost:5173
+npm run dev
 ```
 
-With no `VITE_API_BASE` set, the app calls the backend at `http://localhost:3001`.
-Run the backend repo alongside it for full-fidelity Excel export.
+The Vite app normally runs at `http://localhost:5173`. Run the backend on port 3001 for authenticated
+governed reads/mutations and server-side Excel export.
 
 ## Environment
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VITE_API_BASE` | Optional | Base URL of the export backend, no trailing slash. Set to `https://quote-gen-be.vercel.app` in the committed `.env.production`, so production builds need no dashboard configuration. Falls back to `http://localhost:3001` for `npm run dev`. |
+| Variable | Purpose |
+|---|---|
+| `VITE_API_BASE` | Backend base URL. The development fallback is `http://localhost:3001`; Vite reads it at build time. |
+| `VITE_FEATURE_FLAGS` | Comma-separated feature destinations. Development also has a narrow in-code default floor; inspect `src/lib/featureFlags.js` before changing rollout behavior. |
 
-Vite inlines this at **build time** — changing it requires a redeploy, not just
-a restart. A `VITE_API_BASE` set in the Vercel dashboard overrides
-`.env.production`.
+Do not put secret or service-role values in a `VITE_*` variable; Vite exposes them to the browser.
+Local environment files are user-owned and must not be inspected or changed during unrelated work.
 
-## Deploying to Vercel
+## Architecture
 
-Import this repo — Vite is detected automatically (build `npm run build`, output
-`dist`), and the backend URL comes from `.env.production`. No environment
-variables needed for a standard deploy.
+- `src/AuthContext.jsx` and `src/lib/apiClient.js`: authenticated frontend session and backend
+  transport.
+- `src/QuotationApp.jsx`: thin application shell and routed tab composition.
+- `src/state/`: composed state slices. Composition order in `AppStateProvider.jsx` is significant.
+- `src/tabs/`: costing, Batch, Quote, master-data, Pricing Basis, and administration screens.
+- `src/engine/`: pure costing and authority-resolution modules.
+- `src/lib/`: API actions, capability checks, governed Batch/Quote models, feature flags, and the
+  single local-persistence seam.
+- `src/export/`: PDF, client-side workbook fallback, and server-template export integration.
 
-The backend already allows this app's production domain. If you deploy to a
-different domain, or test from a preview URL (each gets its own unique
-`*.vercel.app` domain), add it to `CORS_ORIGINS` on the backend or the browser
-will block the export request.
+The application is transitional: legacy `cbb_*` state still uses browser storage, while newer
+governed screens use the authenticated backend and Supabase. A browser backup is therefore not a
+complete backup of governed database records.
 
-## Data & state
+## S9 status
 
-There is no database. All state lives in the browser's `localStorage` under
-`cbb_*` keys — rates, freight matrix, quote items, box trim, partitions, maker
-name and batch profile — seeded from the defaults in `src/data/defaults.js`.
-Use the in-app backup action to export all keys as a single JSON file.
+Local S9 implementation, migrations, and recorded automated database verification exist. The
+production attestation secret and Edge Function are not activated, and the real authenticated
+Calculate/Send/workflow, runtime authorization, persistent, browser, and Product Owner journeys are
+not verified. S9 is not technically or Product Owner closed. Keep the S9 records and backend
+artifacts active.
 
-Excel export posts to the backend for full openpyxl formatting, and falls back
-to client-side `xlsx-js-style` generation if the backend is unreachable.
+## Checks
+
+Use `npm run` to list the current fixture commands, then choose checks that exercise the affected
+behavior. Common examples:
+
+```powershell
+npm run build
+npm run test:module-contract
+npm run test:costing
+npm run test:resolver
+npm run test:governed-calculate-send
+npm run lint
+```
+
+Run whole-repository lint only when its scope is useful; targeted lint is acceptable for a focused
+increment. Never run Prettier or `eslint --fix` across this repository.
+
+## Guardrails
+
+- Costing behavior is mirrored with backend export/runtime behavior; review both sides when changing
+  formulas or inputs.
+- Blank, zero, and unresolved values are distinct.
+- Capability checks, tenant/plant boundaries, immutable Quote history, and applied migrations are
+  protected authority boundaries.
+- Presence of a screen, route, fixture, or migration does not by itself prove deployment, browser
+  verification, or Product Owner acceptance.

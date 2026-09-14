@@ -12,8 +12,15 @@
 //   buildSpecFromRow(row, constEntry, profile) → full spec object
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { CREDIT_PCT, DEFAULT_BOX_TRIM_DATA, TAKEUP, TRIM } from '../data/defaults.js';
+import { DEFAULT_BOX_TRIM_DATA, TAKEUP, TRIM } from './costingTables.js';
 import { CALC_DEFAULTS } from './calcDefaults.js';
+import { resolveFreight } from './resolveAuthority.js';
+import { constructionLayerIssues } from '../lib/constructionIdentity.js';
+
+// DEFAULT_FREIGHT is an application MIRROR, not an approved Freight Master.
+// This label is what a snapshot records for it, and it can never occupy the
+// governed {freightSetVersionId, freightEntryId} reference shape.
+export const LEGACY_FREIGHT_MATRIX_REF='app-mirror/default-freight';
 
 export const bfNum=c=>{const n=parseInt(String(c||""));return n===35?33:n||0;};
 export const gsmS=g=>{const v=+g||0;if(v>0&&v<100)return 4;if(v===100)return 1.5;if(v>200)return 1;return 0;};
@@ -23,21 +30,24 @@ export const getTrimD=(bt,ply,trimData)=>{ const td=trimData||DEFAULT_BOX_TRIM_D
 export const getEffectiveRate=(code,gsm,rates)=>{
   if(!code)return 0;
   const e=rates.find(r=>r.code===code);
-  if(!e||!e.price)return 0;
-  const creditPct=(e.interest!=null&&e.interest!=='')?+e.interest/100:CREDIT_PCT;
-  return e.price+e.price*creditPct-(e.disc||0)+(e.freight||0)+gsmS(gsm);
+  if(!e||e.effectiveRate==null||e.effectiveRate===''||isNaN(+e.effectiveRate))return 0;
+  return +e.effectiveRate+gsmS(gsm);
 };
 export const getFreightRate=(plant,delivery,matrix,override)=>{
   if(override&&+override>0)return +override;
   return matrix?.[plant]?.[delivery]||0;
 };
-export const calcCosting=(spec,rates,freight,boxTrimData)=>{
+export const calcCosting=(spec,rates,freight,boxTrimData,resolvedFreightRate)=>{
   const{L,W,H,ply=5,boxType="RSC",layers={},flute_F1,flute_F2,ups=1,
     waste=5,convRate=7,wastePP=5,convRatePP=12.5,freightOverride,plant,delivery,margin=8,interest,
     printing=0,stitching=0,coating=0,handling=0,moqCharge=0,packing=0,other=0,unloading=0,
     flutingBCF=0.10,setCode,rowType}=spec;
   const isBoard=boxType==="Board"||boxType==="PP"; // PP = plates/partitions: flat piece formula
   if(!+L||!+W||(!isBoard&&!+H))return null;
+  // A partial paper stack is not a cheaper construction; it is no construction.
+  // Fail before arithmetic so omitted BF/grade or GSM can never become zero-cost
+  // layers in a seemingly usable result, including through non-UI callers.
+  if(constructionLayerIssues(spec).length)return null;
   // PP-aware rates: Plate/Partition rows use P&P waste and conv rates.
   // NOTE: must use a proper "is this actually unset" check, not `||` — several
   // sectors (Textile, Cooler, Petrol, Edible-Oil, Footwear, Elec-LED, Beauty,
@@ -81,7 +91,13 @@ export const calcCosting=(spec,rates,freight,boxTrimData)=>{
     wt+=wc;wtSheet+=ws;mat+=wc*r;
     rowDetails.push({k,wt:wc,ws,cost:wc*r,rate:r,code:ly.code,gsm:ly.gsm,tu});
   });
-  const frRate=getFreightRate(plant,delivery,freight,freightOverride);
+  // S8(a). `resolvedFreightRate` is a PRE-RESOLVED NUMBER, never a context:
+  // calcCosting cannot resolve freight, so it cannot double-resolve it or
+  // disagree with the boundary that did. `undefined` is the legacy path,
+  // unchanged and bit-identical - flag-off parity is structural, not emulated.
+  const frRate=resolvedFreightRate===undefined
+    ?getFreightRate(plant,delivery,freight,freightOverride)
+    :+resolvedFreightRate;
   // wt=Paper Consumed (waste incl), wtSheet=actual box weight (no waste)
   const conv=wt*effConv;    // Conversion on Paper Consumed (PP-aware — was always using Box convRate)
   const fr=wtSheet*frRate;          // Freight on Sheet Weight (goods shipped)
@@ -109,14 +125,110 @@ export const calcCosting=(spec,rates,freight,boxTrimData)=>{
     frRate,rowDetails};
 };
 
+/* ═══ S8(a) — THE FREIGHT OUTCOME BOUNDARY ═════════════════════════════════
+   The ONLY caller of resolveFreight. Freight resolves exactly once, here, and
+   travels as a value alongside the result it produced - so the blocker reads
+   the same object the calculation used and no consumer recomputes anything.
+   There is no module-global "last resolution" state; there is nothing to go
+   stale.
+
+   WHY A WRAPPER AND NOT A FATTER RESULT. When freight is unresolved there is
+   no result at all - arithmetic must not run on a null - but the REASON still
+   has to reach the UI. Hanging the reason off the result cannot work, because
+   the result is exactly what is missing. So the pair is returned:
+
+       { result: CostingResult|null, freightResolution: FreightResolution|null }
+
+   Neither field can be mistaken for the other. The wrapper carries no costing
+   fields, it is frozen, and both live call sites destructure it on the same
+   line it is created - its lifetime is one expression and it never enters
+   state. `calcCosting` keeps its own name, arity and return type, so nothing
+   that calls the old name can receive a wrapper.
+
+   FLAG OFF IS THE LEGACY FUNCTION, NOT AN EMULATION OF IT. When authorityV2 is
+   false this does not call the resolver at all: it calls the unchanged
+   calcCosting path with no fifth argument and returns freightResolution:null.
+   Bit-identical parity is then structural - the same code computing the same
+   number, including the legacy treatment of an explicit zero, which the legacy
+   `if(override&&+override>0)` DISCARDS. The new explicit-zero semantics arrive
+   only with the flag. Emulating legacy behaviour from a v2 resolution would be
+   a second answer, which is the defect this slice exists to remove.        */
+export const calcCostingOutcome=(spec,rates,freight,boxTrimData,opts={})=>{
+  if(!opts.authorityV2)
+    return Object.freeze({result:calcCosting(spec,rates,freight,boxTrimData),
+                          freightResolution:null});
+
+  const freightResolution=resolveFreight({
+    rowOverride:opts.rowOverride, rowRef:opts.rowRef??null,
+    legacyBatchOverride:spec?.freightOverride, legacyBatchRef:opts.legacyBatchRef??null,
+    pricingGroup:opts.pricingGroup??null,
+    approvedMasterRate:opts.approvedMasterRate,
+    approvedMasterRef:opts.approvedMasterRef??null,
+    approvedMasterUnavailable:opts.approvedMasterUnavailable??null,
+    legacyMatrix:freight??null, legacyMatrixRef:LEGACY_FREIGHT_MATRIX_REF,
+    originPlant:spec?.plant, legacyDestination:spec?.delivery,
+  });
+
+  // Unresolved: return BEFORE any arithmetic. `+null` (0) and `wtSheet*undefined`
+  // (NaN) are unreachable by construction, not by inspection.
+  if(freightResolution.value===null)
+    return Object.freeze({result:null,freightResolution});
+
+  return Object.freeze({
+    result:calcCosting(spec,rates,freight,boxTrimData,freightResolution.value),
+    freightResolution});
+};
+
+/* ═══ S8(a) — FREIGHT MESSAGES ═════════════════════════════════════════════
+   Reason-specific, and honest about which tier answered. A value that came
+   from the temporary legacy matrix never says "approved Master".            */
+const freightRoute=spec=>`${spec?.plant||"?"} → ${spec?.delivery||"?"}`;
+
+export const freightBlockerText=(spec,fr)=>{
+  if(fr.reason==="manual_value_missing")
+    return "Freight unresolved — Pricing Group is set to manual with no value";
+  switch(fr.degradedFrom){
+    case "basis_missing":
+      return "Freight unresolved — Pricing Group is in master mode with no freight-basis Delivery Group selected";
+    case "basis_ship_to_missing":
+      return "Freight unresolved — the freight-basis Delivery Group has no Ship-to Location";
+    case "no_approved_pair":
+      return "Freight unresolved — no approved Freight Master rate for the freight basis, and no legacy rate on file";
+    default:
+      return `Freight unresolved — no override, and no freight rate on file for ${freightRoute(spec)}`;
+  }
+};
+
+export const freightAssumptionText=(spec,fr)=>{
+  switch(fr.source){
+    case "row":
+      return "Freight from the row override";
+    case "legacy_batch":
+      return "Freight from the Batch Profile override (temporary — not yet governed Pricing Group freight)";
+    case "pricing_group":
+      return fr.mode==="ex_factory"
+        ?"Ex-factory — no freight charged"
+        :"Freight from Pricing Group (manual)";
+    case "master":
+      return `Freight from the approved Freight Master (Freight Set version ${fr.sourceRef?.freightSetVersionId})`;
+    case "legacy_matrix":
+      return `Freight from the temporary legacy matrix (${freightRoute(spec)}) — approved Freight Master not yet available`;
+    default:
+      return "Freight from plant×location matrix";
+  }
+};
+
 /* ═══ MISSING INFO ENGINE ═══════════════════════════════════════════════════ */
-export const checkMissingInfo=(spec,result)=>{
+export const checkMissingInfo=(spec,result,freightResolution)=>{
   const B=[],W=[],A=[];
   const needsH=spec.boxType!=="Board"&&spec.boxType!=="PP";
   if(!spec.L||!spec.W||(needsH&&!+spec.H))
     B.push(needsH?"Box dimensions (L×W×H) not entered":"Board dimensions (L×W) not entered — H not required for flat Board pieces");
-  if(!Object.values(spec.layers||{}).some(l=>l.code&&l.gsm))
-                                     B.push("Paper construction not specified — enter at least one layer");
+  const layerIssues=constructionLayerIssues(spec);
+  if(layerIssues.length){
+    const affected=[...new Set(layerIssues.map(issue=>issue.key))].join(", ");
+    B.push(`Paper construction incomplete — grade/BF and positive GSM required for ${affected}`);
+  }
   if(!spec.delivery)                 B.push("Freight not specified");
   if(!spec.volume||+spec.volume===0) B.push("Monthly volume (nos/month) not provided");
   if(!spec.sector)                   W.push("Sector not selected — sector defaults not applied");
@@ -127,7 +239,18 @@ export const checkMissingInfo=(spec,result)=>{
   if(spec.salesMOQ&&result?.calcMOQ&&+spec.salesMOQ<result.calcMOQ)
                                      W.push(`Proposed MOQ (${(+spec.salesMOQ).toLocaleString()} boxes) is below minimum production run (${result.calcMOQ.toLocaleString()} boxes = ${result.moqKg.toLocaleString()} kg)`);
   if(spec.isRepeat) A.push("Repeat customer — previous delivery terms assumed");
-  if(!spec.freightOverride) A.push("Freight from plant×location matrix");
+  // S8(a). The freight line used to be one assumption for three different
+  // situations: an inherited rate, an explicit zero, and NO RATE ON FILE. It
+  // now reads the resolution the calculation actually used - it does NOT
+  // recompute freight, and there is no second answer to disagree with.
+  // Omitted (flag off, or any other caller) keeps the pre-S8 line exactly.
+  if(freightResolution==null){
+    if(!spec.freightOverride) A.push("Freight from plant×location matrix");
+  }else if(freightResolution.source==="unresolved"){
+    B.push(freightBlockerText(spec,freightResolution));
+  }else{
+    A.push(freightAssumptionText(spec,freightResolution));
+  }
   return{blockers:B,warnings:W,assumptions:A};
 };
 

@@ -24,6 +24,7 @@ import { useCostingResult } from "./useCostingResult.js";
 import { useBatchInvalidation } from "./useBatchInvalidation.js";
 import { useCostingBatchBridge } from "./useCostingBatchBridge.js";
 import { useQuoteActions } from "./useQuoteActions.js";
+import { usePricingBasisState } from "./usePricingBasisState.js";
 
 export function AppStateProvider({ children }){
   const st = {};
@@ -32,6 +33,7 @@ export function AppStateProvider({ children }){
   Object.assign(st, useMastersState());       // no deps
   Object.assign(st, useCostingState());       // no deps
   Object.assign(st, useQuoteItemsState(st));  // needs profile (ui)
+  Object.assign(st, usePricingBasisState());  // U3 fallback + the single U4 durable Batch binding
   Object.assign(st, useBatchState(st));       // needs sectorCodes + constructionLib (masters), setTab/showToast (ui)
   Object.assign(st, useCostingDraft(st));     // C3: owns spec/s(); C4: reviewCopy + derived activeBatchRowId; C5: profileDraft, the resolved spec and batchDefaults. AFTER useBatchState (needs batchProfile/batchRows), BEFORE useCostingResult (consumes spec + batchDefaults)
   Object.assign(st, useCostingResult(st));    // needs spec (draft), masters, batchRows/batchProfile (batch)

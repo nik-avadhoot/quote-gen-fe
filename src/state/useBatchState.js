@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { getItem, setItem } from "../lib/persist.js";
 import { sameSetCode } from "../engine/rowType.js";
+import { togglePinnedAddOn } from "../lib/pinnedAddOns.js";
 
 export function useBatchState(st){
   // D-5: setTab and showToast were used ONLY by restoreAutosave, which the
@@ -34,7 +35,8 @@ export function useBatchState(st){
     try{const s=getItem('cbb_pinned_addons');return s?JSON.parse(s):[];}catch(e){return[];}
   });
   const togglePinAddOn=(k)=>setPinnedAddOns(prev=>{
-    const next=prev.includes(k)?prev.filter(x=>x!==k):[...prev,k].slice(-2);
+    const next=togglePinnedAddOn(prev,k);
+    if(next===prev)return prev;
     try{setItem('cbb_pinned_addons',JSON.stringify(next));}catch(e){}
     return next;
   });
@@ -71,6 +73,14 @@ export function useBatchState(st){
     }
   });
   const[batchResults,setBatchResults]=useState({});
+  // S8(a). The freight resolution that PRODUCED each row's result, keyed the
+  // same way and invalidated in lockstep. It is a PARALLEL map on purpose:
+  // batchResults must keep holding a bare CostingResult, because every
+  // downstream consumer depends on that shape and an outcome wrapper sitting
+  // there would be exactly the confusion the boundary exists to prevent.
+  // Calculate All fills both from ONE resolution; Send reads this one to say
+  // WHY a row was skipped, rather than resolving freight a second time.
+  const[batchFreight,setBatchFreight]=useState({});
   const[expandedConstr,setExpandedConstr]=useState(null);
   const[constrFilter,setConstrFilter]=useState({sector:'',client:'',status:'active'});
   const[constrQuery,setConstrQuery]=useState('');
@@ -191,11 +201,19 @@ export function useBatchState(st){
   // Row-level: clears only the affected row's result when a costing-relevant field changes.
   // Profile/master level: clears all results (called on profile, rates, freight, construction changes).
   // Non-costing fields (product name, matCode, remarks, setCode, spec_bs/bct/ect) do NOT invalidate.
-  const invalidateBatchRow=(rowId)=>setBatchResults(prev=>{
-    if(!prev[rowId])return prev;
-    const next={...prev};delete next[rowId];return next;
-  });
-  const invalidateAllBatchResults=()=>setBatchResults({});
+  const invalidateBatchRow=(rowId)=>{
+    setBatchResults(prev=>{
+      if(!prev[rowId])return prev;
+      const next={...prev};delete next[rowId];return next;
+    });
+    // S8(a): a resolution outliving the result it explains would be a stale
+    // second answer. Cleared together, always.
+    setBatchFreight(prev=>{
+      if(!prev[rowId])return prev;
+      const next={...prev};delete next[rowId];return next;
+    });
+  };
+  const invalidateAllBatchResults=()=>{setBatchResults({});setBatchFreight({});};
 
-  return { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchConstrOverlay, batchConstrOverlayFilter, batchConstrOverlayQuery, batchAgeLabel, batchConstrTargetRowId, batchProfile, batchResults, batchRows, constrFilter, constrQuery, expandedConstr, expandedRows, invalidateAllBatchResults, invalidateBatchRow, parseConstrQuery, pinnedAddOns, setAutoCodeEnabled, setAutoCodeSeq, setBatchConstrOverlay, setBatchConstrOverlayFilter, setBatchConstrOverlayQuery, setBatchConstrTargetRowId, setBatchProfile, setBatchResults, setBatchRows, setConstrFilter, setConstrQuery, setExpandedConstr, setExpandedRows, setPinnedAddOns, togglePinAddOn, toggleRowExpand };
+  return { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchConstrOverlay, batchConstrOverlayFilter, batchConstrOverlayQuery, batchAgeLabel, batchConstrTargetRowId, batchFreight, batchProfile, batchResults, batchRows, constrFilter, constrQuery, expandedConstr, expandedRows, invalidateAllBatchResults, invalidateBatchRow, parseConstrQuery, pinnedAddOns, setAutoCodeEnabled, setAutoCodeSeq, setBatchConstrOverlay, setBatchConstrOverlayFilter, setBatchConstrOverlayQuery, setBatchConstrTargetRowId, setBatchFreight, setBatchProfile, setBatchResults, setBatchRows, setConstrFilter, setConstrQuery, setExpandedConstr, setExpandedRows, setPinnedAddOns, togglePinAddOn, toggleRowExpand };
 }

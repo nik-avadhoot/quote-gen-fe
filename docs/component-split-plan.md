@@ -685,7 +685,7 @@ object-returning arrow — memoising it buys nothing and is the entire source of
 Prerequisite: `src/lib/constructionName.js` ← `constrAutoName` (3137–3157) and `STATUS_DISPLAY`
 (3126–3136). Both pure, both used by *two* tabs.
 
-Follow the pattern in [`UserManagementTab.jsx`](quote-gen-fe/src/UserManagementTab.jsx): own file,
+Follow the pattern in [`UserManagementTab.jsx`](../src/tabs/UserManagementTab.jsx): own file,
 local state, imports from `theme.js`. Shared state and `showToast` come from `useAppState()`.
 
 One commit each, ascending coupling:

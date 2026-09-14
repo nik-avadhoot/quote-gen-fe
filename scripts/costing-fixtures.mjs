@@ -22,12 +22,14 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { calcCosting } from '../src/engine/costing.js';
+import { calcCosting, calcCostingOutcome, checkMissingInfo } from '../src/engine/costing.js';
+import { materializeEffectiveRates } from '../src/engine/rateMaster.js';
 import { INIT_SPEC, DEFAULT_RATES, DEFAULT_FREIGHT, DEFAULT_BOX_TRIM_DATA }
   from '../src/data/defaults.js';
 
 const GOLDEN_PATH = join(dirname(fileURLToPath(import.meta.url)), 'costing-golden.json');
 const FIELDS = ['finalRate', 'ratePerKg', 'calcMOQ', 'calcGSM', 'calcBS'];
+const EFFECTIVE_RATES = materializeEffectiveRates(DEFAULT_RATES);
 
 /* ── Fixture specs ─────────────────────────────────────────────────────────
    Defined in code so the golden file is always reproducible from source.   */
@@ -83,7 +85,7 @@ const CASES = {
 /* ── Run ───────────────────────────────────────────────────────────────────*/
 
 const run = (name, spec) => {
-  const r = calcCosting(spec, DEFAULT_RATES, DEFAULT_FREIGHT, DEFAULT_BOX_TRIM_DATA);
+  const r = calcCosting(spec, EFFECTIVE_RATES, DEFAULT_FREIGHT, DEFAULT_BOX_TRIM_DATA);
   if (!r) throw new Error(`calcCosting returned null for "${name}" — spec failed its dimension guard`);
   return Object.fromEntries(FIELDS.map(f => [f, r[f]]));
 };
@@ -171,6 +173,111 @@ for (const name of Object.keys(CASES)) {
 }
 for (const name of Object.keys(golden)) {
   if (!CASES[name]) fail(`${name}: in golden file but no longer defined as a fixture`);
+}
+
+
+/* ══ S8(a) — THE OUTCOME BOUNDARY ══════════════════════════════════════════
+   These arms are NOT golden entries. `run()` above throws on a null result,
+   and recording an unresolved case into the golden as `null` would be the
+   wrong shape — it would encode "no rate on file" as an expected NUMBER, the
+   very collapse this slice removes. They are asserted directly instead.     */
+
+const outcomeOk = (name, cond, extra = '') => {
+  if (cond) console.log(`ok    ${name}`);
+  else { fail(`${name}${extra ? ` — ${extra}` : ''}`); }
+};
+
+// A destination that is genuinely absent from DEFAULT_FREIGHT. Nagpur ships to
+// Pune (2.5) but there is no Nashik row anywhere in the mirror.
+const UNRESOLVABLE = { ...BOX_5PLY, delivery: 'Nashik' };
+const FLAG_ON  = { authorityV2: true };
+const FLAG_OFF = { authorityV2: false };
+const args = s => [s, EFFECTIVE_RATES, DEFAULT_FREIGHT, DEFAULT_BOX_TRIM_DATA];
+
+console.log('\n── S8(a) flag-off parity: the LEGACY function, not an emulation ──');
+{
+  // Blank, explicit zero, positive, and a missing pair. Flag off must equal the
+  // unchanged legacy call in every one — INCLUDING the legacy treatment of zero,
+  // which `if(override&&+override>0)` DISCARDS. Parity means bit-identical to
+  // what shipped, defects and all; the corrected semantics arrive with the flag.
+  const parity = [
+    ['blank override',   { ...BOX_5PLY, freightOverride: '' }],
+    ['explicit zero',    { ...BOX_5PLY, freightOverride: 0 }],
+    ['positive override',{ ...BOX_5PLY, freightOverride: 9.5 }],
+    ['missing pair',     UNRESOLVABLE],
+  ];
+  for (const [label, spec] of parity) {
+    const legacy  = calcCosting(...args(spec));
+    const flagOff = calcCostingOutcome(...args(spec), FLAG_OFF);
+    outcomeOk(`${label}: flag-off result is identical to the legacy call`,
+      JSON.stringify(flagOff.result) === JSON.stringify(legacy));
+    outcomeOk(`${label}: and invents no provenance`, flagOff.freightResolution === null);
+  }
+  // The legacy defect is still present with the flag OFF. Asserted, not assumed:
+  // this is what makes "bit-identical" a claim with teeth rather than a hope.
+  const zeroOff  = calcCostingOutcome(...args({ ...BOX_5PLY, freightOverride: 0 }), FLAG_OFF);
+  const blankOff = calcCostingOutcome(...args({ ...BOX_5PLY, freightOverride: '' }), FLAG_OFF);
+  outcomeOk('flag off: explicit zero is STILL indistinguishable from blank (pre-S8 behaviour)',
+    zeroOff.result.finalRate === blankOff.result.finalRate);
+  outcomeOk('flag off: a missing pair STILL silently prices at 0 freight (pre-S8 behaviour)',
+    calcCostingOutcome(...args(UNRESOLVABLE), FLAG_OFF).result.frRate === 0);
+}
+
+console.log('\n── S8(a) flag on: explicit zero and unresolved become distinct ──');
+{
+  const zero  = calcCostingOutcome(...args({ ...BOX_5PLY, freightOverride: 0 }), FLAG_ON);
+  const blank = calcCostingOutcome(...args({ ...BOX_5PLY, freightOverride: '' }), FLAG_ON);
+  outcomeOk('an explicit zero override survives as a value',
+    zero.freightResolution.value === 0 && zero.freightResolution.source === 'legacy_batch');
+  outcomeOk('and it PRICES differently from blank, which inherits 2.5',
+    zero.result.frRate === 0 && blank.result.frRate === 2.5
+    && zero.result.finalRate !== blank.result.finalRate);
+  outcomeOk('blank inherits from the temporary mirror, and says so',
+    blank.freightResolution.source === 'legacy_matrix'
+    && blank.freightResolution.authority === 'temporary');
+  outcomeOk('the mirror never claims approved-master authority',
+    blank.freightResolution.source !== 'master'
+    && blank.freightResolution.sourceRef === 'app-mirror/default-freight');
+}
+
+console.log('\n── S8(a) unresolved produces NO usable calculation ──');
+{
+  const out = calcCostingOutcome(...args(UNRESOLVABLE), FLAG_ON);
+  outcomeOk('result is null — the arithmetic never ran', out.result === null);
+  outcomeOk('but the reason survives the null result',
+    out.freightResolution.source === 'unresolved'
+    && out.freightResolution.reason === 'no_legacy_pair');
+  outcomeOk('no total, final rate or freight rate exists to be misread',
+    out.result === null);
+  outcomeOk('the value is null, never 0 and never NaN',
+    out.freightResolution.value === null && !Number.isNaN(out.freightResolution.value));
+
+  // checkMissingInfo receives the SAME object and turns it into a blocker.
+  const missing = checkMissingInfo(UNRESOLVABLE, out.result, out.freightResolution);
+  outcomeOk('checkMissingInfo raises a freight BLOCKER, not an assumption',
+    missing.blockers.some(b => b.startsWith('Freight unresolved')));
+  outcomeOk('and no longer offers the misleading matrix assumption',
+    !missing.assumptions.includes('Freight from plant×location matrix'));
+  outcomeOk('the blocker names the route it could not price',
+    missing.blockers.some(b => b.includes('Nagpur → Nashik')));
+
+  // Same call with NO resolution keeps the pre-S8 line exactly.
+  const legacyMissing = checkMissingInfo(UNRESOLVABLE, calcCosting(...args(UNRESOLVABLE)));
+  outcomeOk('omitting the resolution preserves the pre-S8 assumption verbatim',
+    legacyMissing.assumptions.includes('Freight from plant×location matrix')
+    && !legacyMissing.blockers.some(b => b.startsWith('Freight unresolved')));
+}
+
+console.log('\n── S8(a) the wrapper cannot be mistaken for a result ──');
+{
+  const out = calcCostingOutcome(...args(BOX_5PLY), FLAG_ON);
+  outcomeOk('it carries no costing fields of its own',
+    out.finalRate === undefined && out.total === undefined && out.frRate === undefined);
+  outcomeOk('it is frozen', Object.isFrozen(out));
+  outcomeOk('and exposes exactly two keys',
+    JSON.stringify(Object.keys(out).sort()) === JSON.stringify(['freightResolution', 'result']));
+  outcomeOk('calcCosting itself still returns a bare result, never a wrapper',
+    calcCosting(...args(BOX_5PLY)).finalRate === 41.25);
 }
 
 console.log(failed ? `\n${failed} failure(s)` : '\nall fixtures pass');

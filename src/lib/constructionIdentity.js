@@ -36,6 +36,31 @@
 
 export const toStr=v=>(v===undefined||v===null||v===""?"":String(v).trim());
 
+const REQUIRED_3_PLY_LAYERS=["TOP","F1","L1"];
+const REQUIRED_5_PLY_LAYERS=[...REQUIRED_3_PLY_LAYERS,"F2","L2"];
+
+export const requiredConstructionLayers=x=>
+  +x?.ply===5?REQUIRED_5_PLY_LAYERS:REQUIRED_3_PLY_LAYERS;
+
+// A library row may exist as an unfinished draft, but it is not a usable
+// costing construction until every structural layer has both a paper grade
+// (the BF-bearing code) and a positive GSM. Keeping this predicate pure lets
+// selection, matching and send-readiness share one boundary.
+export const constructionLayerIssues=x=>{
+  const issues=[];
+  const layers=x?.layers||{};
+  requiredConstructionLayers(x).forEach(key=>{
+    const layer=layers[key]||{};
+    if(!toStr(layer.code))issues.push({key,field:"code"});
+    const gsm=Number(layer.gsm);
+    if(layer.gsm===""||layer.gsm===null||layer.gsm===undefined||!Number.isFinite(gsm)||gsm<=0)
+      issues.push({key,field:"gsm"});
+  });
+  return issues;
+};
+
+export const isUsableConstruction=x=>constructionLayerIssues(x).length===0;
+
 // Normalise BOTH sides the same way. The original compared `+c.ply` against
 // `(+spec.ply||5)` — applying the default to the incoming side only, so an entry
 // with no ply produced NaN and could never match anything, not even itself.
@@ -64,6 +89,31 @@ export const sameConstruction=(a,b)=>{
          A.spec_bct===B.spec_bct&&A.spec_ect===B.spec_ect&&
          A.ply===B.ply&&A.flute_F1===B.flute_F1&&A.flute_F2===B.flute_F2&&
          A.boxType===B.boxType&&A.layers===B.layers;
+};
+
+const hasBoardSpecIdentity=x=>{
+  const n=norm(x);
+  return !!(n.board_gsm||n.spec_bs||n.spec_bct||n.spec_ect);
+};
+
+const sameStandardConstruction=(a,b)=>{
+  const A=norm(a),B=norm(b);
+  return A.board_gsm===B.board_gsm&&A.spec_bs===B.spec_bs&&
+    A.spec_bct===B.spec_bct&&A.spec_ect===B.spec_ect&&A.ply===B.ply&&
+    A.flute_F1===B.flute_F1&&A.flute_F2===B.flute_F2&&A.boxType===B.boxType;
+};
+
+// Suggestion/reuse is stricter than duplicate detection. Unfinished library
+// drafts stay editable in the full library, but can never be selected as a
+// costing answer. A standards-only match also needs a real standard on both
+// sides; otherwise two sets of blanks would be called a match.
+export const findUsableConstructionMatch=(lib,spec)=>(lib||[])
+  .find(c=>isUsableConstruction(c)&&sameConstruction(c,spec));
+
+export const findUsableStandardConstructionMatch=(lib,spec)=>{
+  if(!hasBoardSpecIdentity(spec))return undefined;
+  return (lib||[]).find(c=>isUsableConstruction(c)&&hasBoardSpecIdentity(c)&&
+    sameStandardConstruction(c,spec));
 };
 
 // Does this entry say anything about what the board IS? A row created by

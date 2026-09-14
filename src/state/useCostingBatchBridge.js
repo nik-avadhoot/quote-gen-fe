@@ -25,11 +25,14 @@ import { INIT_SPEC } from "../data/defaults.js";
 import { deepEqual } from "./costingDraftModel.js";
 import { buildSpecFromRow } from "../engine/costing.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
-import { findDuplicate } from "../lib/constructionIdentity.js";
+import {
+  constructionLayerIssues, findUsableConstructionMatch,
+  findUsableStandardConstructionMatch,
+} from "../lib/constructionIdentity.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useCostingBatchBridge(st){
-  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, setAutoFill, setBatchProfile, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setSetAutoFill, setTab, showToast, spec, specRaw } = st;
+  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, setAutoFill, setBatchProfile, setDurableBatch, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setNewBatchDialogOpen, setSetAutoFill, setTab, showToast, spec, specRaw } = st;
 
   const loadBatchRowIntoCosting=(row)=>{
     // Gate: block Deep Dive if this row has an unconfirmed SET Code
@@ -46,8 +49,6 @@ export function useCostingBatchBridge(st){
     // Apply row-level overrides — same logic as calcBatchRow so deepdive reflects exact costing
     const rowWaste=row.wasteConv_waste;
     const rowConv=row.wasteConv_conv;
-    const profWaste=isPP?(batchProfile.wastePP??5):(batchProfile.waste??5);
-    const profConv=isPP?(batchProfile.convRatePP??12.5):(batchProfile.convRate??7);
     if(rowWaste!==""&&rowWaste!=null){if(isPP)sp.wastePP=+rowWaste;else sp.waste=+rowWaste;}
     if(rowConv!==""&&rowConv!=null){if(isPP)sp.convRatePP=+rowConv;else sp.convRate=+rowConv;}
     // WAVE 3: the two row-override reads were here. Freight and Interest are
@@ -492,16 +493,15 @@ export function useCostingBatchBridge(st){
     // mandatory structural layers for any valid corrugated construction.
     // For 5-ply, F2 and L2 are also required — without them the engine costs
     // three layers against 5-ply trims and MOQ, producing a silently undercosted quote.
-    const layers=spec.layers||{};
-    const REQUIRED_LAYERS=["TOP","F1","L1"];
-    if(+spec.ply===5) REQUIRED_LAYERS.push("F2","L2");
     const LAYER_NAMES={
       TOP:"TOP (outer liner)",F1:"F1 (flute medium)",L1:"L1 (inner liner)",
       F2:"F2 (second flute)",L2:"L2 (innermost liner — required for 5-ply)",
     };
-    REQUIRED_LAYERS.forEach(k=>{
-      if(!layers[k]?.code||String(layers[k].code).trim()==="")
-        missing.push(LAYER_NAMES[k]);
+    const layerIssues=constructionLayerIssues(spec);
+    [...new Set(layerIssues.map(issue=>issue.key))].forEach(k=>{
+      const fields=layerIssues.filter(issue=>issue.key===k).map(issue=>
+        issue.field==="code"?"paper grade / BF":"positive GSM");
+      missing.push(`${LAYER_NAMES[k]} — enter ${fields.join(" and ")}`);
     });
 
     // C5: these read the RESOLVED spec, so a Producing Plant owned by the
@@ -626,7 +626,6 @@ export function useCostingBatchBridge(st){
     // ── Resolve construction — find existing match or create new ─────────────
     const LETTERS="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const usedCodes=new Set(constructionLib.map(c=>c.code));
-    const toStr=v=>(v===undefined||v===null||v===""?"":String(v).trim());
     const incomingSector=spec.sector||batchProfile.sector||"";
     let constrCode=null;
 
@@ -637,7 +636,7 @@ export function useCostingBatchBridge(st){
     // `existingSTD` below is deliberately NOT routed through it — that is the
     // board-specs-match-but-layers-differ case, and its Cancel branch is a
     // SANCTIONED duplication route ruled by the product owner.
-    const existingFull=findDuplicate(constructionLib,spec);
+    const existingFull=findUsableConstructionMatch(constructionLib,spec);
 
     if(existingFull){
       // Exact match including layers — reuse silently
@@ -645,16 +644,7 @@ export function useCostingBatchBridge(st){
       showToast(`✅ Matched existing construction [${constrCode}]`,'success',3000);
     } else {
       // C1: also check for STD-only match (layers differ) — confirm before reusing
-      const existingSTD=constructionLib.find(c=>
-        toStr(c.board_gsm)===toStr(spec.board_gsm)&&
-        toStr(c.spec_bs)===toStr(spec.spec_bs)&&
-        toStr(c.spec_bct)===toStr(spec.spec_bct)&&
-        toStr(c.spec_ect)===toStr(spec.spec_ect)&&
-        +c.ply===(+spec.ply||5)&&
-        toStr(c.flute_F1)===toStr(spec.flute_F1)&&
-        toStr(c.flute_F2)===toStr(spec.flute_F2)&&
-        toStr(c.boxType)===toStr(spec.boxType||"RSC")
-      );
+      const existingSTD=findUsableStandardConstructionMatch(constructionLib,spec);
       if(existingSTD){
         // STDs match but paper layers differ — must not silently reuse
         const reuse=window.confirm(
@@ -804,7 +794,6 @@ export function useCostingBatchBridge(st){
     // because profileDraft is null again.
     markDraftSent();
     const rowNum=batchRows.length+1;
-    const constrWasMatched=!!existingFull||(!!constrCode&&!constructionLib.find(c=>c.code===constrCode));
     // Single toast — construction info merged in so the Maker sees one clear signal
     showToast(
       `✅ Row ${rowNum} added to Batch Entry · [${constrCode}] · → switch to Batch Entry tab to verify`,
@@ -858,7 +847,10 @@ export function useCostingBatchBridge(st){
   // ⚠️ See D-2: the confirm text names the profile, SKU rows, results and Quote
   // Items — four things — but setSpec below also discards the Costing
   // scratchpad, unnamed. Recorded, deliberately NOT fixed here (defect freeze).
-  const startNewBatch=()=>{
+  // `+ New Batch` now opens the governed creation surface. Nothing is cleared
+  // until public.create_batch has succeeded and its complete workspace has
+  // been read back. This function performs that post-success transition only.
+  const completeNewBatchStart=(governedBatch=null)=>{
             // Fix 5: also clear Quote Items on New Batch so prior customer's data cannot leak
             // ── D-2: name what CHANGES, not four of ten things ───────────────
             // The old confirm named the profile, rows, results and Quote Items —
@@ -893,20 +885,9 @@ export function useCostingBatchBridge(st){
             // discarded, and the Maker is pointed at New Draft as the way to keep
             // working. This qualifies D-2's spec-preservation for this one path.
             const _isNewBatchDraft=profileDraft!==null;
-            const _keepLine=_isNewBatchDraft
-              ?"• Keeps your new-batch draft — it is independent of the batch being cleared.\n"
-              :"• DISCARDS your Costing draft — it belongs to the batch being cleared. Cancel and use New Draft first if you want to keep it.\n";
-            if(!window.confirm(
-              "Start a new batch?\n\n"+
-              "• Clears the current batch — profile, all SKU rows, results and Quote Items.\n"+
-              _keepLine+
-              // C6 deleted specCommitted and the identity freeze with it, but this
-              // line went on telling the Maker a freeze was being released. It named
-              // a mechanism that no longer exists. Unlinking the review is the part
-              // that is still true, so that is all it now says.
-              "• Returns Costing to same-batch context: any Deep-Dive review is unlinked.\n\n"+
-              "OK = Start new batch   |   Cancel = Stay"
-            ))return;
+            // The confirmation and the exact impact summary now live in the
+            // governed creation panel. Repeating a browser confirm here would
+            // create two approval moments after the new Batch already exists.
             // ── D-5 prerequisite: archive the batch being cleared ────────────────
             // INVARIANT: cbb_batch_previous holds the most recent NON-EMPTY batch
             // cleared by + New Batch. One slot. Nothing else.
@@ -945,9 +926,20 @@ export function useCostingBatchBridge(st){
                   setItem('cbb_batch_previous',JSON.stringify({..._prev,archivedAt:Date.now()}));
               }
             }catch{ /* unparseable autosave — leave any existing archive intact */ }
-            const fresh={client:'',sector:'',plant:'',delivery:'',
-              margin:8,marginPP:8,interest:0.5,paymentDisc:'30',freightOverride:'',
-              waste:5,convRate:7,wastePP:5,convRatePP:12.5,
+            const durableProfile=governedBatch?.current_profile;
+            const profileValue=(key,localDefault)=>governedBatch
+              ?(durableProfile?.[key]??null)
+              :localDefault;
+            const fresh={client:'',
+              sector:governedBatch?.sector?.sector_code||'',
+              plant:governedBatch?.plant?.name||'',delivery:'',
+              margin:profileValue('margin_box_pct',8),
+              marginPP:profileValue('margin_pp_pct',8),
+              interest:governedBatch?null:0.5,paymentDisc:'30',freightOverride:'',
+              waste:profileValue('waste_cbb_pct',5),
+              convRate:profileValue('conv_box_rate',7),
+              wastePP:profileValue('waste_pp_pct',5),
+              convRatePP:profileValue('conv_pp_rate',12.5),
               customerType:'existing',priceContext:'unknown'};
             setBatchProfile(fresh);
             // C5 · B2: seed the draft from the `fresh` object we just built, NOT
@@ -980,8 +972,14 @@ export function useCostingBatchBridge(st){
             // category as the spec, not batch state. Resetting it would make
             // "keeps your Costing spec" partly false, since a preserved spec
             // would stop behaving the way the Maker left it.
-            showToast("✅ New batch started — Costing spec kept",'success');
+            setDurableBatch(governedBatch);
+            setNewBatchDialogOpen(false);
+            showToast(governedBatch
+              ?`✅ Governed Batch ${governedBatch.batch_reference} started — Costing spec kept`
+              :"✅ Local Batch draft cleared and durable Batch unbound — Costing spec kept",'success');
   };
 
-  return { copyCostingToProfile, discardNewDraft, loadBatchRowIntoCosting, newDraftKeepClient, newDraftNewClient, pushCostingToBatchRow, sendCostingToBatch, specContextOnly, specForNextSku, specFromProfile, startNewBatch, startNewSku };
+  const startNewBatch=()=>setNewBatchDialogOpen(true);
+
+  return { completeNewBatchStart, copyCostingToProfile, discardNewDraft, loadBatchRowIntoCosting, newDraftKeepClient, newDraftNewClient, pushCostingToBatchRow, sendCostingToBatch, specContextOnly, specForNextSku, specFromProfile, startNewBatch, startNewSku };
 }

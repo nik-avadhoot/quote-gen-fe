@@ -362,6 +362,11 @@ UA-7 proceeds only when **either** the standalone screen is reliably available i
 flag configuration, **or** the screen is unflagged. Until then the duplication stays. `PlantPicker`
 keeps its own `plants` fetch regardless, so user assignment never depends on the panel.
 
+**This gate was discharged on 2026-09-09 and UA-7 is closed — see §13.** The first limb was
+satisfied: a tracked development floor in `src/lib/featureFlags.js` makes the standalone screen
+reliably available in the development build. The screen was NOT unflagged, and the production flag
+remains off — see §13's production qualification.
+
 ---
 
 ## 6. Frontend actions and screens
@@ -631,11 +636,64 @@ revoked rows in either grant table; `ClaudeCode` is unchanged.
 Commits: `quote-gen-be` `b38f3a5`, `eb0452b`, `065a0b3`; `quote-gen-fe` `9301600`, `019b4a3`,
 `0292160`. Nothing pushed.
 
-### The only remaining Users/Access sub-slice
+### Remaining Users/Access sub-slices
 
-| # | Slice | State |
-|---|---|---|
-| **UA-7** | Remove the duplicated embedded Plant Master panel | Open, unauthorised, **gated on reliable standalone Producing Plants visibility (§5)** |
-
-UA-1, UA-3, UA-4, UA-5 and UA-6 are closed. UA-7 needs its own authorisation, and nothing here
+**None.** UA-1, UA-3, UA-4, UA-5, UA-6 and UA-7 are all closed — see §13 for UA-7. Nothing here
 begins S8 or U2.
+
+---
+
+## 13. Closure record — UA-7 (2026-09-09)
+
+**UA-7 is CLOSED: implemented, automated-test verified, browser verified, technically closed and
+Product Owner validated.** Users/Access is complete. U1 as a whole remains OPEN.
+
+### The §5 gate, and how it was discharged
+
+§5 forbade removing the embedded panel while the standalone screen "can be hidden by configuration".
+It could be. Reconciliation found that the only thing enabling `u1_producing_plants` and
+`u1_customer_families` was `.env.local` — ignored by `.gitignore` `*.local`, never tracked, never in
+history. A clean checkout of HEAD carries only `.env.example` (flag empty) and `.env.production` (no
+flag line), so a fresh clone or a new machine silently lost both screens. That is precisely the
+appearing-then-disappearing regression §5 names.
+
+The correction is a tracked **development floor** in `src/lib/featureFlags.js`: `DEV_DEFAULTS` unions
+`u1_producing_plants` and `u1_customer_families` into the enabled set when `import.meta.env.DEV` is
+true. Deliberately code and not a `.env.development` file, because Vite ranks `.env.[mode]` ABOVE
+`.env.local` and an env file would silently strip a developer's own flags. Verified on real Vite
+builds: with **no env files at all** both resolve `true`; with `.env.local` present the developer's
+`u1_batch_party_link` survives; under `vite build` the spread is dead-code eliminated.
+
+### The change
+
+`src/tabs/UserManagementTab.jsx`: `PlantMasterPanel` (44 lines) and its single render call removed —
+nothing else. The `/masters/plants` fetch, `plants` state, `PlantPicker`, `CapabilityMatrix`,
+`NewUserForm` and `AuthOrphansPanel` are all retained; plant assignment never depended on the panel.
+`ProducingPlantsScreen.jsx` and `.env.example` had stale cross-references corrected.
+
+### Evidence
+
+| Gate | Result |
+|---|---|
+| Frontend fixture gates | **10 gates, 628 checks, all pass**; `user-access` 124 |
+| ESLint | **66 errors, 0 warnings** — ceiling unchanged, zero new, none in the touched files |
+| Authenticated browser walkthrough | **Passed**, 2026-09-09, Product Owner's Chrome on `localhost:5173`, live backend |
+
+Browser evidence, Product Owner validated: the served source contained the UA-7 changes
+(`PlantMasterPanel` 0 occurrences, `DEV_DEFAULTS` present); the embedded panel was absent from
+Users/Access; plant assignment and capability controls remained operational (KOL/NAG/PUN drove the
+capability matrix); a drafted change enabled Save and was **discarded without a write**, confirmed by
+re-reading the list from the server; Producing Plants rendered standalone (KOL/NAG/PUN, read-only, no
+timezone); Customer Families remained visible and operational; and no navigation, session, authority
+or relevant console regression appeared. Fixtures 1375 and 1574 are unchanged — still inactive with
+zero active grants.
+
+### Production qualification — RETAINED
+
+**Production rollout is not ready.** The production feature flag remains off and `.env.production` is
+untouched, so with the embedded fallback now removed a **production build has no Plant Master view at
+all**. UA-7 is closed for the current private development application only. Production visibility is
+NOT secured, and must not be represented as such. Exposing the standalone Plant Master in production
+is a separate rollout decision that has not been taken.
+
+Nothing committed or pushed.

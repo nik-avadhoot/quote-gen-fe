@@ -33,7 +33,7 @@
 import * as XLSX from "xlsx-js-style";
 import { TAKEUP, TRIM, PLANTS, LOCATIONS } from "../data/defaults.js";
 import { CALC_DEFAULTS } from "../engine/calcDefaults.js";
-import { resolveSupplierCreditCost } from "../engine/resolveAuthority.js";
+import { establishEffectiveMaterialRate, resolveSupplierCreditCost } from "../engine/rateMaster.js";
 import { getTrimD } from "../engine/costing.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
 import { apiFetch } from "../lib/apiClient.js";
@@ -150,7 +150,7 @@ const exportExcelFull=(items,rates,freight)=>{
     ...rates.map(r=>{
       const cp=resolveSupplierCreditCost({rateEntry:r}).value/100;
       return [r.code,r.desc,r.price,+(r.price*cp).toFixed(2),r.disc,(r.freight||0),
-              +(r.price+r.price*cp-(r.disc||0)+(r.freight||0)).toFixed(2)];
+              +establishEffectiveMaterialRate(r).toFixed(2)];
     }),
     [""],["GSM SURCHARGE: <100 GSM=+4 | =100 GSM=+1.5 (FIXED) | >200 GSM=+1 | else 0"],
   ];

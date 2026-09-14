@@ -30,8 +30,8 @@
 import { CALC_DEFAULTS } from "../src/engine/calcDefaults.js";
 import { APPROVED_DAY_COUNT_BASIS, STRUCTURED_PAYMENT_TERMS,
   deriveInterestPct, isStructuredPaymentTerm } from "../src/engine/interestBasis.js";
-import { isBlank, resolveField, resolveInterest, resolveRowAuthority,
-  resolveSupplierCreditCost } from "../src/engine/resolveAuthority.js";
+import { isBlank, normalizeFreightOverrideInput, resolveField, resolveFreight, resolveInterest, resolveRowAuthority } from "../src/engine/resolveAuthority.js";
+import { establishEffectiveMaterialRate, resolveSupplierCreditCost } from "../src/engine/rateMaster.js";
 import { CREDIT_PCT } from "../src/data/defaults.js";
 
 let fails = 0;
@@ -209,11 +209,8 @@ for (const [days, want] of [[30, 0.5], [45, 0.75], [60, 1.0], [90, 1.5]]) {
 // ── SUPPLIER PAPER-CREDIT COST is a different tier entirely (CDM-41) ─────
 console.log("\n── supplier paper-credit cost is not customer interest (A-05) ──");
 {
-  eq("the versioned system value is 1.5%", CALC_DEFAULTS.supplierCreditCostPct, 1.5);
-  ok("derived from CREDIT_PCT, not restated beside it",
-     CALC_DEFAULTS.supplierCreditCostPct / 100 === CREDIT_PCT);
-  ok("and it is NOT the customer annual rate",
-     CALC_DEFAULTS.supplierCreditCostPct !== CALC_DEFAULTS.annualInterestPct);
+  eq("the Rate Master mirror value is 1.5%", CREDIT_PCT * 100, 1.5);
+  ok("and it is NOT the customer annual rate", CREDIT_PCT * 100 !== CALC_DEFAULTS.annualInterestPct);
 
   const inherit = resolveSupplierCreditCost({ rateEntry: { code: "16", interest: null } });
   eq("a blank per-grade value inherits", inherit.value, 1.5);
@@ -231,6 +228,9 @@ console.log("\n── supplier paper-credit cost is not customer interest (A-05)
     rateSetVersion: { id: 7, creditCostPct: 1.75 } });
   eq("and the Rate Set version tier is live the moment one is supplied", viaVersion.value, 1.75);
   eq("attributed to the version", viaVersion.source, "rate_set_version");
+  eq("the Rate Master establishes the governed effective material rate",
+     establishEffectiveMaterialRate({ code: "22", price: 40, disc: 1, freight: 2, interest: "" },
+       { id: 7, creditCostPct: 1.75 }), 41.7);
 }
 
 // ── PROVENANCE FOR EVERY INHERITED FIELD, IN ONE CALL (CDM-22) ───────────
@@ -248,6 +248,265 @@ console.log("\n── Send freezes values AND sources ──");
   ok("every field carries a source", Object.values(all).every(r => !!r.source));
   ok("and a sourceRef slot, even when null",
      Object.values(all).every(r => "sourceRef" in r));
+}
+
+
+// ══ S8(a) — FREIGHT AUTHORITY (CDM-17) ═══════════════════════════════════
+//
+// What a green run here has to mean, stated as the resolvers that would FAIL:
+//
+//   · the pre-S8 `if(override&&+override>0)` passes every positive case and
+//     FAILS every explicit-zero case, at all four tiers;
+//   · the pre-S8 `matrix?.[p]?.[d] || 0` passes every hit and FAILS every
+//     unresolved case, because it answers 0 where there is no rate on file;
+//   · a resolver that ordered legacy_batch above row passes everything except
+//     the precedence case — which is the U4 decision this slice recorded;
+//   · a resolver that returned `master` for DEFAULT_FREIGHT passes every value
+//     case and FAILS the provenance cases, which is the falsehood that would
+//     have reached a snapshot as an approved Freight Set version;
+//   · a resolver that substituted the Batch destination in master mode passes
+//     the happy path and FAILS the no-substitution case.
+
+const MATRIX = { Nagpur: { Pune: 2.5, Nagpur: 2.0 } };
+const M = { legacyMatrix: MATRIX, legacyMatrixRef: "app-mirror/default-freight",
+            originPlant: "Nagpur", legacyDestination: "Pune" };
+const GOOD_REF = { freightSetVersionId: 11, freightEntryId: 42 };
+
+console.log("\n── S8(a) freight: explicit zero survives at every tier ──");
+{
+  eq("row 0 is a value, not a blank",   resolveFreight({ ...M, rowOverride: 0 }).value, 0);
+  eq("and it is attributed to the row", resolveFreight({ ...M, rowOverride: 0 }).source, "row");
+  eq("legacy batch 0 is a value",       resolveFreight({ ...M, legacyBatchOverride: 0 }).value, 0);
+  eq("attributed to the legacy tier",   resolveFreight({ ...M, legacyBatchOverride: 0 }).source, "legacy_batch");
+  eq("ex_factory is an explicit zero",
+     resolveFreight({ ...M, pricingGroup: { id: 5, mode: "ex_factory" } }).value, 0);
+  eq("and it is GOVERNED, not a miss",
+     resolveFreight({ ...M, pricingGroup: { id: 5, mode: "ex_factory" } }).authority, "governed");
+  eq("Pricing Group manual 0 survives",
+     resolveFreight({ ...M, pricingGroup: { id: 5, mode: "manual", manualValue: 0 } }).value, 0);
+  eq("an approved master rate of 0 is a RATE, not a missing pair",
+     resolveFreight({ ...M, approvedMasterRate: 0, approvedMasterRef: GOOD_REF }).value, 0);
+  eq("attributed to the approved master",
+     resolveFreight({ ...M, approvedMasterRate: 0, approvedMasterRef: GOOD_REF }).source, "master");
+  eq("a legacy matrix rate of 0 is a rate too",
+     resolveFreight({ ...M, legacyMatrix: { Nagpur: { Pune: 0 } } }).value, 0);
+}
+
+console.log("\n── S8(a) freight: row beats the temporary legacy batch tier ──");
+{
+  const both = resolveFreight({ ...M, rowOverride: 7, legacyBatchOverride: 3 });
+  eq("the row override wins", both.value, 7);
+  eq("and says so", both.source, "row");
+  const zeroRow = resolveFreight({ ...M, rowOverride: 0, legacyBatchOverride: 3 });
+  eq("an explicit row ZERO also beats an inherited legacy value", zeroRow.value, 0);
+  const blankRow = resolveFreight({ ...M, rowOverride: "", legacyBatchOverride: 3 });
+  eq("a BLANK row inherits the legacy tier", blankRow.value, 3);
+  eq("and is attributed to it", blankRow.source, "legacy_batch");
+}
+
+console.log("\n── S8(a) freight: governed vs temporary provenance ──");
+{
+  const master = resolveFreight({ ...M, approvedMasterRate: 4.25, approvedMasterRef: GOOD_REF });
+  eq("approved master is governed", master.authority, "governed");
+  eq("with the exact serialized reference shape",
+     JSON.stringify(master.sourceRef), JSON.stringify({ freightSetVersionId: 11, freightEntryId: 42 }));
+
+  const legacy = resolveFreight({ ...M });
+  eq("the mirror is NOT source master", legacy.source, "legacy_matrix");
+  eq("it is explicitly TEMPORARY", legacy.authority, "temporary");
+  eq("and carries the mirror label, never a Freight Set version",
+     legacy.sourceRef, "app-mirror/default-freight");
+  eq("recording why it degraded", legacy.degradedFrom, "no_pricing_group");
+  ok("a temporary label can never occupy the governed reference shape",
+     typeof legacy.sourceRef === "string" && typeof master.sourceRef === "object");
+
+  eq("legacy_batch is temporary too",
+     resolveFreight({ ...M, legacyBatchOverride: 3 }).authority, "temporary");
+  eq("the row tier is governed",
+     resolveFreight({ ...M, rowOverride: 3 }).authority, "governed");
+}
+
+console.log("\n── S8(a) freight: incomplete governed provenance is UNAVAILABLE ──");
+{
+  const half = resolveFreight({ ...M, approvedMasterRate: 4.25,
+                                approvedMasterRef: { freightSetVersionId: 11 } });
+  eq("half a reference is not a reference — it does not return master", half.source, "legacy_matrix");
+  eq("and it degrades on the authorized path", half.degradedFrom, "no_approved_pair");
+  const none = resolveFreight({ ...M, approvedMasterRate: 4.25, approvedMasterRef: null });
+  eq("no reference at all, same treatment", none.source, "legacy_matrix");
+}
+
+console.log("\n── S8(a) freight: Pricing Group modes ──");
+{
+  const man = resolveFreight({ ...M, pricingGroup: { id: 9, mode: "manual", manualValue: 6.5 } });
+  eq("manual terminates at the group", man.value, 6.5);
+  eq("attributed to the Pricing Group", man.source, "pricing_group");
+  eq("carrying the group id", man.sourceRef, 9);
+  eq("and its mode", man.mode, "manual");
+
+  const bad = resolveFreight({ ...M, pricingGroup: { id: 9, mode: "manual", manualValue: null } });
+  eq("manual with no value is unresolved, NOT a fall-through", bad.source, "unresolved");
+  eq("with its own reason", bad.reason, "manual_value_missing");
+  eq("and no number", bad.value, null);
+
+  const noBasis = resolveFreight({ ...M, pricingGroup: { id: 9, mode: "master",
+                                                         basisDeliveryGroupId: null } });
+  eq("master mode with no basis degrades", noBasis.degradedFrom, "basis_missing");
+  const shipTo = resolveFreight({ ...M, pricingGroup: { id: 9, mode: "master",
+                                    basisDeliveryGroupId: 3 },
+                                  approvedMasterUnavailable: "basis_ship_to_missing" });
+  eq("a basis with no Ship-to is its own reason", shipTo.degradedFrom, "basis_ship_to_missing");
+}
+
+console.log("\n── S8(a) freight: the Batch destination is NEVER the basis ──");
+{
+  // Master mode, basis selected, approved rate genuinely unavailable. The Batch
+  // destination Pune IS in the legacy matrix. The approved tier must not borrow
+  // it: the value may only come from the authorized legacy_matrix tier, and it
+  // must SAY so rather than claiming approved authority for a substituted route.
+  const sub = resolveFreight({ ...M,
+    pricingGroup: { id: 9, mode: "master", basisDeliveryGroupId: 3 },
+    approvedMasterRate: undefined, approvedMasterUnavailable: "no_approved_pair" });
+  eq("no approved value is manufactured from the Batch destination", sub.source, "legacy_matrix");
+  eq("it is temporary", sub.authority, "temporary");
+  eq("and the governed failure is recorded", sub.degradedFrom, "no_approved_pair");
+  ok("the number came from the legacy route, not an approved pair", sub.value === 2.5);
+}
+
+console.log("\n── S8(a) freight: unresolved blocks and is never zero ──");
+{
+  const miss = resolveFreight({ ...M, legacyDestination: "Nashik" });
+  eq("a missing legacy pair is unresolved", miss.source, "unresolved");
+  eq("value is null — never 0", miss.value, null);
+  ok("and never NaN", !Number.isNaN(miss.value));
+  eq("with a reason", miss.reason, "no_legacy_pair");
+  eq("no authority is claimed", miss.authority, null);
+
+  const nothing = resolveFreight({ originPlant: "Nagpur", legacyDestination: "Pune" });
+  eq("no matrix at all is unresolved too", nothing.source, "unresolved");
+  eq("still null", nothing.value, null);
+}
+
+
+// ══ S8 PRODUCER-SIDE — what the Batch Profile STORES ══════════════════════
+//
+// resolveFreight can only be as honest as the value handed to it. These arms
+// cover the producer, and each names the writer that would FAIL it:
+//
+//   · the old `isManual = v!=='' && +v!==_matrixFr` passes blank and passes
+//     "different from matrix", and FAILS both equal-to-matrix cases - storing
+//     '' where the user typed a value, so an override and an inheritance
+//     became the same stored state;
+//   · a writer that kept `+v>0` FAILS both explicit-zero cases;
+//   · the old Plant/Delivery handlers wrote the new route's matrix rate into
+//     freightOverride, so they FAIL the two route-change cases by inventing an
+//     override that was never entered.
+//
+// The two cases that carry the argument are 3 and 5: both produce the SAME
+// NUMBER as the pre-fix code and differ only in `source`. A fix that got the
+// value right and the authority wrong passes every numeric assertion and fails
+// exactly these.
+
+const MX = { Nagpur: { Nagpur: 2, Pune: 2.5 }, Pune: { Nashik: 0 } };
+const P  = { legacyMatrix: MX, legacyMatrixRef: "app-mirror/default-freight" };
+
+// The stored profile value, then what the resolver makes of it. One helper so
+// the producer and the consumer are never asserted apart.
+const stored = (typed) => normalizeFreightOverrideInput(typed);
+const resolvedFrom = (typed, plant, dest) => resolveFreight({
+  ...P, legacyBatchOverride: stored(typed), originPlant: plant, legacyDestination: dest });
+
+console.log("\n── S8 producer: every deliberate entry is preserved ──");
+{
+  // 1. blank → inheritance
+  eq("blank stores '' (inherit)", stored(""), "");
+  eq("and the chain advances past the batch tier",
+     resolvedFrom("", "Nagpur", "Nagpur").source, "legacy_matrix");
+  eq("picking up the matrix rate", resolvedFrom("", "Nagpur", "Nagpur").value, 2);
+
+  // 2. explicit zero, matrix non-zero
+  eq("explicit 0 stores the NUMBER 0", stored("0"), 0);
+  ok("which is not blank", stored("0") !== "");
+  eq("and is attributed to the batch tier",
+     resolvedFrom("0", "Nagpur", "Nagpur").source, "legacy_batch");
+  eq("charging nothing, not the matrix 2", resolvedFrom("0", "Nagpur", "Nagpur").value, 0);
+
+  // 3. explicit value EQUAL to the matrix — the demotion case
+  eq("a value equal to the matrix is still stored", stored("2"), 2);
+  eq("and keeps BATCH authority, not matrix authority",
+     resolvedFrom("2", "Nagpur", "Nagpur").source, "legacy_batch");
+  ok("same number as inheriting, different tier — not interchangeable",
+     resolvedFrom("2", "Nagpur", "Nagpur").value === resolvedFrom("", "Nagpur", "Nagpur").value
+     && resolvedFrom("2", "Nagpur", "Nagpur").source !== resolvedFrom("", "Nagpur", "Nagpur").source);
+
+  // 4. explicit value different from the matrix
+  eq("a different value is stored", stored("3.5"), 3.5);
+  eq("with batch authority", resolvedFrom("3.5", "Nagpur", "Nagpur").source, "legacy_batch");
+
+  // 5. explicit zero where the MATRIX RATE IS ALSO ZERO (real: Pune→Nashik)
+  eq("an explicit 0 on a zero-rated route is still stored", stored("0"), 0);
+  eq("and is the batch's zero, not the matrix's",
+     resolvedFrom("0", "Pune", "Nashik").source, "legacy_batch");
+  eq("while blank on that same route is the matrix's zero",
+     resolvedFrom("", "Pune", "Nashik").source, "legacy_matrix");
+  ok("both are 0, and they are NOT the same fact",
+     resolvedFrom("0", "Pune", "Nashik").value === 0
+     && resolvedFrom("", "Pune", "Nashik").value === 0);
+
+  // 9. clearing restores inheritance — the single deliberate action
+  eq("clearing a stored override returns to inherit", stored(""), "");
+  eq("and the tier advances again",
+     resolvedFrom("", "Nagpur", "Nagpur").source, "legacy_matrix");
+}
+
+console.log("\n── S8 producer: an absent matrix pair is not a zero ──");
+{
+  // 6. The display rule extracted verbatim from BatchProfileBar's TERMS block:
+  //    a genuine 0 is a rate; an absent pair is unavailable and shows empty.
+  const mxAvail = (raw) => raw !== undefined && raw !== null && raw !== "";
+  const displayFr = (ovr, raw) => {
+    const isOvr = ovr !== "" && ovr !== undefined;
+    return isOvr ? ovr : (mxAvail(raw) ? raw : "");
+  };
+  eq("a genuine matrix rate of 0 is available", mxAvail(MX.Pune.Nashik), true);
+  eq("and displays as 0", displayFr("", MX.Pune.Nashik), 0);
+  eq("an ABSENT pair is not available", mxAvail(MX.Nagpur.Nashik), false);
+  eq("and displays EMPTY, never 0", displayFr("", MX.Nagpur.Nashik), "");
+  ok("nothing is stored for an absent pair either", stored("") === "");
+  eq("and the chain reports it unresolved rather than free",
+     resolveFreight({ ...P, originPlant: "Nagpur", legacyDestination: "Nashik" }).source,
+     "unresolved");
+
+  // _isOvr is presence-only: an override equal to the matrix still styles as one.
+  const isOvr = (v) => v !== "" && v !== undefined;
+  ok("an override equal to the matrix is still flagged OVERRIDDEN", isOvr(stored("2")));
+  ok("and an inherited value is not", !isOvr(stored("")));
+}
+
+console.log("\n── S8 producer: a route change preserves the override ──");
+{
+  // 7 + 8. The Plant/Delivery reducers now write only the axis they own. The
+  // reducer bodies are reproduced here exactly as they now read.
+  const onPlant    = (p, nv) => ({ ...p, plant: nv });
+  const onDelivery = (p, nv) => ({ ...p, delivery: nv });
+
+  const withOvr = { plant: "Nagpur", delivery: "Nagpur", freightOverride: 3.5 };
+  eq("changing PLANT leaves the stored override untouched",
+     onPlant(withOvr, "Pune").freightOverride, 3.5);
+  eq("changing DELIVERY leaves it untouched",
+     onDelivery(withOvr, "Pune").freightOverride, 3.5);
+  ok("and it is not replaced by the new route's matrix rate",
+     onPlant(withOvr, "Pune").freightOverride !== MX.Pune.Nashik
+     && onPlant(withOvr, "Pune").freightOverride !== 2);
+
+  const inheriting = { plant: "Nagpur", delivery: "Nagpur", freightOverride: "" };
+  eq("an INHERITING profile is not given one by changing plant",
+     onPlant(inheriting, "Pune").freightOverride, "");
+  eq("nor by changing delivery",
+     onDelivery(inheriting, "Pune").freightOverride, "");
+  eq("so it still inherits afterwards",
+     resolveFreight({ ...P, legacyBatchOverride: onPlant(inheriting, "Nagpur").freightOverride,
+       originPlant: "Nagpur", legacyDestination: "Pune" }).source, "legacy_matrix");
 }
 
 console.log(fails === 0 ? "\nall checks pass" : `\n${fails} FAILED`);

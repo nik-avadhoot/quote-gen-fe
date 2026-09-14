@@ -73,50 +73,6 @@ function PlantPicker({ plants, selected, disabled, onChange }) {
   );
 }
 
-// Read-only on purpose. The canonical brief seeds `plants` and approves no
-// create/edit/deactivate operation for it, so Plant Master maintenance is
-// deferred rather than invented here, and the panel says so instead of leaving
-// an administrator hunting for a button that should not exist yet.
-function PlantMasterPanel({ plants }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div style={{ marginBottom: 12, background: C.white, border: `1px solid ${C.border}`, borderRadius: 7 }}>
-      <button type="button" onClick={() => setOpen(o => !o)}
-        style={{ ...btnStyle("outline"), width: "100%", textAlign: "left", borderRadius: 7, border: "none", background: "transparent", padding: "9px 12px" }}>
-        {open ? "▾" : "▸"} Plant Master — {plants.filter(p => p.status === "active").length} active
-      </button>
-      {open && (
-        <div style={{ padding: "0 12px 12px" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%" }}>
-            <thead>
-              <tr style={{ color: C.slateM }}>
-                {["Code", "Name", "Status"].map(h => (
-                  <th key={h} style={{ padding: "4px 8px", textAlign: "left", fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {plants.map(p => (
-                <tr key={p.plant_code} style={{ borderTop: `1px solid ${C.border}` }}>
-                  <td style={{ padding: "5px 8px", fontFamily: mono, fontSize: 12, fontWeight: 700, color: C.slate }}>{p.plant_code}</td>
-                  <td style={{ padding: "5px 8px", fontSize: 12, color: C.slateM }}>{p.name}</td>
-                  <td style={{ padding: "5px 8px", fontSize: 11, fontWeight: 700, color: p.status === "active" ? C.green : C.slateL }}>
-                    {p.status === "active" ? "● Active" : "○ Inactive"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{ marginTop: 8, fontSize: 11, color: C.slateL }}>
-            Read-only. Adding, editing or retiring a plant is not part of this phase —
-            removing a user&apos;s plant assignment does not deactivate the plant.
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // Shown after creating a user or resetting a password — stays on screen until
 // explicitly closed (no toast, no timeout) since this is the only time the
 // password is ever visible. Losing it here means the account is locked out.
@@ -587,7 +543,6 @@ export default function UserManagementTab({ showToast }) {
   return (
     <div style={{ overflowY: "auto", height: "100%", padding: 16 }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: C.slate, marginBottom: 10 }}>User Management</div>
-      <PlantMasterPanel plants={plants} />
       <AuthOrphansPanel plants={plants} onAdopted={load} showToast={showToast} />
       <NewUserForm plants={plants} onCreated={handleCreated} showToast={showToast} />
       <div style={{ marginBottom: 10 }}>

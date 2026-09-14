@@ -18,12 +18,15 @@
 // nowhere, since the copy is invisible to any other gate in this repo.
 // ═══════════════════════════════════════════════════════════════════════════
 import {
+  groupExternalReferencesByParty, externalRefKindLabel, EXTERNAL_REF_KIND_LABELS,
   familyNameIsBlank,
   proposeFamilyBody, createProspectBody, updateFamilyNameBody, approveFamilyBody,
-  addAliasBody, updateAliasBody, retireAliasBody, mergeBody, reassignBody, graduateBody,
+  addFamilySectorBody, addAliasBody, updateAliasBody, retireAliasBody, mergeBody,
+  reassignBody, graduateBody,
   mergeConfirmMessage, reassignConfirmMessage, graduateConfirmMessage, retireAliasConfirmMessage,
   effectiveDatePrecedesMembership,
 } from "../src/lib/customerFamilyActions.js";
+import { readFileSync } from "node:fs";
 
 let fails = 0;
 const ok = (name, cond, extra = "") => {
@@ -34,8 +37,8 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // ── request-body shapes — one per route, exact keys only ───────────────────
 
-ok("propose: trims whitespace and maps to {name}",
-   eq(proposeFamilyBody("  Acme  "), { name: "Acme" }));
+ok("propose: trims whitespace and includes the required first Sector",
+   eq(proposeFamilyBody("  Acme  ", "31"), { name: "Acme", sector_id: 31 }));
 
 // ── D3: a blank Family proposal must be refused visibly, never silently ────
 // The button used to LOOK disabled while staying clickable (ui/primitives.jsx
@@ -54,13 +57,16 @@ ok("blank check: a non-string is blank (never proposable)", familyNameIsBlank(42
 ok("blank name and the body builder agree — what the button blocks is exactly what would send empty",
    familyNameIsBlank("   ") === true && proposeFamilyBody("   ").name === "");
 
-ok("prospect: family_id omitted entirely when not given",
-   eq(createProspectBody("Beta Co", null), { display_name: "Beta Co" })
+ok("prospect: family_id omitted entirely when not given and first Sector retained",
+   eq(createProspectBody("Beta Co", null, "31"), { display_name: "Beta Co", sector_id: 31 })
    && !("family_id" in createProspectBody("Beta Co", null)));
 ok("prospect: family_id coerced to a number when given (a <select> value is a string)",
    eq(createProspectBody("Beta Co", "7"), { display_name: "Beta Co", family_id: 7 }));
 ok("prospect: an empty-string family_id (the placeholder option) is treated as omitted",
    !("family_id" in createProspectBody("Beta Co", "")));
+
+ok("add-sector: carries the selected Sector and Family CAS token",
+   eq(addFamilySectorBody("32", 3), { sector_id: 32, expected_content_version: 3 }));
 
 ok("update-name: carries both the new name and the CAS token",
    eq(updateFamilyNameBody("Acme Renamed", 3), { name: "Acme Renamed", expected_content_version: 3 }));
@@ -126,6 +132,64 @@ ok("a missing effective date never flags (nothing to compare)",
    effectiveDatePrecedesMembership("", "2026-06-01") === false);
 ok("a missing membership start date never flags (nothing to compare)",
    effectiveDatePrecedesMembership("2026-01-01", "") === false);
+
+// ── U1 external references — read-only presentation ────────────────────────
+// Grouping and ordering are the whole testable surface here: there is no body
+// builder, because there is no write operation. What must hold is that a
+// reference is attributed to the RIGHT Party and that the order does not
+// depend on what order the server happened to return rows in.
+
+const XREFS = [
+  { id: 3, party_id: 9, ref_kind: "other", ref_value: "zeta" },
+  { id: 1, party_id: 9, ref_kind: "legacy_customer_code", ref_value: "OLD-2" },
+  { id: 2, party_id: 9, ref_kind: "legacy_customer_code", ref_value: "OLD-1" },
+  { id: 4, party_id: 12, ref_kind: "customer_item_ref", ref_value: "ITEM-9" },
+];
+const grouped = groupExternalReferencesByParty(XREFS);
+
+ok("external refs: grouped under the Party they belong to",
+   grouped[9].length === 3 && grouped[12].length === 1);
+ok("external refs: a Party with none is simply absent, not an empty key",
+   grouped[99] === undefined);
+ok("external refs: ordered by kind, then value, then id — not by arrival order",
+   grouped[9].map(r => r.id).join(",") === "2,1,3");
+ok("external refs: the same rows in a different order group identically",
+   JSON.stringify(groupExternalReferencesByParty([...XREFS].reverse())) === JSON.stringify(grouped));
+ok("external refs: a row with no party_id is dropped, never guessed onto a Party",
+   Object.keys(groupExternalReferencesByParty([{ id: 5, ref_value: "orphan" }])).length === 0);
+ok("external refs: an empty or missing payload yields an empty grouping",
+   Object.keys(groupExternalReferencesByParty([])).length === 0
+   && Object.keys(groupExternalReferencesByParty(undefined)).length === 0);
+
+ok("external refs: every kind the check constraint permits has a readable label",
+   externalRefKindLabel("legacy_customer_code") === "Legacy customer code"
+   && externalRefKindLabel("customer_item_ref") === "Customer item reference"
+   && externalRefKindLabel("other") === "Other");
+ok("external refs: the label map covers exactly ck_pxr_kind's three values",
+   Object.keys(EXTERNAL_REF_KIND_LABELS).sort().join(",")
+     === "customer_item_ref,legacy_customer_code,other");
+ok("external refs: an unrecognised kind is shown verbatim, not hidden or relabelled",
+   externalRefKindLabel("something_new") === "something_new");
+ok("external refs: a missing kind still renders something honest",
+   externalRefKindLabel(undefined) === "Unknown");
+
+const familyScreen = readFileSync(
+  new URL("../src/tabs/CustomerFamiliesScreen.jsx", import.meta.url), "utf8");
+ok("family workspace: proposal requires a first Sector and explains that more may be attached",
+   familyScreen.includes("Every Customer Family requires at least one Sector")
+   && familyScreen.includes("More Sectors can be attached from the Family workspace"));
+ok("family workspace: additional Sector uses only the governed backend route with Family CAS",
+   familyScreen.includes("/sectors`")
+   && familyScreen.includes("addFamilySectorBody(newSectorId, family.content_version)")
+   && !familyScreen.includes(".table(")
+   && !familyScreen.includes(".rpc("));
+ok("family workspace: all Family Sectors stay distinct from one-Sector Batch guidance",
+   familyScreen.includes("A Customer Family needs at least one Sector and may have more")
+   && familyScreen.includes("Each Batch uses exactly one attached Sector")
+   && familyScreen.includes("FIRST / BATCH SUGGESTION"));
+ok("family workspace: an unclassified legacy Family is a visible remediation gap",
+   familyScreen.includes("Sector classification required before Family approval or Batch creation")
+   && familyScreen.includes("must be classified in the Family workspace"));
 
 console.log();
 console.log(fails === 0 ? "all checks pass" : `${fails} FAILED`);

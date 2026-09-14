@@ -53,7 +53,12 @@ export default function SpecForm(){
   // stored values instead would report a row as carrying an override whenever
   // the profile holds a 0 and buildSpecFromRow seeded a "" from it, which is
   // the same freight by any measure the engine applies.
-  const _frEff=v=>(v!=null&&v!==""&&+v>0)?+v:null;
+  // S8(a). Was `+v>0`, the same discard-the-zero test the engine carried at
+  // getFreightRate. Display-only - it moves no price - but with the engine
+  // fixed it made this read-only card contradict the cost build-up two columns
+  // away: the build-up charged "0 Rs/kg" while this card showed the matrix
+  // rate as though that were what applied. Blank is blank; 0 is a value.
+  const _frEff=v=>(v!=null&&v!==""&&!isNaN(+v))?+v:null;
   const _frFromRow=!!activeBatchRowId
     &&_frEff(spec.freightOverride)!==_frEff(_bdC.freightOverride);
   // Both sides default the same way buildSpecFromRow does (engine:209), so a

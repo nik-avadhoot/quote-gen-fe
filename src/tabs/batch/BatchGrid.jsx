@@ -24,19 +24,53 @@ import { BOX_TYPES } from "../../data/defaults.js";
 import { buildSpecFromRow, checkSpecCompliance } from "../../engine/costing.js";
 import { isPPType, sameSetCode } from "../../engine/rowType.js";
 import { findDivergence, isDiverged } from "../../lib/overrideDivergence.js";
+import { isUsableConstruction } from "../../lib/constructionIdentity.js";
 import { Btn } from "../../ui/primitives.jsx";
 import { STATUS_DISPLAY, constrAutoName } from "../../lib/constructionName.js";
+import { canPinAddOn, MAX_PINNED_ADD_ONS } from "../../lib/pinnedAddOns.js";
+import { batchDeliveryGridEntries, deliverySectionItemCount } from "../../lib/batchDeliverySections.js";
+import { durableRowToLocalPreview } from "../../lib/batchRowModel.js";
 import { C, mono, sans } from "../../theme.js";
 import { useAppState } from "../../state/AppStateContext.js";
 
+const BASE_GRID_COLUMN_COUNT=35;
+
+function DeliverySectionHeader({ section, colSpan, onManage, onWorkspace }) {
+  const itemCount = deliverySectionItemCount(section);
+  const pricingLabel = section.pricingGroup?.label
+    || (section.pricingGroup?.id == null ? "No Pricing Group" : `Pricing Group #${section.pricingGroup.id}`);
+  return <tr className={`batch-grid-delivery-header is-${section.status}`}>
+    <td colSpan={colSpan}>
+      <div className="batch-grid-delivery-line">
+        <span className="batch-grid-delivery-kicker">Delivery Group</span>
+        <strong>{section.label}</strong>
+        <span className="batch-grid-delivery-path">{section.detail}</span>
+        <span className="batch-grid-delivery-pricing">{pricingLabel}</span>
+        <span className="batch-grid-delivery-count">{itemCount} item{itemCount === 1 ? "" : "s"}</span>
+        {section.isFreightBasis && <b>Freight basis</b>}
+        <span className="batch-grid-delivery-actions">
+          {section.pricingGroup && <button type="button" onClick={() => onWorkspace("row-create", section)}>
+            + Item
+          </button>}
+          <button type="button" onClick={() => onWorkspace("set-manage", section)}>SETs</button>
+          {section.route && <button type="button" onClick={() => onManage("edit", section)}>Edit</button>}
+          <button type="button" onClick={() => onManage(section.pricingGroup ? "create" : "manage", section)}>
+            {section.pricingGroup ? "+ Delivery Group" : "Manage Delivery Groups"}
+          </button>
+        </span>
+      </div>
+    </td>
+  </tr>;
+}
+
 export default function BatchGrid(){
   const {activeBatchRowId,addBatchRow,autoCalcPPDims,autoCodeEnabled,autoCodeSeq,
-    batchProfile,batchResults,batchRows,calculateAll,constructionLib,expandedRows,freight,
+    batchProfile,batchResults,batchRows,calculateAll,constructionLib,durableBatch,expandedRows,freight,
     generateCode,generateMissingCodes,getBatchRowStatus,invalidateAllBatchResults,
     invalidateBatchRow,loadBatchRowIntoCosting,partitionsMaster,pinnedAddOns,
     sendAllToQuoteItems,setAutoCodeEnabled,setBatchConstrOverlay,
     setBatchConstrOverlayFilter,setBatchConstrOverlayQuery,setBatchConstrTargetRowId,
-    setBatchRows,showToast,togglePinAddOn,toggleRowExpand}=useAppState();
+    setBatchProfile,setBatchRows,setBatchWorkspaceRequest,showToast,togglePinAddOn,toggleRowExpand}=useAppState();
   // D-26: the SET Code value as it stood when the input took focus, so blur can
   // tell an edit from a tab-through and only re-resolve Nos/Set on a real change.
   //
@@ -77,6 +111,41 @@ export default function BatchGrid(){
                   (r,b)=>set(r,"wasteConv_conv")?r.wasteConv_conv:b),
     };
   },[batchRows,batchProfile]);
+  const _deliveryGridEntries=useMemo(
+    ()=>batchDeliveryGridEntries(durableBatch,batchRows),[durableBatch,batchRows]);
+  const openDeliveryManager=(mode,section)=>{
+    if(!durableBatch?.id){
+      showToast("⚠️ Start or open a governed Batch before adding Delivery Groups.","info",6000);
+      return;
+    }
+    setBatchWorkspaceRequest({requestId:Date.now(),batchId:durableBatch.id,mode,
+      pricingGroupId:section.pricingGroup?.id??null,
+      deliveryGroupId:mode==="edit"?section.route?.id??null:null});
+  };
+  const openWorkspaceAction=(mode,section,detail={})=>{
+    if(!durableBatch?.id){
+      showToast("⚠️ Start or open a governed Batch before managing durable rows or SETs.","info",6000);
+      return;
+    }
+    setBatchWorkspaceRequest({requestId:Date.now(),batchId:durableBatch.id,mode,
+      pricingGroupId:section.pricingGroup?.id??null,...detail});
+  };
+  const copyDurableToGrid=durableRow=>{
+    const existing=batchRows.find(item=>String(item.durableRowId)===String(durableRow.id));
+    const preview=durableRowToLocalPreview(durableRow,existing?.id||`local-durable-${durableRow.id}`);
+    setBatchRows(current=>existing
+      ?current.map(item=>item.id===existing.id?preview:item)
+      :[...current,preview]);
+    if(existing) invalidateBatchRow(existing.id);
+    setBatchProfile(current=>({
+      ...current,
+      client:durableRow.customer?.display_name||current.client,
+      plant:durableBatch?.plant?.name||durableBatch?.plant?.plant_code||current.plant,
+      sector:durableBatch?.sector?.sector_code||current.sector,
+    }));
+    showToast("Loaded exact governed row inputs into the local preview grid. No calculation was persisted.",
+      "success",6500);
+  };
   // Shared marker: red border + a ⚠ line in the tooltip. Amber (override) is untouched.
   const _divStyle=d=>d?{border:`1px solid ${C.red}`,background:"#FFF1F0"}:null;
   const _divTitle=(d,label,unit)=>d
@@ -127,7 +196,7 @@ export default function BatchGrid(){
         </div>
 
         {/* The grid */}
-        {batchRows.length===0
+        {_deliveryGridEntries.length===0
           ?<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
               height:"100%",color:C.slateL,gap:10}}>
               <div style={{fontSize:32}}>📋</div>
@@ -176,8 +245,37 @@ export default function BatchGrid(){
                 </tr>
               </thead>
               <tbody>
-                {batchRows.map((row,ri)=>{
+                {_deliveryGridEntries.map(entry=>{
+                  const {row,durableRow,section,startsSection}=entry;
+                  const sectionHeader=startsSection
+                    ?<DeliverySectionHeader section={section} colSpan={BASE_GRID_COLUMN_COUNT+pinnedAddOns.length}
+                        onManage={openDeliveryManager} onWorkspace={openWorkspaceAction}/>:null;
+                  if(!row){
+                    const durableLabel=durableRow
+                      ?durableRow.material_code||durableRow.sku?.plant_item_code||`SKU #${durableRow.sku_id}`
+                      :"No item rows assigned";
+                    return <Fragment key={`${section.key}:durable:${durableRow?.id||"empty"}`}>
+                      {sectionHeader}
+                      <tr className="batch-grid-durable-placeholder">
+                        <td colSpan={BASE_GRID_COLUMN_COUNT+pinnedAddOns.length}>
+                          <div className="batch-grid-durable-placeholder-line">
+                            <strong>{durableLabel}</strong>
+                            <span>{durableRow
+                              ?`Durable row #${durableRow.id} is relevant to this route but is not loaded in the working grid.`
+                              :"This Pricing Group has no relevant item rows yet."}</span>
+                            {durableRow&&<button type="button" onClick={()=>copyDurableToGrid(durableRow)}
+                              title="Create a local preview copy. The governed row and calculation remain unchanged.">
+                              Load into grid
+                            </button>}
+                          </div>
+                        </td>
+                      </tr>
+                    </Fragment>;
+                  }
+                  const ri=Math.max(0,batchRows.findIndex(item=>item.id===row.id));
                   const res=batchResults[row.id];
+                  const governedRow=row.durableRowId==null?null:(durableBatch?.batch_rows||[]).find(item=>
+                    String(item.id)===String(row.durableRowId));
                   const st=getBatchRowStatus(row);
                   const sd=STATUS_DISPLAY[st]||STATUS_DISPLAY["draft-uncalc"];
                   const isActive=activeBatchRowId===row.id;
@@ -203,8 +301,8 @@ export default function BatchGrid(){
                   const dimRow=autoCalcPPDims(row);
                   const comp=res&&buildSpecFromRow(dimRow,constructionLib.find(c=>c.code===row.constructionCode),batchProfile)
                     ?checkSpecCompliance(buildSpecFromRow(dimRow,constructionLib.find(c=>c.code===row.constructionCode),batchProfile),res):[];
-                  const bsOk=comp.length===0?"✅":comp.some(c=>c.severity==="high")?"❌":"⚠️";
-                  return(<Fragment key={row.id}>
+                  return(<Fragment key={`${section.key}:row:${row.id}`}>
+                    {sectionHeader}
                     <tr style={{background:isActive?"#EEF4FB":ri%2?C.cream:C.white,
                       borderBottom:`1px solid ${C.border}44`}}>
                       {/* ── FROZEN COL 1: Status (left:0, w:28) — click to expand/collapse sub-row ── */}
@@ -430,6 +528,7 @@ export default function BatchGrid(){
                         {(()=>{
                           const ce=row.constructionCode?constructionLib.find(c=>c.code===row.constructionCode):null;
                           const autoN=ce?constrAutoName(ce):"";
+                          const constructionUsable=!!ce&&isUsableConstruction(ce);
                           return(
                           <button
                             onClick={()=>{
@@ -438,18 +537,20 @@ export default function BatchGrid(){
                               setBatchConstrOverlayQuery('');
                               setBatchConstrOverlayFilter({sector:'',client:''});
                             }}
-                            title={ce?`[${ce.code}] ${autoN} — click to change`:"Click to select a construction"}
+                            title={constructionUsable?`[${ce.code}] ${autoN} — click to change`
+                              :ce?`[${ce.code}] is incomplete — select a construction with grade/BF and GSM for every required layer`
+                              :"Click to select a construction"}
                             style={{width:156,padding:"3px 6px",
-                              border:`1px solid ${row.constructionCode?C.border:C.red}`,
+                              border:`1px solid ${constructionUsable?C.border:C.red}`,
                               borderRadius:3,fontSize:9,textAlign:"left",cursor:"pointer",
-                              background:row.constructionCode?C.white:"#FFF5F5",
-                              color:row.constructionCode?C.slateM:C.red,
+                              background:constructionUsable?C.white:"#FFF5F5",
+                              color:constructionUsable?C.slateM:C.red,
                               fontFamily:mono,display:"flex",alignItems:"center",gap:4}}>
-                            {row.constructionCode
+                            {constructionUsable
                               ?<><span style={{color:C.amber,fontWeight:800}}>{row.constructionCode}</span>
                                 <span style={{fontSize:8,color:C.slateL,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>
                                   {autoN.substring(0,22)}{autoN.length>22?"…":""}</span></>
-                              :<span style={{fontSize:9}}>— pick construction 📚</span>}
+                              :<span style={{fontSize:9}}>{ce?`⚠ ${ce.code} incomplete`:"— pick construction 📚"}</span>}
                           </button>);
                         })()}
                       </td>
@@ -620,6 +721,10 @@ export default function BatchGrid(){
                           {expandedRows.has(row.id)?"▴":"▾"}</button>
                         <button onClick={()=>loadBatchRowIntoCosting(row)} title="Deep-dive in Costing"
                           style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:C.slateL,padding:"0 3px"}}>🔍</button>
+                        {governedRow&&<button type="button"
+                          onClick={()=>openWorkspaceAction("row-edit",section,{rowId:governedRow.id})}
+                          title={`Edit governed row #${governedRow.id}`}
+                          style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:C.amber,padding:"0 3px",fontWeight:800}}>G</button>}
                         <button onClick={()=>setBatchRows(prev=>prev.filter(r=>r.id!==row.id))}
                           style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:C.red,padding:"0 3px"}}>×</button>
                       </td>
@@ -630,14 +735,26 @@ export default function BatchGrid(){
                         ["printing","Printing"],["stitching","Stitching"],["coating","Coating"],["handling","Handling"],
                         ["moqCharge","MOQ Chg"],["packing","Packing"],["other","Other"],["unloading","Unloading"]];
                       const ao=row.addOns||{};
-                      const totalCols=31+pinnedAddOns.length; // match main row colspan
-                      const isPP=isPPType(row.itemType); // R-2
+                      const totalCols=BASE_GRID_COLUMN_COUNT+pinnedAddOns.length;
                       const profInt=batchProfile.interest??0.5;
                       const profFr=batchProfile.freightOverride||freight?.[batchProfile.plant]?.[batchProfile.delivery]||0;
                       const res2=batchResults[row.id];
                       return(
                       <tr style={{background:ri%2?"#F5F0E8":"#F8F5EF"}}>
                         <td colSpan={totalCols} style={{padding:"6px 16px 8px 8px",borderBottom:`2px solid ${C.amber}44`}}>
+                          {governedRow&&<div className="batch-grid-governed-row-actions">
+                            <span>Governed row #{governedRow.id} · v{governedRow.content_version} · {governedRow.status}</span>
+                            <button type="button" onClick={()=>openWorkspaceAction("row-edit",section,{rowId:governedRow.id})}>
+                              Edit governed row
+                            </button>
+                            <button type="button" onClick={()=>openWorkspaceAction("row-status",section,{
+                              rowId:governedRow.id,rowStatus:governedRow.status==="active"?"removed":"active"})}>
+                              {governedRow.status==="active"?"Remove governed row":"Restore governed row"}
+                            </button>
+                            <button type="button" onClick={()=>openWorkspaceAction("set-manage",section,{rowId:governedRow.id})}>
+                              SET membership
+                            </button>
+                          </div>}
                           <div style={{display:"flex",gap:24,flexWrap:"wrap",alignItems:"flex-start",justifyContent:"flex-end"}}>
                             {/* ── Glass SKU Type (ALCOBEV Main Box) ── */}
                             {batchProfile.sector==="ALCOBEV"&&row.itemType==="Box"&&(
@@ -702,12 +819,23 @@ export default function BatchGrid(){
                                       style={{width:52,padding:"2px 4px",border:`1px solid ${ao[k]?C.amber:C.border}`,
                                         borderRadius:3,fontSize:10,textAlign:"center",fontFamily:mono,
                                         background:ao[k]?"#FFF8ED":C.white}}/>
-                                    <button onClick={()=>togglePinAddOn(k)}
-                                      title={pinnedAddOns.includes(k)?"Unpin from main grid":"Pin to main grid (max 2)"}
-                                      style={{background:"none",border:"none",cursor:"pointer",fontSize:12,
-                                        color:pinnedAddOns.includes(k)?C.amber:C.slateL,
-                                        opacity:(!pinnedAddOns.includes(k)&&pinnedAddOns.length>=2)?0.3:1,
-                                        padding:"0 2px"}}>📌</button>
+                                    {(()=>{
+                                      const isPinned=pinnedAddOns.includes(k);
+                                      const canPin=canPinAddOn(pinnedAddOns,k);
+                                      const title=isPinned
+                                        ?"Unpin from main grid"
+                                        :canPin
+                                          ?`Pin to main grid (max ${MAX_PINNED_ADD_ONS})`
+                                          :`Two add-ons are already pinned. Unpin one before pinning ${lbl}.`;
+                                      return <button type="button" onClick={()=>togglePinAddOn(k)}
+                                        disabled={!canPin} aria-pressed={isPinned}
+                                        aria-label={isPinned?`Unpin ${lbl} from main grid`:`Pin ${lbl} to main grid`}
+                                        title={title}
+                                        style={{background:"none",border:"none",cursor:canPin?"pointer":"not-allowed",fontSize:12,
+                                          color:isPinned?C.amber:C.slateL,
+                                          opacity:canPin?1:0.3,
+                                          padding:"0 2px"}}>{isPinned?"📌✓":"📌"}</button>;
+                                    })()}
                                   </div>))}
                               </div>
                             </div>

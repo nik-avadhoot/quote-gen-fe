@@ -2,7 +2,7 @@ import { useState } from "react";
 import { C, mono, sans } from "./theme.js";
 import { useAuth } from "./AuthContext.jsx";
 
-export default function LoginScreen() {
+export default function LoginScreen({ onU3Illustration, onU4CatalogueIllustration, onU5Illustration }) {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,6 +48,31 @@ export default function LoginScreen() {
             fontWeight: 700, fontSize: 13, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1, fontFamily: sans }}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
+
+        {onU3Illustration && (
+          <button type="button" onClick={onU3Illustration}
+            style={{ width: "100%", marginTop: 10, padding: "7px 0", borderRadius: 6,
+              border: `1px solid ${C.border}`, background: C.cream, color: C.slateM,
+              fontWeight: 650, fontSize: 10.5, cursor: "pointer", fontFamily: sans }}>
+            Preview U3–U4 · labelled fixture only
+          </button>
+        )}
+        {onU5Illustration && (
+          <button type="button" onClick={onU5Illustration}
+            style={{ width: "100%", marginTop: 7, padding: "7px 0", borderRadius: 6,
+              border: `1px solid ${C.border}`, background: C.cream, color: C.slateM,
+              fontWeight: 650, fontSize: 10.5, cursor: "pointer", fontFamily: sans }}>
+            Preview U5 Quote evidence · fixture only
+          </button>
+        )}
+        {onU4CatalogueIllustration && (
+          <button type="button" onClick={onU4CatalogueIllustration}
+            style={{ width: "100%", marginTop: 7, padding: "7px 0", borderRadius: 6,
+              border: `1px solid ${C.border}`, background: C.cream, color: C.slateM,
+              fontWeight: 650, fontSize: 10.5, cursor: "pointer", fontFamily: sans }}>
+            Preview My Batches · labelled fixture only
+          </button>
+        )}
       </form>
     </div>
   );

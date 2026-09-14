@@ -36,7 +36,7 @@
 // treating a non-numeric string as blank - so adopting the resolver moves no
 // number that the engine was already computing.
 //
-// TWO TIERS ARE PRESENT BUT CURRENTLY INERT, AND THAT IS DELIBERATE.
+// ONE TIER IS PRESENT BUT CURRENTLY INERT, AND THAT IS DELIBERATE.
 //
 //   sector.marginPct        sector_versions.margin_pct is NOT NULL in the
 //                           database, but the browser-local Sector master
@@ -46,15 +46,8 @@
 //                           It starts carrying values when U3 delivers Sectors
 //                           from the database, and that will be a visible,
 //                           reviewed change - not a silent one now.
-//
-//   rateSetVersion          CDM-41 puts supplier credit cost on the Rate Set
-//                           version. The frontend has no Rate Set version object
-//                           yet, so the caller passes null and the chain falls
-//                           to the versioned system value, which is the same
-//                           1.5% the engine already used.
-//
-// Neither tier is a guess about the future: both are the canonical chain written
-// down once, so the day the data arrives nobody has to find the call sites.
+// This is not a guess about the future: it is the canonical chain written down
+// once, so the day the data arrives nobody has to find the call sites.
 // ═══════════════════════════════════════════════════════════════════════════
 import { CALC_DEFAULTS } from './calcDefaults.js';
 import { deriveInterestPct } from './interestBasis.js';
@@ -184,31 +177,6 @@ export function resolveInterest(ctx = {}) {
 }
 
 /**
- * Resolve SUPPLIER paper-credit cost (CDM-41, Amendment 01 A-05).
- *
- *   per-grade exception → Rate Set version → versioned system value
- *
- * A different tier from customer interest and never derived from it. Blank on
- * the grade inherits; an explicit 0 is a grade genuinely bought on cash terms
- * and must survive.
- */
-export function resolveSupplierCreditCost(ctx = {}) {
-  const { rateEntry, rateSetVersion } = ctx;
-  const defaults = ctx.calcDefaults || CALC_DEFAULTS;
-
-  if (rateEntry && !isBlank(rateEntry.interest)) {
-    return hit(rateEntry.interest, 'rate_entry', rateEntry.code ?? null);
-  }
-  if (rateSetVersion && !isBlank(rateSetVersion.creditCostPct)) {
-    return hit(rateSetVersion.creditCostPct, 'rate_set_version', rateSetVersion.id ?? null);
-  }
-  if (!isBlank(defaults.supplierCreditCostPct)) {
-    return hit(defaults.supplierCreditCostPct, 'system', defaults.versionLabel ?? null);
-  }
-  return { ...UNRESOLVED };
-}
-
-/**
  * Every inheritable value for one row, in one call, with provenance for each.
  * This is the shape Send freezes (CDM-22) and the shape both surfaces consume,
  * so Costing and Batch Entry cannot drift apart again.
@@ -228,3 +196,152 @@ export function resolveRowAuthority(ctx = {}) {
     interest: resolveInterest({ pricingGroup: ctx.pricingGroup, calcDefaults: ctx.calcDefaults }),
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// S8(a) — FREIGHT AUTHORITY (CDM-17)
+//
+// The one chain of the five that terminates in BLOCK rather than a fallback.
+// Two live defects made that impossible (engine/costing.js:30-33, pre-S8):
+//
+//   `if(override&&+override>0)`   an explicit ZERO override was discarded
+//   `matrix?.[p]?.[d] || 0`       a MISSING pair returned 0, so "no rate on
+//                                 file" and "the rate is zero" were one value
+//
+// THE AUTHORIZED CHAIN. Two tiers are explicitly TEMPORARY and say so in their
+// own provenance, because the app cannot yet reach the governed sources:
+//
+//   canonical row override           'row'            governed
+//     legacy Batch Profile override  'legacy_batch'   TEMPORARY  → removed U4
+//       Pricing Group  manual        'pricing_group'  governed   (terminates)
+//                      ex_factory    'pricing_group'  governed   (terminates, 0)
+//                      master        delegates to the tier below via its BASIS
+//         approved Freight Master    'master'         governed
+//           legacy plant×dest matrix 'legacy_matrix'  TEMPORARY  → removed U3
+//             unresolved             'unresolved'     → blocks
+//
+// WHY row BEATS legacy_batch. Neither has a live writer today (WAVE 3 removed
+// every per-row freight producer), so the order moves no number now. It decides
+// what happens at U4, when the row override gains one: the tier the Maker can
+// see and edit must beat the batch-level value they did not touch.
+//
+// WHY 'master' AND 'legacy_matrix' ARE NOT THE SAME TIER. DEFAULT_FREIGHT is an
+// application mirror keyed by plant NAME. The governed master is freight_entries
+// keyed by (freight_set_version_id, origin_plant_id, destination_location_id),
+// reached through the Pricing Group's freight-basis Delivery Group. Returning
+// 'master' for the mirror would let a snapshot record a temporary label as an
+// approved Freight Set version. `authority` is the field that makes that
+// mistake impossible for a downstream writer to make by omission.
+//
+// THE BASIS IS NEVER SUBSTITUTED. In `master` mode the destination is the basis
+// Delivery Group's ship-to Location, resolved UPSTREAM and handed in as
+// approvedMasterRate. There is no code path here in which the Batch Profile's
+// legacy destination stands in for it: `legacyDestination` is read by the
+// legacy_matrix tier and by nothing else.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Provenance shape for the governed approved-master tier. BOTH ids must be
+ *  present: incomplete governed provenance is treated as UNAVAILABLE and takes
+ *  the authorized compatibility path, because half a reference is not a
+ *  reference and must never be snapshotted as one. */
+const isCompleteMasterRef = (ref) =>
+  !!ref && !isBlank(ref.freightSetVersionId) && !isBlank(ref.freightEntryId);
+
+const freightHit = (value, source, authority, sourceRef, extra = null) => ({
+  value: +value, source, authority, sourceRef,
+  mode: null, degradedFrom: null, reason: null, ...(extra || {}),
+});
+
+/**
+ * Resolve the single freight value entering calculation (CDM-17).
+ *
+ * Pure: plain data in, plain data out. No callbacks, no environment, no I/O.
+ * `authorityV2` is a plain boolean injected by the application boundary - this
+ * module must stay importable into plain Node or the goldens cannot run it.
+ *
+ * @returns {{value:number|null, source:string, authority:'governed'|'temporary'|null,
+ *            sourceRef:(string|number|{freightSetVersionId:number,freightEntryId:number}|null),
+ *            mode:string|null, degradedFrom:string|null, reason:string|null}}
+ */
+export function resolveFreight(ctx = {}) {
+  const {
+    rowOverride, rowRef = null,
+    legacyBatchOverride, legacyBatchRef = null,
+    pricingGroup = null,
+    approvedMasterRate, approvedMasterRef = null, approvedMasterUnavailable = null,
+    legacyMatrix = null, legacyMatrixRef = null,
+    originPlant, legacyDestination,
+  } = ctx;
+
+  // ── 1. canonical row override (governed) ────────────────────────────────
+  if (!isBlank(rowOverride)) return freightHit(rowOverride, 'row', 'governed', rowRef);
+
+  // ── 2. legacy Batch Profile override (TEMPORARY, removed at U4) ──────────
+  if (!isBlank(legacyBatchOverride))
+    return freightHit(legacyBatchOverride, 'legacy_batch', 'temporary', legacyBatchRef);
+
+  // ── 3. Pricing Group. manual and ex_factory TERMINATE here; master
+  //       delegates downward through its governed basis. ───────────────────
+  let degradedFrom = approvedMasterUnavailable;
+  if (pricingGroup) {
+    const pgRef = pricingGroup.id ?? null;
+    if (pricingGroup.mode === 'ex_factory')
+      return freightHit(0, 'pricing_group', 'governed', pgRef, { mode: 'ex_factory' });
+    if (pricingGroup.mode === 'manual') {
+      // ck_pg_manual_value forbids this in the database; defended anyway,
+      // because an unenforced client object is not the database.
+      if (isBlank(pricingGroup.manualValue))
+        return { value: null, source: 'unresolved', authority: null, sourceRef: null,
+                 mode: 'manual', degradedFrom: null, reason: 'manual_value_missing' };
+      return freightHit(pricingGroup.manualValue, 'pricing_group', 'governed', pgRef,
+        { mode: 'manual' });
+    }
+    if (pricingGroup.mode === 'master' && isBlank(pricingGroup.basisDeliveryGroupId))
+      degradedFrom = degradedFrom || 'basis_missing';
+  } else {
+    degradedFrom = degradedFrom || 'no_pricing_group';
+  }
+
+  // ── 4. approved Freight Master (governed). Incomplete provenance is
+  //       UNAVAILABLE, never a governed hit with half a reference. ─────────
+  if (!isBlank(approvedMasterRate)) {
+    if (isCompleteMasterRef(approvedMasterRef))
+      return freightHit(approvedMasterRate, 'master', 'governed', {
+        freightSetVersionId: approvedMasterRef.freightSetVersionId,
+        freightEntryId: approvedMasterRef.freightEntryId,
+      }, { mode: pricingGroup?.mode ?? 'master' });
+    degradedFrom = 'no_approved_pair';
+  } else {
+    degradedFrom = degradedFrom || 'no_approved_pair';
+  }
+
+  // ── 5. legacy plant x destination matrix (TEMPORARY, removed at U3).
+  //       The `||0` is gone: a miss is `undefined` and falls through. ───────
+  const legacyRate = legacyMatrix?.[originPlant]?.[legacyDestination];
+  if (!isBlank(legacyRate))
+    return freightHit(legacyRate, 'legacy_matrix', 'temporary', legacyMatrixRef, { degradedFrom });
+
+  // ── 6. unresolved. Blocks. Never 0, never undefined, never NaN. ─────────
+  return { value: null, source: 'unresolved', authority: null, sourceRef: null,
+           mode: pricingGroup?.mode ?? null, degradedFrom,
+           reason: legacyMatrix ? 'no_legacy_pair' : 'no_approved_pair' };
+}
+
+/**
+ * Normalise what a Batch Profile freight input produced into what the profile
+ * STORES. Producer-side companion to resolveFreight, and pure so the rule has a
+ * callable surface the goldens can hold to account.
+ *
+ * Blank is the ONLY inheritance signal. Every other entry is a value the user
+ * deliberately typed and is stored as a number - including 0, and including a
+ * number that happens to equal today's matrix rate.
+ *
+ * WHAT THIS REPLACED, AND WHY IT MATTERED. The handler used to compute
+ * `isManual = v!=='' && +v!==_matrixFr` and store '' when the typed value
+ * equalled the matrix. The number stayed right and the AUTHORITY was lost:
+ * an override of 2 and an inherited 2 became the same stored state, so a later
+ * change to the Freight Master moved the value the user had deliberately
+ * pinned. Equal numbers from different tiers are not interchangeable - which is
+ * exactly what S8(a) made visible, and therefore no longer dismissable.
+ */
+export const normalizeFreightOverrideInput = (raw) =>
+  (raw === '' || raw === null || raw === undefined) ? '' : +raw;

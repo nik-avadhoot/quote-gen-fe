@@ -13,6 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import * as XLSX from "xlsx-js-style";
 import { calcCosting } from "../engine/costing.js";
+import { materializeEffectiveRates } from "../engine/rateMaster.js";
 
 export const parseImportedExcel=async(file,rates,freight,boxTrimData)=>{
   const ab=await file.arrayBuffer();
@@ -51,7 +52,7 @@ export const parseImportedExcel=async(file,rates,freight,boxTrimData)=>{
       handling:+(row[52])||0,coating:+(row[55])||0,other:+(row[56])||0,
       volume:"",salesMOQ:row[66]||"",customerType:"existing",priceContext:"unknown",isRepeat:false,
     };
-    const result=calcCosting(spec,rates,freight,boxTrim);
+    const result=calcCosting(spec,materializeEffectiveRates(rates),freight,boxTrim);
     return{id:Date.now()+idx,spec,result,status:"imported",note:"Re-imported from Excel"};
   });
 };

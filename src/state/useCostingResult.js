@@ -23,9 +23,12 @@
 // byte-identical to the monolith; only the surrounding closure changed.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useMemo } from "react";
-import { calcCosting, checkMissingInfo, checkSpecCompliance, estimateOverspecSaving, suggestMargin } from "../engine/costing.js";
+import { calcCostingOutcome, checkMissingInfo, checkSpecCompliance, estimateOverspecSaving, suggestMargin } from "../engine/costing.js";
 import { resolveField } from "../engine/resolveAuthority.js";
+import { materializeEffectiveRates } from "../engine/rateMaster.js";
+import { isFeatureEnabled } from "../lib/featureFlags.js";
 import { isPPType } from "../engine/rowType.js";
+import { constructionLayerIssues, requiredConstructionLayers } from "../lib/constructionIdentity.js";
 
 export function useCostingResult(st){
   const { batchDefaults, boxTrim, freight, rates, sectors, spec } = st;
@@ -81,20 +84,34 @@ export function useCostingResult(st){
          wastePP:(spec.wastePP===""||spec.wastePP==null)?_wasteDefPP:spec.wastePP,
          convRatePP:(spec.convRatePP===""||spec.convRatePP==null)?_convDefPP:spec.convRatePP,
         }:spec;
-    const result=calcCosting(_calcSpec,rates,freight,boxTrim);
+    // S8(a). THE application boundary for freight: the flag is read here and
+    // injected, so the engine never imports Vite environment state and stays
+    // importable into plain Node for the goldens. The wrapper is destructured
+    // on the line it is created - it never enters state and nothing downstream
+    // can mistake it for a result.
+    //
+    // Pre-U4 there is no Pricing Group and no governed Freight Master reachable
+    // from the app, so `opts` carries only the flag: the chain falls through to
+    // the temporary legacy matrix and prices exactly as it does today, while
+    // SAYING that it is temporary rather than claiming approved authority.
+    const _effectiveRates=materializeEffectiveRates(rates);
+    const {result,freightResolution}=calcCostingOutcome(_calcSpec,_effectiveRates,freight,boxTrim,
+      {authorityV2:isFeatureEnabled("freight_authority_v2")});
     const r=result;
-    const missing=checkMissingInfo(spec,r);
+    // Same object the calculation used. checkMissingInfo does not recompute
+    // freight; with the flag off it receives null and keeps its pre-S8 line.
+    const missing=checkMissingInfo(spec,r,freightResolution);
     const compliance=checkSpecCompliance(spec,r);
     const marginSugg=suggestMargin(spec,r?.calcMOQ);
     const osSaving=r&&compliance.find(c=>c.type==="over"&&c.field.includes("Burst"))
-      ?estimateOverspecSaving(spec,r,rates):null;
+      ?estimateOverspecSaving(spec,r,_effectiveRates):null;
     return{_sectorForCalc,_hasCommittedBatch,_wasteDefBox,_convDefBox,_wasteDefPP,_convDefPP,
-      _calcSpec,result,r,missing,compliance,marginSugg,osSaving};
+      _calcSpec,result,r,missing,compliance,marginSugg,osSaving,freightResolution};
   },[spec,sectors,rates,freight,boxTrim,_hasBD,
      bdWaste,bdConvRate,bdWastePP,bdConvRatePP]);
 
   const{_sectorForCalc,_hasCommittedBatch,_wasteDefBox,_convDefBox,_wasteDefPP,_convDefPP,
-    _calcSpec,result,r,missing,compliance,marginSugg,osSaving}=_derived;
+    _calcSpec,result,r,missing,compliance,marginSugg,osSaving,freightResolution}=_derived;
 
   // A1: single resolver — same blank→authority logic as _calcSpec above.
   // isWasteBlank/isConvBlank preserved so delta computation never writes 0 overrides.
@@ -118,12 +135,12 @@ export function useCostingResult(st){
     isPPType(_sendRType);
   const _sendMissingDims=(!spec.L||+spec.L<=0)||(!spec.W||+spec.W<=0)||
     (!_sendIsFlatSheet&&(!spec.H||+spec.H<=0));
-  const _sendReqLayers=["TOP","F1","L1"];
-  if(+spec.ply===5)_sendReqLayers.push("F2","L2");
+  const _sendReqLayers=requiredConstructionLayers(spec);
   const _sendLayerNames={TOP:"TOP liner",F1:"F1 flute",L1:"L1 liner",F2:"F2 flute",L2:"L2 liner"};
-  const _sendMissingLayers=_sendReqLayers.filter(k=>!_sendLayers[k]?.code||String(_sendLayers[k].code).trim()==="");
-  const _sendReady=!_sendMissingDims&&_sendMissingLayers.length===0;
+  const _sendLayerIssues=constructionLayerIssues(spec);
+  const _sendMissingLayers=[...new Set(_sendLayerIssues.map(issue=>issue.key))];
+  const _sendReady=!_sendMissingDims&&_sendLayerIssues.length===0;
 
 
-  return { _calcSpec, _convDefBox, _convDefPP, _hasCommittedBatch, _sectorForCalc, _sendBType, _sendIsFlatSheet, _sendLayerNames, _sendLayers, _sendMissingDims, _sendMissingLayers, _sendRType, _sendReady, _sendReqLayers, _wasteDefBox, _wasteDefPP, compliance, marginSugg, missing, osSaving, r, resolveSpecWasteConv, result };
+  return { _calcSpec, _convDefBox, _convDefPP, _hasCommittedBatch, _sectorForCalc, _sendBType, _sendIsFlatSheet, _sendLayerIssues, _sendLayerNames, _sendLayers, _sendMissingDims, _sendMissingLayers, _sendRType, _sendReady, _sendReqLayers, _wasteDefBox, _wasteDefPP, compliance, freightResolution, marginSugg, missing, osSaving, r, resolveSpecWasteConv, result };
 }

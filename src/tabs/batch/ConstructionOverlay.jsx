@@ -17,6 +17,7 @@
 // its own commit with its own verification.
 // ═══════════════════════════════════════════════════════════════════════════
 import { constrAutoName } from "../../lib/constructionName.js";
+import { isUsableConstruction } from "../../lib/constructionIdentity.js";
 import { C, mono } from "../../theme.js";
 import { useAppState } from "../../state/AppStateContext.js";
 
@@ -29,8 +30,9 @@ export default function ConstructionOverlay(){
   // Apply overlay-specific filter (sector + client + query)
   const oq=batchConstrOverlayQuery.toLowerCase();
   const of=batchConstrOverlayFilter;
-  const overlayLibFiltered=constructionLib.filter(c=>{
-    if((c.status||'active')!=='active')return false;
+  const activeConstructions=constructionLib.filter(c=>(c.status||'active')==='active');
+  const usableActiveConstructions=activeConstructions.filter(isUsableConstruction);
+  const overlayLibFiltered=usableActiveConstructions.filter(c=>{
     if(of.sector&&(c.sector||'')!==of.sector)return false;
     if(of.client&&(c.client||'')!==of.client)return false;
     if(of.gsm_min&&+c.board_gsm<+of.gsm_min)return false;
@@ -41,7 +43,7 @@ export default function ConstructionOverlay(){
     if(of.cobb_max&&c.spec_cobb&&+c.spec_cobb>+of.cobb_max)return false;
     if(!oq)return true;
     const autoN=constrAutoName(c).toLowerCase();
-    return c.code.toLowerCase().includes(oq)||autoN.includes(oq)||
+    return (c.code||'').toLowerCase().includes(oq)||autoN.includes(oq)||
       (c.name||'').toLowerCase().includes(oq)||
       (c.sector||'').toLowerCase().includes(oq)||
       (c.client||'').toLowerCase().includes(oq);
@@ -84,14 +86,14 @@ export default function ConstructionOverlay(){
         <select value={of.sector} onChange={e=>setBatchConstrOverlayFilter(p=>({...p,sector:e.target.value,client:''}))}
           style={{flex:1,padding:"3px 6px",border:`1px solid ${of.sector?C.amber:C.border}`,borderRadius:4,fontSize:10,color:C.slate,background:C.white}}>
           <option value="">All Sectors</option>
-          {[...new Set(constructionLib.filter(c=>(c.status||'active')==='active').map(c=>c.sector||'').filter(Boolean))].sort()
+          {[...new Set(usableActiveConstructions.map(c=>c.sector||'').filter(Boolean))].sort()
             .map(s=><option key={s} value={s}>{s}</option>)}
         </select>
         <select value={of.client} onChange={e=>setBatchConstrOverlayFilter(p=>({...p,client:e.target.value}))}
           style={{flex:1,padding:"3px 6px",border:`1px solid ${of.client?C.amber:C.border}`,borderRadius:4,fontSize:10,color:C.slate,background:C.white}}>
           <option value="">All Clients</option>
-          {[...new Set(constructionLib
-            .filter(c=>(c.status||'active')==='active'&&(!of.sector||(c.sector||'')===of.sector))
+          {[...new Set(usableActiveConstructions
+            .filter(c=>!of.sector||(c.sector||'')===of.sector)
             .map(c=>c.client||'').filter(Boolean))].sort()
             .map(cl=><option key={cl} value={cl}>{cl}</option>)}
         </select>
@@ -124,7 +126,11 @@ export default function ConstructionOverlay(){
             </div>)}
         </>);
       })()}
-      <div style={{fontSize:9,color:C.slateL,marginTop:4}}>{overlayLibFiltered.length} of {constructionLib.filter(c=>(c.status||'active')==='active').length} active shown</div>
+      <div style={{fontSize:9,color:C.slateL,marginTop:4}}>
+        {overlayLibFiltered.length} of {usableActiveConstructions.length} usable shown
+        {activeConstructions.length>usableActiveConstructions.length
+          ?` · ${activeConstructions.length-usableActiveConstructions.length} incomplete hidden`:""}
+      </div>
     </div>
     {/* Scrollable construction list */}
     <div style={{flex:1,overflowY:"auto",padding:"8px 12px"}}>

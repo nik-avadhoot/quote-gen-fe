@@ -2,10 +2,9 @@
 //
 // Extracted from QuotationApp.jsx (Phase 8). Structural move only.
 //
-// NAV_ITEMS travels WITH the sidebar rather than living in a constants file:
-// two of its entries carry live counts (items.length, constructionLib.length)
-// and one is capability-gated, so it is derived state, not configuration. Adding a
-// master tab is still a one-line change - it is just a line in here.
+// Navigation follows the canonical data-model product groups. Only destinations
+// that have an implemented screen are interactive; future quote workflow is
+// shown honestly as activation-pending rather than routed to a hollow page.
 //
 // Producing Plants and Customer Families are additionally feature-flagged
 // (U1-C4 correction) — the SAME flag that gates their mount in
@@ -14,61 +13,117 @@
 // read_party_master capability; Producing Plants does not (its RLS policy
 // is open to any authenticated active user).
 // ════════════════════════════════════════════════════════════════════════
+import { useState } from "react";
 import { hasCapability } from "../lib/capabilities.js";
 import { isFeatureEnabled } from "../lib/featureFlags.js";
 import { useAppState } from "../state/AppStateContext.js";
-import { C, sans } from "../theme.js";
 
 export default function Sidebar(){
   const { constructionLib, items, profile, setSidebarCollapsed, setTab,
     sidebarCollapsed, tab } = useAppState();
-  const NAV_ITEMS=[
-    ["costing","📊","Costing"],
-    ["items","📋","Quote Items",items.length],
-    ["batch","🗂","Batch Entry"],
-    ["constrlib","📚","Construction Library",constructionLib.length],
-    ["rates","💰","Rate Master"],
-    ["freight","🚚","Freight Rates"],
-    ["defaults","🛠","Defaults"],
-    ...(isFeatureEnabled("u1_producing_plants")?[["plants","🏭","Producing Plants"]]:[]),
-    ...(isFeatureEnabled("u1_customer_families")&&hasCapability(profile,"read_party_master")
-      ?[["families","👪","Customer Families"]]:[]),
+  const item = (id, icon, label, count, detail) => ({ id, icon, label, count, detail });
+  const pending = (icon, label, detail) => ({ icon, label, detail, pending: true });
+  const NAV_SECTIONS=[
+    ["Workspace", [
+      item("costing","SC","Start Costing"),
+      item("batch","BB","Batch Builder"),
+      item("mybatches","MB","My Batches",undefined,"Bounded caller-visible durable Batch catalogue"),
+      ...(hasCapability(profile,"check_quote")
+        ?[item("approvalinbox","AI","Approval Inbox",undefined,"Read-only submitted revision queue")]
+        :[pending("AI","Approval Inbox","Capability required")]),
+      item("items","QU","Quotes",items.length,"Governed evidence, working items and Quote History"),
+    ]],
+    ["Customer Masters", [
+      ...(isFeatureEnabled("u1_customer_families")&&hasCapability(profile,"read_party_master")
+        ?[item("families","CF","Customer Families"),
+          pending("CP","Customers and Prospects","Locations and External References included")]:[]),
+    ]],
+    ["Product Masters", [
+    // Product Masters is part of the canonical application map and therefore
+    // remains visible even when this caller cannot open a governed destination.
+    // Feature flags and capabilities decide interactivity, not whether an
+    // entire product domain silently disappears from navigation.
+      ...(isFeatureEnabled("u2_construction_library")&&hasCapability(profile,"read_construction_library")
+        ?[item("conlib","CL","Construction Library",constructionLib.length)]
+        :[pending("CL","Construction Library",
+          isFeatureEnabled("u2_construction_library") ? "Capability required" : "U2 destination not enabled")]),
+      pending("PA","Plant Construction Adoption","In Construction Library"),
+      pending("SK","SKUs","Versions, specifications and Location applicability included"),
+    ]],
+    ["Commercial Masters", [
+      item("defaults","CP","Commercial Policies",undefined,
+        "Sectors, Calculation Defaults and Annual Interest Basis"),
+      item("rates","RM","Rate Masters"),
+      item("freight","FM","Freight Masters"),
+      ...(isFeatureEnabled("u3_pricing_basis") ?[item("pricingbasis","PB","Pricing Basis Releases")]:[]),
+    ]],
+    ["Plant Capabilities", [
+      pending("PC","Plant Configuration","Flute Profiles, Machines, Stations and Process Routes included"),
+    ]],
+    ["Administration", [
     // UA-1: gated on the CAPABILITY, not the derived label. A role string is a
     // presentation summary and must never decide what a screen can be.
-    ...(hasCapability(profile,"administer_users")?[["users","👥","Users"]]:[]),
+      ...(hasCapability(profile,"administer_users")?[item("users","UA","Users & Access",undefined,
+        "Users, Plant Assignments, Capabilities, Invitations and Orphan Recovery")]:[]),
+      ...(isFeatureEnabled("u1_producing_plants")?[item("plants","PP","Producing Plants")]:[]),
+      ...(hasCapability(profile,"administer_users")?[
+        pending("AU","Audit History","Available when audit slice is delivered")]:[]),
+    ]],
   ];
+
+  const activeSection = NAV_SECTIONS.find(([, entries]) =>
+    entries.some(entry => entry.id === tab))?.[0];
+  const [openSections, setOpenSections] = useState(() =>
+    new Set([activeSection || "Workspace"]));
+
+  const toggleSection = section => setOpenSections(current => {
+    return current.has(section) ? new Set() : new Set([section]);
+  });
+  const pendingStatus = detail => detail === "Future" ? "Future"
+    : detail.includes("Backend activation") ? "Activation"
+      : detail === "Capability required" ? "Restricted"
+        : detail === "U2 destination not enabled" ? "Disabled"
+      : detail.startsWith("In ") || detail.startsWith("Shown ") || detail.endsWith("included")
+        ? "Included" : "Planned";
+
   return(
-  <div style={{background:C.slate,display:"flex",flexDirection:"column",flexShrink:0,
-    width:sidebarCollapsed?56:200,overflow:"hidden"}}>
-    <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",
-      borderBottom:`2px solid ${C.amber}`,height:48,boxSizing:"border-box"}}>
-      <div style={{width:28,height:28,flexShrink:0,background:C.amber,borderRadius:6,display:"flex",
-        alignItems:"center",justifyContent:"center",fontSize:14}}>📦</div>
-      {!sidebarCollapsed&&<div style={{color:C.white,fontWeight:700,fontSize:12,lineHeight:1.2,whiteSpace:"nowrap"}}>
-        CFB Quotation Master
-        <div style={{fontSize:8,color:"rgba(255,255,255,.4)",fontWeight:400}}>AVADHOOT PACKS</div>
+  <aside className={`sidebar-shell${sidebarCollapsed ? " is-collapsed" : ""}`} aria-label="Main navigation">
+    <div className="sidebar-brand">
+      <div className="sidebar-brand-mark">CFB</div>
+      {!sidebarCollapsed&&<div className="sidebar-brand-copy">
+        <strong>Quotation Master</strong>
+        <small>AVADHOOT PACKS</small>
       </div>}
     </div>
-    <div style={{flex:1,overflowY:"auto",padding:"8px 0"}}>
-      {NAV_ITEMS.map(([t,icon,l,count])=>(
-        <button key={t} onClick={()=>setTab(t)} title={sidebarCollapsed?l:undefined}
-          style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:sidebarCollapsed?"10px 0":"10px 16px",
-            justifyContent:sidebarCollapsed?"center":"flex-start",border:"none",background:tab===t?"rgba(217,123,46,.15)":"none",
-            borderLeft:tab===t?`3px solid ${C.amber}`:"3px solid transparent",
-            fontFamily:sans,fontSize:12,fontWeight:600,cursor:"pointer",
-            color:tab===t?C.amber:"rgba(255,255,255,.6)"}}>
-          <span style={{fontSize:15,flexShrink:0}}>{icon}</span>
-          {!sidebarCollapsed&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-            {l}{!!count&&` (${count})`}</span>}
-          {sidebarCollapsed&&!!count&&<span style={{position:"absolute",marginLeft:14,marginTop:-14,
-            background:C.amber,color:C.white,borderRadius:8,fontSize:8,padding:"1px 4px"}}>{count}</span>}
-        </button>))}
-    </div>
-    <button onClick={()=>setSidebarCollapsed(v=>!v)} title={sidebarCollapsed?"Expand sidebar":"Collapse sidebar"}
-      style={{padding:"10px 0",border:"none",borderTop:`1px solid rgba(255,255,255,.1)`,
-        background:"none",color:"rgba(255,255,255,.5)",cursor:"pointer",fontSize:13}}>
-      {sidebarCollapsed?"»":"« Collapse"}
+    <nav className="sidebar-nav">
+      {NAV_SECTIONS.filter(([, entries])=>entries.length).map(([section, entries])=><div key={section}
+        className={`sidebar-nav-section${activeSection === section ? " is-current" : ""}`}>
+        {!sidebarCollapsed&&<button type="button" className="sidebar-nav-heading"
+          aria-expanded={openSections.has(section)} onClick={() => toggleSection(section)}>
+          <span>{section}</span><small>{entries.length}</small><b aria-hidden="true">{openSections.has(section) ? "−" : "+"}</b>
+        </button>}
+        {(sidebarCollapsed || openSections.has(section))&&<div className="sidebar-nav-items">{entries.map(entry=>{
+          if (entry.pending) return !sidebarCollapsed&&<div key={entry.label} className="sidebar-nav-pending"
+            title={`${entry.label} · ${entry.detail}`} aria-disabled="true"><span className="sidebar-nav-icon">{entry.icon}</span>
+            <strong>{entry.label}</strong><small>{pendingStatus(entry.detail)}</small></div>;
+          const { id:t, icon, label:l, count, detail }=entry;
+          return <button key={t} onClick={()=>{
+            setOpenSections(current => current.has(section)
+              ? current : new Set([section]));
+            setTab(t);
+          }} title={sidebarCollapsed?l:detail}
+            className={`sidebar-nav-item${tab===t ? " is-active" : ""}`} aria-current={tab===t?"page":undefined}>
+            <span className="sidebar-nav-icon">{icon}</span>
+            {!sidebarCollapsed&&<span className="sidebar-nav-label">{l}</span>}
+            {!sidebarCollapsed&&!!count&&<span className="sidebar-nav-count">{count}</span>}
+            {sidebarCollapsed&&!!count&&<span className="sidebar-nav-count is-compact">{count}</span>}
+          </button>})}</div>}
+      </div>)}
+    </nav>
+    <button className="sidebar-collapse" onClick={()=>setSidebarCollapsed(v=>!v)}
+      title={sidebarCollapsed?"Expand navigation":"Collapse navigation"}>
+      <span>{sidebarCollapsed?"»":"«"}</span>{!sidebarCollapsed&&"Collapse navigation"}
     </button>
-  </div>
+  </aside>
   );
 }

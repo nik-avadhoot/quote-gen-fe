@@ -17,8 +17,25 @@ import { C, mono } from "../../theme.js";
 export default function OutputPanel(){
   const {
     spec, s, card, profileDraft,
-    r, missing, compliance, marginSugg, osSaving,
+    r, missing, compliance, marginSugg, osSaving, freightResolution,
   } = useAppState();
+
+  // S8(a). Name the tier the freight number actually came from, at the number.
+  // A rate from the temporary legacy mirror must never read as approved
+  // authority, and an explicit zero must be legible AS a zero someone chose
+  // rather than as a blank. Absent (flag off) renders exactly as before.
+  const freightTag=(()=>{
+    if(!freightResolution)return"";
+    switch(freightResolution.source){
+      case"row":           return" · row override";
+      case"legacy_batch":  return" · Batch override (temporary)";
+      case"pricing_group": return freightResolution.mode==="ex_factory"
+                                    ?" · ex-factory":" · Pricing Group (manual)";
+      case"master":        return" · approved Master";
+      case"legacy_matrix": return" · temporary legacy matrix";
+      default:             return"";
+    }
+  })();
 
   return(
     <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
@@ -176,7 +193,7 @@ export default function OutputPanel(){
                       return active.length?" ("+active.join("·")+")":"";
                     })()}`,r.addOns],
                   ["Customer Interest",r.intC],
-                  [`Freight (${r.frRate} Rs/kg)`,r.fr],
+                  [`Freight (${r.frRate} Rs/kg${freightTag})`,r.fr],
                   ["Margin ("+spec.margin+"%)",r.marginAmt]].filter(Boolean).map(([l,v])=>(
                   <tr key={l} style={{borderBottom:`1px solid ${C.border}`}}>
                     <td style={{padding:"5px 0",color:C.slateM,fontSize:11}}>{l}</td>
