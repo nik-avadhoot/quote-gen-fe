@@ -18,25 +18,25 @@ import { C, T, mono } from "../../theme.js";
 // Kept at module scope so moving the table near the top does not create a
 // component during render. Its row order is the engine's existing order.
 const LayerDetail=({r,card})=>(
-  <div style={card}>
+  <div style={{...card,marginBottom:0,minWidth:0,padding:"8px 9px"}}>
     <div style={{fontSize:T.label,fontWeight:700,color:C.slateM,textTransform:"uppercase",
-      letterSpacing:"0.07em",marginBottom:8}}>Layer Detail</div>
+      letterSpacing:"0.07em",marginBottom:5}}>Layer Detail</div>
     <table style={{width:"100%",fontSize:T.body,borderCollapse:"collapse"}}>
       <thead><tr style={{borderBottom:`1px solid ${C.border}`}}>
-        {["Layer","BF / Grade","GSM","TU","Paper Consumed","Sheet Wt","Rate","Cost"].map(h=>(
-          <th key={h} style={{padding:"3px 5px",fontSize:T.label,color:C.slateL,textTransform:"uppercase",
+        {["Layer","Grade","GSM","TU","Consumed","Sheet Wt","Rate","Cost"].map(h=>(
+          <th key={h} style={{padding:"2px 3px",fontSize:T.label,color:C.slateL,textTransform:"uppercase",
             textAlign:h==="Layer"?"left":"center",fontWeight:600}}>{h}</th>))}
       </tr></thead>
       <tbody>{r.rowDetails.filter(x=>x.wt>0).map(x=>(
         <tr key={x.k} style={{borderBottom:`1px solid ${C.border}`}}>
-          <td style={{padding:"4px 5px",fontWeight:700,color:C.slateM,fontFamily:mono}}>{x.k}</td>
-          <td style={{padding:"4px 5px",textAlign:"center",fontFamily:mono}}>{x.code}</td>
-          <td style={{padding:"4px 5px",textAlign:"center",fontFamily:mono}}>{x.gsm}</td>
-          <td style={{padding:"4px 5px",textAlign:"center",color:C.slateL,fontFamily:mono}}>{x.tu?.toFixed(2)||"1.00"}</td>
-          <td style={{padding:"4px 5px",textAlign:"center",fontFamily:mono}}>{(x.wt*1000).toFixed(0)}g</td>
-          <td style={{padding:"4px 5px",textAlign:"center",fontFamily:mono,color:C.slateL}}>{(x.ws*1000).toFixed(0)}g</td>
-          <td style={{padding:"4px 5px",textAlign:"center",fontFamily:mono}}>₹{x.rate?.toFixed(2)}</td>
-          <td style={{padding:"4px 5px",textAlign:"center",fontWeight:700,fontFamily:mono}}>₹{x.cost?.toFixed(2)}</td>
+          <td style={{padding:"3px",fontWeight:700,color:C.slateM,fontFamily:mono}}>{x.k}</td>
+          <td style={{padding:"3px",textAlign:"center",fontFamily:mono}}>{x.code}</td>
+          <td style={{padding:"3px",textAlign:"center",fontFamily:mono}}>{x.gsm}</td>
+          <td style={{padding:"3px",textAlign:"center",color:C.slateL,fontFamily:mono}}>{x.tu?.toFixed(2)||"1.00"}</td>
+          <td style={{padding:"3px",textAlign:"center",fontFamily:mono}}>{(x.wt*1000).toFixed(0)}g</td>
+          <td style={{padding:"3px",textAlign:"center",fontFamily:mono,color:C.slateL}}>{(x.ws*1000).toFixed(0)}g</td>
+          <td style={{padding:"3px",textAlign:"center",fontFamily:mono}}>₹{x.rate?.toFixed(2)}</td>
+          <td style={{padding:"3px",textAlign:"center",fontWeight:700,fontFamily:mono}}>₹{x.cost?.toFixed(2)}</td>
         </tr>))}
         <tr style={{background:C.paper}}>
           <td style={{padding:"4px 5px",fontWeight:700,fontSize:T.label,color:C.slateM}}>TOTAL</td>
@@ -58,6 +58,145 @@ const LayerDetail=({r,card})=>(
     </table>
   </div>
 );
+
+const DielineCard=({spec,card})=>(
+  <div style={{...card,padding:"8px 10px",marginBottom:0,background:"#FAFAFA",minWidth:0}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:3}}>
+      <span style={{fontSize:T.label,fontWeight:700,color:"#9A7B4A",textTransform:"uppercase",letterSpacing:"0.07em"}}>
+        Die-Line Preview
+      </span>
+      <span style={{fontSize:T.micro,color:"#888",textAlign:"right",lineHeight:1.25}}>
+        {spec.boxType==="Die-R"||spec.boxType==="Die-S"
+          ? "⚠ Approximation only — use customer KLD for die-cut SKUs"
+          : `Flat blank: ${Math.round(2*(+spec.L||0)+(2*(+spec.W||0))+Math.max((+spec.W||0)*0.1,15))}×${Math.round((+spec.H||0)+2*Math.min((+spec.W||0)/2,(+spec.H||0)))} mm (RSC est.)`
+        }
+      </span>
+    </div>
+    <div style={{overflowX:"auto"}}>
+      <BoxDieline L={spec.L} W={spec.W} H={spec.H}
+        boxType={spec.boxType||"RSC"} dimType={spec.dimType} ups={spec.ups}
+        style={{margin:"0 auto"}}/>
+    </div>
+  </div>
+);
+
+const sliderShell={height:92,display:"flex",alignItems:"center",justifyContent:"center"};
+const verticalSlider={width:92,transform:"rotate(-90deg)",accentColor:C.amber};
+
+const MarginControl=({spec,s,r,card,marginSugg})=>(
+  <div style={{...card,marginBottom:0,padding:"8px 7px",minWidth:0,textAlign:"center"}}>
+    <div style={{fontSize:T.label,fontWeight:700,color:C.slateM,textTransform:"uppercase",
+      letterSpacing:"0.06em"}}>Margin</div>
+    <div style={{fontSize:T.value,fontWeight:700,color:C.slate,fontFamily:mono,marginTop:2}}>
+      ₹{r.finalRate.toFixed(2)}</div>
+    <div style={{fontSize:T.heading,fontWeight:800,color:C.amber,fontFamily:mono,marginTop:3}}>
+      {spec.margin}%</div>
+    <div style={sliderShell}>
+      <input type="range" min={0} max={20} step={0.5} value={spec.margin}
+        aria-label="Margin percentage" onChange={e=>s("margin",+e.target.value)} style={verticalSlider}/>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:3}}>
+      {[0,6,8,10,12,15].map(m=><button key={m} onClick={()=>s("margin",m)}
+        style={{padding:"3px 2px",borderRadius:5,fontSize:T.label,cursor:"pointer",minWidth:0,
+          border:`1px solid ${+spec.margin===m?C.amber:C.border}`,
+          background:+spec.margin===m?C.amberL:C.white,
+          color:+spec.margin===m?C.amberD:C.slateL,fontWeight:+spec.margin===m?700:400}}>{m}%</button>)}
+    </div>
+    {marginSugg.suggested!==+spec.margin&&(spec.customerType!=="existing"||spec.volume||spec.priceContext!=="unknown")&&(
+      <button onClick={()=>s("margin",marginSugg.suggested)} title={`Base 8%${marginSugg.adjustments.map(a=>" · "+a).join("")}${marginSugg.risk?" · "+marginSugg.risk:""}`}
+        style={{width:"100%",marginTop:5,padding:"3px 2px",borderRadius:5,fontSize:T.micro,cursor:"pointer",
+          border:`1px solid ${C.green}`,background:C.greenL,color:C.green,fontWeight:700}}>
+        ✦ Use {marginSugg.suggested}%</button>)}
+    {marginSugg.adjustments.length>0&&<details style={{marginTop:4,fontSize:T.micro,color:C.slateL,
+      lineHeight:1.3,textAlign:"left"}}>
+      <summary style={{cursor:"pointer",whiteSpace:"nowrap"}}>Why {marginSugg.suggested}%?</summary>
+      <div style={{marginTop:3,padding:"4px",background:C.cream,borderRadius:4}}>
+        Base 8%{marginSugg.adjustments.map(a=>" · "+a).join("")}
+        {marginSugg.risk&&<span style={{color:C.amberD,fontWeight:600}}> · {marginSugg.risk}</span>}
+      </div>
+    </details>}
+  </div>
+);
+
+const BsControl=({spec,s,card})=>{
+  const current=Math.round((spec.flutingBCF!=null?spec.flutingBCF:0.10)*100);
+  return(
+    <div style={{...card,marginBottom:0,padding:"8px 7px",minWidth:0,textAlign:"center"}}>
+      <div style={{fontSize:T.label,fontWeight:700,color:C.slateM,textTransform:"uppercase",
+        letterSpacing:"0.05em",lineHeight:1.25}}>Fluting BS</div>
+      <div style={{fontSize:T.heading,fontWeight:800,color:C.amber,fontFamily:mono,marginTop:4}}>{current}%</div>
+      <div style={sliderShell}>
+        <input type="range" min={0} max={30} step={1} value={current}
+          aria-label="Fluting BS contribution" onChange={e=>s("flutingBCF",+e.target.value/100)}
+          style={verticalSlider}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:3}}>
+        {[0,10,20,30].map(pct=><button key={pct} onClick={()=>s("flutingBCF",pct/100)}
+          style={{padding:"3px 2px",borderRadius:5,fontSize:T.label,cursor:"pointer",minWidth:0,
+            border:`1px solid ${current===pct?C.amber:C.border}`,
+            background:current===pct?C.amberL:C.white,
+            color:current===pct?C.amberD:C.slateL,fontWeight:current===pct?700:400}}>{pct}%</button>)}
+      </div>
+      <details style={{fontSize:T.micro,color:C.slateL,marginTop:5,lineHeight:1.25,textAlign:"left"}}>
+        <summary style={{cursor:"pointer",whiteSpace:"nowrap"}}>BS formula</summary>
+        <div style={{marginTop:3,padding:"4px",background:C.cream,borderRadius:4}}>
+          Liner BCF = 1. Flute BCF = slider. BS = Σ(BF_adj × BCF × GSM ÷ 1000).
+        </div>
+      </details>
+    </div>
+  );
+};
+
+const CostBuildUp=({r,spec,card,freightTag})=>{
+  const addOnLabel=r.addOns>0&&(()=>{
+    const labels={printing:"Print",stitching:"Stitch",coating:"Coat",handling:"Hdlg",
+      moqCharge:"MOQ±",packing:"Pack",other:"Other",unloading:"Unload"};
+    const active=Object.entries(labels).filter(([key])=>spec[key]&&+spec[key]>0)
+      .map(([key,label])=>`${label} ₹${(+spec[key]).toFixed(2)}`);
+    return `Add-ons${active.length?` (${active.join("·")})`:""}`;
+  })();
+  const rows=[["Material",r.mat],["Conversion",r.conv],
+    addOnLabel&&[addOnLabel,r.addOns],["Interest",r.intC],
+    [`Freight (${r.frRate} Rs/kg${freightTag})`,r.fr],[`Margin (${spec.margin}%)`,r.marginAmt]].filter(Boolean);
+
+  return(
+    <div style={{...card,marginBottom:0,padding:"8px 10px",minWidth:0}}>
+      <div style={{fontSize:T.label,fontWeight:700,color:C.slateM,textTransform:"uppercase",
+        letterSpacing:"0.07em",marginBottom:5}}>Cost Build-up</div>
+      <table style={{width:"100%",fontSize:T.body,borderCollapse:"collapse",tableLayout:"fixed"}}>
+        <thead><tr style={{borderBottom:`1px solid ${C.border}`}}>
+          {["Component","₹ / box","₹ / kg","Share"].map((heading,index)=><th key={heading}
+            style={{padding:"2px 3px",fontSize:T.micro,color:C.slateL,textTransform:"uppercase",
+              textAlign:index===0?"left":"right",fontWeight:600,width:index===0?"48%":index===3?"18%":undefined}}>
+            {heading}</th>)}
+        </tr></thead>
+        <tbody>{rows.map(([label,value])=>{
+          const share=r.finalRate>0?value/r.finalRate*100:0;
+          return <tr key={label} style={{borderBottom:`1px solid ${C.border}`}}>
+            <td title={label} style={{padding:"4px 3px",color:C.slateM,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</td>
+            <td style={{padding:"4px 3px",textAlign:"right",fontWeight:600,fontFamily:mono}}>₹{(+(value??0)).toFixed(2)}</td>
+            <td style={{padding:"4px 3px",textAlign:"right",fontFamily:mono,color:C.amberD}}>
+              {r.wtSheet>0?`₹${(value/r.wtSheet).toFixed(2)}`:"—"}</td>
+            <td style={{padding:"4px 3px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:4,justifyContent:"flex-end"}}>
+                <div style={{height:4,borderRadius:2,background:C.paper,flex:1,minWidth:18}}>
+                  <div style={{height:"100%",background:label.startsWith("Margin")?C.amber:C.slateM,borderRadius:2,
+                    width:Math.min(100,share).toFixed(0)+"%"}}/></div>
+                <span style={{fontSize:T.micro,color:C.slateL,fontFamily:mono,minWidth:22,textAlign:"right"}}>{share.toFixed(0)}%</span>
+              </div>
+            </td>
+          </tr>;})}
+          <tr style={{borderTop:`2px solid ${C.amber}`}}>
+            <td style={{padding:"6px 3px 2px",fontWeight:800,color:C.amber,fontSize:T.title,fontFamily:mono}}>
+              ₹{r.finalRate.toFixed(2)}</td>
+            <td colSpan={3} style={{padding:"6px 3px 2px",textAlign:"right",fontSize:T.micro,color:C.slateL}}>
+              LANDED RATE · excl GST</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 export default function OutputPanel(){
   const {
@@ -91,25 +230,9 @@ export default function OutputPanel(){
       <div style={{flex:1,overflowY:"auto",padding:12}}>
         {/* KLD is a read-only consequence of the dimensions. Keep it in the
             output column; SpecForm remains the sole editor of its inputs. */}
-        {(spec.L&&spec.W&&spec.H)&&(
-        <div style={{...card,padding:"8px 10px",marginBottom:10,background:"#FAFAFA"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
-            <span style={{fontSize:T.label,fontWeight:700,color:"#9A7B4A",textTransform:"uppercase",letterSpacing:"0.07em"}}>
-              Die-Line Preview
-            </span>
-            <span style={{fontSize:T.micro,color:"#888",textAlign:"right"}}>
-              {spec.boxType==="Die-R"||spec.boxType==="Die-S"
-                ? "⚠ Approximation only — use customer KLD for die-cut SKUs"
-                : `Flat blank: ${Math.round(2*(+spec.L||0)+(2*(+spec.W||0))+Math.max((+spec.W||0)*0.1,15))}×${Math.round((+spec.H||0)+2*Math.min((+spec.W||0)/2,(+spec.H||0)))} mm (RSC est.)`
-              }
-            </span>
-          </div>
-          <div style={{overflowX:"auto"}}>
-            <BoxDieline L={spec.L} W={spec.W} H={spec.H}
-              boxType={spec.boxType||"RSC"} dimType={spec.dimType} ups={spec.ups}
-              style={{margin:"0 auto"}}/>
-          </div>
-        </div>)}
+        {!r&&(spec.L&&spec.W&&spec.H)&&<div style={{marginBottom:10}}>
+          <DielineCard spec={spec} card={card}/>
+        </div>}
         {/* Diagnostics — Blockers (left) + Warnings (right) always side-by-side for equal height.
              Plant warning injected locally (plant/delivery not in costing.js checkMissingInfo). */}
         {(()=>{
@@ -149,7 +272,6 @@ export default function OutputPanel(){
         })()}
         {missing.blockers.length===0&&r&&<div style={{marginBottom:8,fontSize:11,color:C.green,fontWeight:600}}>
           ✅ Ready to quote{missing.warnings.length>0?` (${missing.warnings.length} warning${missing.warnings.length>1?"s":""} noted)`:""}</div>}
-        {r&&<LayerDetail r={r} card={card}/>}
         {!r&&<div style={{padding:hasInputProgress?"5px 0":"16px 0"}}>
           <div style={{fontSize:T.value,fontWeight:600,color:C.slateM,
             marginBottom:hasInputProgress?6:12,textAlign:hasInputProgress?"left":"center"}}>
@@ -179,23 +301,41 @@ export default function OutputPanel(){
         </div>}
 
         {r&&<>
-          {/* Key numbers */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:7,marginBottom:10}}>
-            <KN label="Final Rate" val={`₹${r.finalRate.toFixed(2)}`} hl
-              sub={+spec.qtyPerSet>1?`×${spec.qtyPerSet} nos/set = ₹${(r.finalRate*(+spec.qtyPerSet)).toFixed(2)}/set`:"MROUND 0.05 · excl GST"}/>
-            <KN label="Rate/kg (landed)" val={`₹${r.ratePerKg.toFixed(2)}`} sub="Sheet Wt basis · incl freight"/>
-            <KN label="Paper Consumed" val={`${(r.wt*1000).toFixed(0)} g`}
-              sub={+spec.qtyPerSet>1
-                ?`×${spec.qtyPerSet} = ${((r.wt*(+spec.qtyPerSet))*1000).toFixed(0)}g total · Sheet Wt: ${(r.wtSheet*1000).toFixed(0)}g`
-                :`Sheet Wt (excl waste): ${(r.wtSheet*1000).toFixed(0)} g`}/>
-            <KN label="Calc MOQ" val={r.calcMOQ.toLocaleString()}
-              sub={spec.salesMOQ?`Sales: ${(+spec.salesMOQ).toLocaleString()} ${+spec.salesMOQ<r.calcMOQ?"⚠️ below min":"✅"}`:`${r.moqKg.toLocaleString()} kg`}/>
+          {/* The control rail narrows the key-output block to roughly 75% of
+              the panel while keeping the box's primary outputs at the top. */}
+          <div style={{display:"grid",gridTemplateColumns:"minmax(112px,1fr) minmax(0,3fr)",gap:10,
+            alignItems:"stretch",marginBottom:10}}>
+            <MarginControl spec={spec} s={s} r={r} card={card} marginSugg={marginSugg}/>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:7,minWidth:0}}>
+              <KN label="Final Rate" val={`₹${r.finalRate.toFixed(2)}`} hl
+                sub={+spec.qtyPerSet>1?`×${spec.qtyPerSet} nos/set = ₹${(r.finalRate*(+spec.qtyPerSet)).toFixed(2)}/set`:"MROUND 0.05 · excl GST"}/>
+              <KN label="Rate/kg (landed)" val={`₹${r.ratePerKg.toFixed(2)}`} sub="Sheet Wt basis · incl freight"/>
+              <KN label="Paper Consumed" val={`${(r.wt*1000).toFixed(0)} g`}
+                sub={+spec.qtyPerSet>1
+                  ?`×${spec.qtyPerSet} = ${((r.wt*(+spec.qtyPerSet))*1000).toFixed(0)}g total · Sheet Wt: ${(r.wtSheet*1000).toFixed(0)}g`
+                  :`Sheet Wt (excl waste): ${(r.wtSheet*1000).toFixed(0)} g`}/>
+              <KN label="Calc MOQ" val={r.calcMOQ.toLocaleString()}
+                sub={spec.salesMOQ?`Sales: ${(+spec.salesMOQ).toLocaleString()} ${+spec.salesMOQ<r.calcMOQ?"⚠️ below min":"✅"}`:`${r.moqKg.toLocaleString()} kg`}/>
+              <KN label="Deckle" val={r.deckle+"mm"}/>
+              <KN label="Cutting" val={r.cutting+"mm"}/>
+              <KN label="Calc BS" val={r.calcBS} sub={spec.spec_bs?`Std: ${spec.spec_bs}`:"no std set"}/>
+              <KN label="Calc GSM" val={r.calcGSM} sub={spec.board_gsm?`Std: ${spec.board_gsm}`:"no std set"}/>
+            </div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:7,marginBottom:10}}>
-            <KN label="Deckle" val={r.deckle+"mm"}/>
-            <KN label="Cutting" val={r.cutting+"mm"}/>
-            <KN label="Calc BS" val={r.calcBS} sub={spec.spec_bs?`Std: ${spec.spec_bs}`:"no std set"}/>
-            <KN label="Calc GSM" val={r.calcGSM} sub={spec.board_gsm?`Std: ${spec.board_gsm}`:"no std set"}/>
+
+          {/* Physical identity and its resulting cost sit on the same line. */}
+          <div style={{display:"grid",gridTemplateColumns:"minmax(0,2fr) minmax(0,3fr)",gap:10,
+            alignItems:"stretch",marginBottom:10}}>
+            <DielineCard spec={spec} card={card}/>
+            <CostBuildUp r={r} spec={spec} card={card} freightTag={freightTag}/>
+          </div>
+
+          {/* BS is the layer calculation control, so it shares the row with
+              the compact layer result rather than consuming a full-width row. */}
+          <div style={{display:"grid",gridTemplateColumns:"minmax(112px,1fr) minmax(0,3fr)",gap:10,
+            alignItems:"stretch",marginBottom:10}}>
+            <BsControl spec={spec} s={s} card={card}/>
+            <LayerDetail r={r} card={card}/>
           </div>
 
           {/* Spec compliance */}
@@ -229,102 +369,6 @@ export default function OutputPanel(){
               </tbody>
             </table>
           </div>}
-
-          <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:10}}>
-            {/* Margin slider — min 0 */}
-            <div style={{...card,padding:"9px 10px",minWidth:0}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                <span style={{fontSize:T.body,fontWeight:700,color:C.slateM}}>Margin</span>
-                <span style={{fontSize:T.title,fontWeight:700,color:C.slate,fontFamily:mono}}>
-                  ₹{r.finalRate.toFixed(2)}</span>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:7,marginTop:5}}>
-                <input type="range" min={0} max={20} step={0.5} value={spec.margin}
-                  onChange={e=>s("margin",+e.target.value)} style={{flex:1,minWidth:0,accentColor:C.amber}}/>
-                <span style={{fontSize:T.heading,fontWeight:800,color:C.amber,minWidth:36,
-                  textAlign:"right",fontFamily:mono}}>{spec.margin}%</span>
-              </div>
-              <div style={{display:"flex",gap:4,marginTop:7,overflowX:"auto",whiteSpace:"nowrap",paddingBottom:2}}>
-                {[0,6,8,10,12,15].map(m=><button key={m} onClick={()=>s("margin",m)}
-                  style={{padding:"3px 7px",borderRadius:5,fontSize:T.body,cursor:"pointer",flexShrink:0,
-                    border:`1px solid ${+spec.margin===m?C.amber:C.border}`,
-                    background:+spec.margin===m?C.amberL:C.white,
-                    color:+spec.margin===m?C.amberD:C.slateL,fontWeight:+spec.margin===m?700:400}}>{m}%</button>)}
-                {marginSugg.suggested!==+spec.margin&&(spec.customerType!=="existing"||spec.volume||spec.priceContext!=="unknown")&&(
-                  <button onClick={()=>s("margin",marginSugg.suggested)} style={{padding:"3px 8px",
-                    borderRadius:5,fontSize:T.body,cursor:"pointer",border:`1px solid ${C.green}`,
-                    background:C.greenL,color:C.green,fontWeight:700,flexShrink:0}}>
-                    ✦ Suggested {marginSugg.suggested}%</button>)}
-              </div>
-              {marginSugg.adjustments.length>0&&<div style={{marginTop:6,padding:"5px 7px",
-                background:C.cream,borderRadius:5,fontSize:T.label,color:C.slateL,lineHeight:1.45}}>
-                <b style={{color:C.slateM}}>Suggested: {marginSugg.suggested}%</b> — base 8%{marginSugg.adjustments.map(a=>" · "+a).join("")}
-                {marginSugg.risk&&<span style={{marginLeft:6,color:C.amberD,fontWeight:600}}> {marginSugg.risk}</span>}
-              </div>}
-            </div>
-
-            {/* Fluting BS Contribution slider */}
-            <div style={{...card,padding:"9px 10px",minWidth:0}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                <span style={{fontSize:T.body,fontWeight:700,color:C.slateM}}>Fluting BS Contribution</span>
-                <span style={{fontSize:T.title,fontWeight:800,color:C.amber,fontFamily:mono}}>
-                  {Math.round((spec.flutingBCF!=null?spec.flutingBCF:0.10)*100)}%</span>
-              </div>
-              <input type="range" min={0} max={30} step={1}
-                value={Math.round((spec.flutingBCF!=null?spec.flutingBCF:0.10)*100)}
-                onChange={e=>s("flutingBCF",+e.target.value/100)}
-                style={{display:"block",width:"100%",marginTop:7,accentColor:C.amber}}/>
-              <div style={{display:"flex",gap:4,marginTop:7,overflowX:"auto",whiteSpace:"nowrap",paddingBottom:2}}>
-                {[0,10,20,30].map(pct=>{
-                  const cur=Math.round((spec.flutingBCF!=null?spec.flutingBCF:0.10)*100);
-                  return<button key={pct} onClick={()=>s("flutingBCF",pct/100)}
-                    style={{padding:"3px 7px",borderRadius:5,fontSize:T.body,cursor:"pointer",flexShrink:0,
-                      border:`1px solid ${cur===pct?C.amber:C.border}`,
-                      background:cur===pct?C.amberL:C.white,
-                      color:cur===pct?C.amberD:C.slateL,fontWeight:cur===pct?700:400}}>
-                    {pct}%</button>;})}
-              </div>
-              <div style={{fontSize:T.label,color:C.slateL,marginTop:5,lineHeight:1.35}}>
-                Liner BCF = 1. Flute BCF = slider. BS = Σ(BF_adj × BCF × GSM ÷ 1000).</div>
-            </div>
-          </div>
-
-          {/* Cost breakdown */}
-          <div style={card}>
-            <div style={{fontSize:10,fontWeight:700,color:C.slateM,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Cost Build-up</div>
-            <table style={{width:"100%",fontSize:12,borderCollapse:"collapse"}}>
-              <tbody>
-                {[["Material Cost (Paper Consumed)",r.mat],
-                  ["Conversion",r.conv],
-                  r.addOns>0&&[`Add-on Costs${(()=>{
-                      const AL={printing:"Print",stitching:"Stitch",coating:"Coat",
-                        handling:"Hdlg",moqCharge:"MOQ±",packing:"Pack",other:"Other",unloading:"Unload"};
-                      const active=Object.entries(AL).filter(([k])=>spec[k]&&+spec[k]>0)
-                        .map(([k,l])=>`${l} ₹${(+spec[k]).toFixed(2)}`);
-                      return active.length?" ("+active.join("·")+")":"";
-                    })()}`,r.addOns],
-                  ["Customer Interest",r.intC],
-                  [`Freight (${r.frRate} Rs/kg${freightTag})`,r.fr],
-                  ["Margin ("+spec.margin+"%)",r.marginAmt]].filter(Boolean).map(([l,v])=>(
-                  <tr key={l} style={{borderBottom:`1px solid ${C.border}`}}>
-                    <td style={{padding:"5px 0",color:C.slateM,fontSize:11}}>{l}</td>
-                    <td style={{padding:"5px 0",textAlign:"right",fontWeight:600,fontFamily:mono,width:72}}>₹{(+(v??0)).toFixed(2)}</td>
-                    <td style={{padding:"5px 0",textAlign:"right",fontFamily:mono,fontSize:10,color:C.amberD,width:60}}>
-                      {r.wtSheet>0?`₹${(v/r.wtSheet).toFixed(2)}/kg`:"—"}</td>
-                    <td style={{padding:"5px 0 5px 6px",width:80}}>
-                      <div style={{height:4,borderRadius:2,background:C.paper}}>
-                        <div style={{height:"100%",background:l.includes("Margin")?C.amber:C.slateM,borderRadius:2,
-                          width:Math.min(100,v/r.finalRate*100).toFixed(0)+"%"}}/></div></td>
-                    <td style={{padding:"5px 0",textAlign:"right",fontSize:10,color:C.slateL,width:28,fontFamily:mono}}>
-                      {(v/r.finalRate*100).toFixed(0)}%</td>
-                  </tr>))}
-                <tr style={{borderTop:`2px solid ${C.amber}`}}>
-                  <td style={{padding:"7px 0 3px",fontWeight:800,color:C.amber,fontSize:15,fontFamily:mono}} colSpan={2}>₹{r.finalRate.toFixed(2)}</td>
-                  <td colSpan={2} style={{padding:"7px 0 3px",textAlign:"right",fontSize:10,color:C.slateL}}>LANDED RATE · excl GST</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
 
         </>}
 
