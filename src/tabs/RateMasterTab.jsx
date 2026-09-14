@@ -16,7 +16,8 @@ import { useState } from "react";
 import { buildBlanketConfirm, gyAffected } from "../lib/blanketConfirm.js";
 import { establishEffectiveMaterialRate, resolveSupplierCreditCost } from "../engine/rateMaster.js";
 import { useAppState } from "../state/AppStateContext.js";
-import { C, mono, sans } from "../theme.js";
+import { C, T, mono, sans } from "../theme.js";
+import { SummaryRow } from "../ui/dataDisplay.jsx";
 
 export default function RateMasterTab(){
   const {
@@ -28,15 +29,20 @@ export default function RateMasterTab(){
   const[newGrade,setNewGrade]=useState({code:"",desc:"",price:"",disc:1.5});
 
   return(
-    <div style={{padding:16,overflowY:"auto",height:"100%"}}>
+    <div className="screen-end-padded" style={{padding:16,overflowY:"auto",height:"100%"}}>
 
       {/* ── Strip 1: Price Rules ──────────────────────────────────────────── */}
-      <div style={{background:"#EEF4FB",border:"1px solid #6A9FD4",borderRadius:8,
-        padding:"10px 14px",marginBottom:10}}>
+      <SummaryRow title="Price Rules"
+        facts={[`GY ₹${gyPremLow}/₹${gyPremHigh}`,`${freightBands.length} freight bands`,
+          `Disc ₹${blanketDisc}`,`Paper credit ${blanketInterest}%`]}
+        status={rateUpdatedAt?`Updated ${rateUpdatedAt}`:"Date not set"}
+        statusTone={rateUpdatedAt?"positive":"warning"}
+        style={{background:"#EEF4FB",borderColor:"#6A9FD4",marginBottom:10}}
+        contentStyle={{padding:"9px 12px"}}>
         {/* Row 1: all bulk controls */}
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"nowrap",overflowX:"auto"}}>
           {/* GY Premiums */}
-          <span style={{fontSize:10,fontWeight:700,color:"#2E6094",whiteSpace:"nowrap"}}>GY Premium</span>
+          <span style={{fontSize:T.label,fontWeight:700,color:"#2E6094",whiteSpace:"nowrap"}}>GY Premium</span>
           {[["16–24BF",gyPremLow,setGyPremLow],["28–35BF",gyPremHigh,setGyPremHigh]].map(([lbl,val,setter])=>(
             <div key={lbl} style={{display:"flex",alignItems:"center",gap:2}}>
               <span style={{fontSize:9,color:C.slateL,whiteSpace:"nowrap"}}>{lbl}</span>
@@ -138,7 +144,7 @@ export default function RateMasterTab(){
               Mark today</button></>}
           </div>
         </div>
-      </div>
+      </SummaryRow>
 
       {/* ── Strip 2: Add Grade (admin only) ───────────────────────────────── */}
       {role==="admin"&&<div style={{display:"flex",gap:6,alignItems:"center",
@@ -171,8 +177,8 @@ export default function RateMasterTab(){
 
       {/* ── Rate Master table ─────────────────────────────────────────────── */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-        <div style={{fontSize:13,fontWeight:700,color:C.slate}}>Rate Master
-          <span style={{fontSize:10,fontWeight:400,color:C.slateL,marginLeft:8}}>
+        <div style={{fontSize:T.title,fontWeight:700,color:C.slate}}>Rate Master
+          <span style={{fontSize:T.label,fontWeight:400,color:C.slateL,marginLeft:8}}>
             {rates.length} grades · effective rates used in all costing</span>
         </div>
         {role==="admin"&&<span style={{fontSize:10,color:C.green,fontWeight:600}}>⚙ Admin — edit enabled</span>}

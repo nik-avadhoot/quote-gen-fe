@@ -108,6 +108,10 @@ code {
 
 /* Scrollable screens opt into one consistent final breathing space without
    having to coordinate their existing top and side padding values. */
+.screen-end-padded {
+  box-sizing: border-box;
+}
+
 .screen-end-padded::after {
   display: block;
   height: 48px;

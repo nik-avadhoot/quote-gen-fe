@@ -30,7 +30,7 @@ import { DEFAULT_BOX_TRIM_DATA } from "../data/defaults.js";
 import { setItem } from "../lib/persist.js";
 import { Btn } from "../ui/primitives.jsx";
 import { useAppState } from "../state/AppStateContext.js";
-import { C, mono, sans } from "../theme.js";
+import { C, T, mono, sans } from "../theme.js";
 
 export default function DefaultsTab(){
   const {
@@ -40,13 +40,24 @@ export default function DefaultsTab(){
   const[newSector,setNewSector]=useState({code:"",name:"",wasteCBB:5,wastePP:5,convBox:7,convPP:12.5,specLang:"BS"});
 
   return(
-    <div style={{overflowY:"auto",height:"100%",padding:20}}>
+    <div className="screen-end-padded" style={{overflowY:"auto",height:"100%",padding:20}}>
+      <nav aria-label="Commercial policy sections"
+        style={{display:"flex",alignItems:"center",gap:6,marginBottom:14,padding:"6px 8px",
+          border:`1px solid ${C.border}`,borderRadius:6,background:C.white,width:"fit-content"}}>
+        {[['sector-defaults','Sector Defaults'],['box-trim-defaults','Box Trim Defaults'],
+          ['partitions-master','Partitions Master']].map(([id,label],i)=><span key={id}
+            style={{display:"flex",alignItems:"center",gap:6}}>
+            {i>0&&<span aria-hidden="true" style={{color:C.border}}>·</span>}
+            <a href={`#${id}`} style={{fontSize:T.body,fontWeight:700,color:C.slateM,
+              textDecoration:"none",whiteSpace:"nowrap"}}>{label}</a>
+          </span>)}
+      </nav>
       {/* SECTOR DEFAULTS */}
-      <div style={{marginBottom:28}}>
+      <div id="sector-defaults" style={{marginBottom:28,scrollMarginTop:12}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:C.slate}}>Sector Defaults</div>
-            <div style={{fontSize:11,color:C.slateL}}>Editable by Admin. Selecting a sector in Costing tab auto-populates Waste%, Conv rates.</div>
+            <div style={{fontSize:T.title,fontWeight:700,color:C.slate}}>Sector Defaults</div>
+            <div style={{fontSize:T.body,color:C.slateL}}>Editable by Admin. Selecting a sector in Costing tab auto-populates Waste%, Conv rates.</div>
           </div>
           {role!=="admin"&&<span style={{fontSize:11,color:C.slateL}}>Switch to Admin to edit</span>}
           {role==="admin"&&<span style={{fontSize:11,color:C.green,fontWeight:600}}>⚙ Admin — edit enabled</span>}
@@ -154,11 +165,11 @@ export default function DefaultsTab(){
       </div>
 
       {/* BOX TYPE TRIM DEFAULTS */}
-      <div>
+      <div id="box-trim-defaults" style={{scrollMarginTop:12}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:C.slate}}>Box Type Trim Defaults</div>
-            <div style={{fontSize:11,color:C.slateL}}>Auto-fills trim margins in the Costing form when box type is selected. Override per SKU if needed.</div>
+            <div style={{fontSize:T.title,fontWeight:700,color:C.slate}}>Box Type Trim Defaults</div>
+            <div style={{fontSize:T.body,color:C.slateL}}>Auto-fills trim margins in the Costing form when box type is selected. Override per SKU if needed.</div>
           </div>
         </div>
         <table style={{borderCollapse:"collapse",fontSize:12}}>
@@ -201,11 +212,12 @@ export default function DefaultsTab(){
       </div>
 
       {/* PARTITIONS MASTER */}
-      <div style={{marginTop:24,paddingTop:20,borderTop:`1px solid ${C.border}`}}>
+      <div id="partitions-master" style={{marginTop:24,paddingTop:20,
+        borderTop:`1px solid ${C.border}`,scrollMarginTop:12}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:C.slate}}>Partitions Master — Alcobev Glass SKU</div>
-            <div style={{fontSize:11,color:C.slateL}}>Nos per set by SKU type. Auto-fills Nos/Set when Glass SKU is selected in the SET config for Partition-L and Partition-W rows.</div>
+            <div style={{fontSize:T.title,fontWeight:700,color:C.slate}}>Partitions Master — Alcobev Glass SKU</div>
+            <div style={{fontSize:T.body,color:C.slateL}}>Nos per set by SKU type. Auto-fills Nos/Set when Glass SKU is selected in the SET config for Partition-L and Partition-W rows.</div>
           </div>
           {role==="admin"&&<Btn ch="+ Add SKU" v="success" sm onClick={()=>setPartitionsMaster(prev=>[...prev,{skuType:"New SKU",lwise:1,wwise:1}])}/>}
         </div>
