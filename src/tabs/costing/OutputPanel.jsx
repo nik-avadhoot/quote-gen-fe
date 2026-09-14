@@ -85,9 +85,12 @@ const sliderShell={height:92,display:"flex",alignItems:"center",justifyContent:"
 const verticalSlider={width:92,transform:"rotate(-90deg)",accentColor:C.amber};
 const percentInput={width:54,padding:"4px 5px",border:`1px solid ${C.border}`,borderRadius:5,
   background:C.white,color:C.amberD,fontFamily:mono,fontSize:T.value,fontWeight:700,textAlign:"right"};
+const disclosurePopover={position:"absolute",zIndex:20,left:"calc(100% + 8px)",bottom:0,width:220,
+  padding:"8px 9px",background:C.white,border:`1px solid ${C.border}`,borderRadius:6,
+  boxShadow:"0 6px 18px rgba(32,49,68,.16)",color:C.slateL,textAlign:"left",lineHeight:1.4};
 
 const MarginControl=({spec,s,r,card,marginSugg})=>(
-  <div style={{...card,marginBottom:0,padding:"8px 7px",minWidth:0,textAlign:"center"}}>
+  <div style={{...card,marginBottom:0,padding:"8px 7px",minWidth:0,textAlign:"center",position:"relative"}}>
     <div style={{fontSize:T.label,fontWeight:700,color:C.slateM,textTransform:"uppercase",
       letterSpacing:"0.06em"}}>Margin</div>
     <div style={{fontSize:T.value,fontWeight:700,color:C.slate,fontFamily:mono,marginTop:2}}>
@@ -110,7 +113,7 @@ const MarginControl=({spec,s,r,card,marginSugg})=>(
     {marginSugg.adjustments.length>0&&<details style={{marginTop:4,fontSize:T.micro,color:C.slateL,
       lineHeight:1.3,textAlign:"left"}}>
       <summary style={{cursor:"pointer",whiteSpace:"nowrap"}}>Why {marginSugg.suggested}%?</summary>
-      <div style={{marginTop:3,padding:"4px",background:C.cream,borderRadius:4}}>
+      <div style={disclosurePopover}>
         Base 8%{marginSugg.adjustments.map(a=>" · "+a).join("")}
         {marginSugg.risk&&<span style={{color:C.amberD,fontWeight:600}}> · {marginSugg.risk}</span>}
       </div>
@@ -121,11 +124,11 @@ const MarginControl=({spec,s,r,card,marginSugg})=>(
 const BsControl=({spec,s,card})=>{
   const current=Math.round((spec.flutingBCF!=null?spec.flutingBCF:0.10)*100);
   return(
-    <div style={{...card,marginBottom:0,padding:"8px 7px",minWidth:0,textAlign:"center",
-      display:"flex",flexDirection:"column"}}>
+    <div style={{...card,marginBottom:0,padding:"11px 7px 8px",minWidth:0,textAlign:"center",
+      display:"flex",flexDirection:"column",position:"relative"}}>
       <div style={{fontSize:T.label,fontWeight:700,color:C.slateM,textTransform:"uppercase",
         letterSpacing:"0.05em",lineHeight:1.25}}>Fluting BS</div>
-      <div style={sliderShell}>
+      <div style={{...sliderShell,marginTop:4}}>
         <input type="range" min={0} max={30} step={1} value={current}
           aria-label="Fluting BS contribution" onChange={e=>s("flutingBCF",+e.target.value/100)}
           style={verticalSlider}/>
@@ -147,7 +150,7 @@ const BsControl=({spec,s,card})=>{
       <details style={{fontSize:T.micro,color:C.slateL,marginTop:"auto",paddingTop:5,
         lineHeight:1.25,textAlign:"left"}}>
         <summary style={{cursor:"pointer",whiteSpace:"nowrap"}}>BS formula</summary>
-        <div style={{marginTop:3,padding:"4px",background:C.cream,borderRadius:4}}>
+        <div style={disclosurePopover}>
           Liner BCF = 1. Flute BCF = slider. BS = Σ(BF_adj × BCF × GSM ÷ 1000).
         </div>
       </details>
