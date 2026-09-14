@@ -74,6 +74,7 @@ export const BOX_TYPES=["RSC","Die-R","Die-S","HRSC-L","HRSC-R","HRSC-O","Board"
 export const INIT_SPEC={
   client:"",product:"",material_code:"",sector:"",
   L:"",W:"",H:"",dimType:"ID",boxType:"RSC",ply:5,ups:1,
+  printing_technology:"",number_of_colours:"",
   flute_F1:"B",flute_F2:"A",
   layers:{TOP:{code:"",gsm:""},F1:{code:"",gsm:""},L1:{code:"",gsm:""},F2:{code:"",gsm:""},L2:{code:"",gsm:""}},
   board_gsm:"",spec_bs:"",spec_bct:"",spec_ect:"",reqBoxWt:"", // required box weight if customer specifies

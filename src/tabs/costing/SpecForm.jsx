@@ -261,8 +261,10 @@ export default function SpecForm(){
             <Sel value={spec.dimType} onChange={v=>s("dimType",v)} opts={["ID","OD"]}/>
           </div>
         </div>
-        {/* Row 2: Box Type Ply F1 F2 — Box Type 1fr (fills available width), PLY 68px (fits 3-ply/5-ply) */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 68px 58px 58px",gap:"4px 5px",marginBottom:2}}>
+        {/* Flutes are edited with their paper layers below. This row keeps the
+            remaining package fields compact and reserves the recovered width
+            for non-price-driving print specification metadata. */}
+        <div style={{display:"grid",gridTemplateColumns:"84px 68px 56px minmax(0,1fr)",gap:"4px 5px",marginBottom:2}}>
           <div>
             <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Box Type</div>
             <Sel value={spec.boxType} onChange={v=>s("boxType",v)} opts={BOX_TYPES}/>
@@ -272,13 +274,38 @@ export default function SpecForm(){
             <Sel value={spec.ply} onChange={v=>s("ply",+v)} opts={[{v:3,l:"3-ply"},{v:5,l:"5-ply"}]}/>
           </div>
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>F1 Flute</div>
-            <Sel value={spec.flute_F1} onChange={v=>s("flute_F1",v)} opts={["A","B","C","E"]}/>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Colours</div>
+            <input type="number" min="0" step="1" value={spec.number_of_colours??""}
+              disabled={!!activeBatchRowId} aria-label="Number of colours"
+              title={activeBatchRowId
+                ?"Printing specification cannot be pushed to a Batch row yet"
+                :"Saved in the Costing draft; backend persistence follows separately"}
+              onChange={e=>{
+                const raw=e.target.value;
+                if(raw===""){s("number_of_colours","");return;}
+                if(/^\d+$/.test(raw))s("number_of_colours",+raw);
+              }}
+              style={{...inputSt,width:"100%",boxSizing:"border-box",textAlign:"center",
+                background:activeBatchRowId?"#F5F5F5":C.white,
+                cursor:activeBatchRowId?"not-allowed":"text"}}/>
           </div>
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>F2 Flute</div>
-            <Sel value={spec.flute_F2} onChange={v=>s("flute_F2",v)}
-              opts={[{v:"",l:"—"},...["A","B","C","E"].map(f=>({v:f,l:f}))]}/>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Print Tech</div>
+            <select value={spec.printing_technology??""}
+              disabled={!!activeBatchRowId} aria-label="Print technology"
+              title={activeBatchRowId
+                ?"Printing specification cannot be pushed to a Batch row yet"
+                :"Saved in the Costing draft; backend persistence follows separately"}
+              onChange={e=>s("printing_technology",e.target.value)}
+              style={{...inputSt,width:"100%",boxSizing:"border-box",
+                color:spec.printing_technology?C.slate:C.slateL,
+                background:activeBatchRowId?"#F5F5F5":C.white,
+                cursor:activeBatchRowId?"not-allowed":"pointer"}}>
+              <option value="">— select —</option>
+              <option value="Flexo">Flexo</option>
+              <option value="CMYK">CMYK</option>
+              <option value="Offset">Offset</option>
+            </select>
           </div>
         </div>
       </div>
@@ -605,16 +632,9 @@ export default function SpecForm(){
             </div>
           </div>);
         })()}
-        <div style={{fontSize:9,color:C.slateL,textAlign:"center",lineHeight:1.5}}>
-          Batch defaults live in <b>Batch Context</b> above. Conversion, Waste and
-          Margin here are <b>SKU exceptions</b> for this row.
-          {/* C7a · mode-aware. The REVIEW wording is used only when an override
-              is actually in effect on this row; a reviewed row with no override
-              is showing the Batch Profile figure, which is what the START
-              sentence already says truthfully. */}
-          <br/>{(_frFromRow||_intFromRow)
-            ?"Existing Batch Entry row values shown; editing is not enabled in Costing."
-            :"Freight and Interest follow Batch Context."}
+        <div style={{fontSize:8,color:C.slateL,textAlign:"center",lineHeight:1.25}}>
+          Amber: editable SKU exception · Grey: context/read-only
+          {(_frFromRow||_intFromRow)&&" · Existing row values shown"}
         </div>
       </div>
       <div style={card}>
