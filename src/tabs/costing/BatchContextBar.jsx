@@ -137,6 +137,9 @@ export default function BatchContextBar(){
          k==="marginPP"?null:k)}
        style={{...inp(isOvr(k),"100%"),textAlign:"center"}}/>
     :<span style={chip(isOvr(k))} title={tip(k)}>{txt(v[k])}</span>;
+  const commercialOverrideCount=["convRate","waste","margin","convRatePP","wastePP","marginPP"]
+    .filter(isOvr).length;
+  const effective=k=>isOvr(k)?v[k]:def[k];
 
   return(
     <div style={{background:"#FEF8F0",borderBottom:`2px solid ${C.amber}`,
@@ -145,12 +148,21 @@ export default function BatchContextBar(){
 
       {/* ── BAND LABEL ── */}
       <div style={{display:"flex",alignItems:"center",marginRight:2,flexShrink:0}}>
-        <span style={{...vert,fontSize:10,fontWeight:800,letterSpacing:"0.1em"}}>
+        <span style={{color:C.amber,fontSize:T.label,fontWeight:800,letterSpacing:"0.1em",
+          textTransform:"uppercase",whiteSpace:"nowrap",background:C.amberL,
+          border:`1px solid ${C.amber}55`,borderRadius:4,padding:"3px 6px"}}>
           {editable?"New Batch":"Context"}</span>
       </div>
 
       {/* ── 1. CUSTOMER — 3 × 2 grid, Batch Entry's field order ── */}
-      <div style={card}>
+      <SummaryRow title="Customer"
+        facts={[v.client||"No client",v.sector||"No sector",
+          [v.plant,v.delivery].filter(Boolean).join(" → ")||"Route unresolved"]}
+        status={editable?"Editable":(v.customerType||"existing").replace(/^./,c=>c.toUpperCase())}
+        statusTone={editable?"warning":"neutral"}
+        style={{minWidth:300,maxWidth:420,flex:"1 1 360px",alignSelf:"stretch"}}
+        contentStyle={{padding:0}}>
+      <div style={{...card,border:0,borderRadius:0}}>
         <div style={vertWrap}><span style={vert}>Customer</span></div>
         <div style={{display:"grid",gridTemplateColumns:"auto 1fr auto 1fr",
           columnGap:5,rowGap:3,alignItems:"center"}}>
@@ -173,9 +185,17 @@ export default function BatchContextBar(){
           {sel(v.priceContext||"unknown",PRICE_OPTS,x=>setContextField("priceContext",x),92)}
         </div>
       </div>
+      </SummaryRow>
 
       {/* ── 2. COMMERCIALS — header row + Box and PP data rows ── */}
-      <div style={card}>
+      <SummaryRow title="Commercials"
+        facts={[`Box ${effective("convRate")}/${effective("waste")}/${effective("margin")}`,
+          `PP ${effective("convRatePP")}/${effective("wastePP")}/${effective("marginPP")}`]}
+        status={commercialOverrideCount?`${commercialOverrideCount} override${commercialOverrideCount===1?"":"s"}`:"Inherited"}
+        statusTone={commercialOverrideCount?"warning":"neutral"}
+        style={{minWidth:260,maxWidth:340,flex:"1 1 300px",alignSelf:"stretch"}}
+        contentStyle={{padding:0}}>
+      <div style={{...card,border:0,borderRadius:0}}>
         <div style={vertWrap}><span style={vert}>Commercials</span></div>
         <div style={{display:"grid",gridTemplateColumns:"24px 52px 52px 52px",
           columnGap:5,rowGap:3,alignItems:"center",minWidth:0}}>
@@ -184,6 +204,7 @@ export default function BatchContextBar(){
           <div style={rowLbl}>PP</div>{num("convRatePP")}{num("wastePP")}{num("marginPP")}
         </div>
       </div>
+      </SummaryRow>
 
       {/* ── 3. TERMS — Freight + Payment·Interest ── */}
       <SummaryRow title="Terms"
@@ -191,9 +212,11 @@ export default function BatchContextBar(){
         status={termsOverrideCount?`${termsOverrideCount} override${termsOverrideCount===1?"":"s"}`:"Inherited"}
         statusTone={termsOverrideCount?"warning":"neutral"}
         style={{minWidth:220,flexShrink:0,alignSelf:"stretch"}}
-        contentStyle={{padding:5}}>
+        contentStyle={{padding:0}}>
+        <div style={{...card,border:0,borderRadius:0}}>
+        <div style={vertWrap}><span style={vert}>Terms</span></div>
         <div style={{display:"grid",gridTemplateColumns:"auto 1fr",
-          columnGap:8,rowGap:4,alignItems:"center"}}>
+          columnGap:8,rowGap:4,alignItems:"center",flex:1}}>
           <span style={rowLbl}>Freight</span>
           <div style={{display:"flex",alignItems:"center",gap:3}}>
             {editable
@@ -226,6 +249,7 @@ export default function BatchContextBar(){
               :<span style={chip(false)} title={note}>
                  {v.paymentDisc?`≤${v.paymentDisc}d`:"—"} · {interestResolution.value}%{interestOvr?" ovr":""}</span>;
           })()}
+        </div>
         </div>
       </SummaryRow>
 

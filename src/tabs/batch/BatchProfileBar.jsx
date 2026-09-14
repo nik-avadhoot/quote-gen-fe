@@ -55,8 +55,8 @@ export default function BatchProfileBar({ pricingCard = null }){
       {/* ── SECTION LABEL ── */}
       <div style={{display:"flex",alignItems:"center",marginRight:2}}>
         <span style={{color:C.amber,fontWeight:800,fontSize:10,textTransform:"uppercase",
-          letterSpacing:"0.1em",writingMode:"vertical-rl",transform:"rotate(180deg)",
-          whiteSpace:"nowrap"}}>Batch Profile</span>
+          letterSpacing:"0.1em",whiteSpace:"nowrap",background:C.amberL,
+          border:`1px solid ${C.amber}55`,borderRadius:4,padding:"3px 6px"}}>Batch Profile</span>
       </div>
 
       {/* ── D-5: batch age — SURFACED, NOT GATED ────────────────────────────────
@@ -75,8 +75,13 @@ export default function BatchProfileBar({ pricingCard = null }){
         </div>)}
 
       {/* ── 1. CUSTOMER DETAILS — 3 × 2 grid (label | field) ── */}
-      <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,
-        padding:"4px 8px 4px 4px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
+      <SummaryRow title="Customer"
+        facts={[batchProfile.client||"No client",batchProfile.sector||"No sector",
+          [batchProfile.plant,batchProfile.delivery].filter(Boolean).join(" → ")||"Route unresolved"]}
+        status={(batchProfile.customerType||"existing").replace(/^./,c=>c.toUpperCase())}
+        style={{minWidth:300,maxWidth:420,flex:"1 1 360px",alignSelf:"stretch"}}
+        contentStyle={{padding:0}}>
+      <div style={{padding:"4px 8px 4px 4px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"center",width:14,flexShrink:0}}>
           <span style={{color:C.amber,fontWeight:700,fontSize:7.5,textTransform:"uppercase",
             letterSpacing:"0.12em",writingMode:"vertical-rl",transform:"rotate(180deg)",
@@ -163,6 +168,7 @@ export default function BatchProfileBar({ pricingCard = null }){
           </select>
         </div>
       </div>
+      </SummaryRow>
 
       {/* ── 2. COMMERCIALS — rates + aligned Terms row ── */}
       {(()=>{
@@ -228,9 +234,19 @@ export default function BatchProfileBar({ pricingCard = null }){
         const termHdr={fontSize:T.micro,lineHeight:1,fontWeight:700,color:C.slateL,
           textAlign:"center",whiteSpace:"nowrap"};
         const _termOverrideCount=Number(_isFrOvr)+Number(_intOvr);
+        const _effective=(key,fallback)=>isOvr(key)?batchProfile[key]:fallback;
+        const _commercialOverrideCount=["convRate","waste","margin","convRatePP","wastePP","marginPP"]
+          .filter(isOvr).length+_termOverrideCount;
         return(
-        <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,
-          padding:"4px 8px 4px 4px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
+        <SummaryRow title="Commercials"
+          facts={[`Box ${_effective("convRate",defConvBox)}/${_effective("waste",defWstBox)}/${_effective("margin",defMgnBox)}`,
+            `PP ${_effective("convRatePP",defConvPP)}/${_effective("wastePP",defWstPP)}/${_effective("marginPP",defMgnPP)}`,
+            `Fr ${_displayFr===''?"—":_displayFr}`,`PT ≤${batchProfile.paymentDisc||"30"}d`,`Int ${_int.value}%`]}
+          status={_commercialOverrideCount?`${_commercialOverrideCount} override${_commercialOverrideCount===1?"":"s"}`:"Inherited"}
+          statusTone={_commercialOverrideCount?"warning":"neutral"}
+          style={{minWidth:300,maxWidth:420,flex:"1 1 360px",alignSelf:"stretch"}}
+          contentStyle={{padding:0}}>
+        <div style={{padding:"4px 8px 4px 4px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",width:14,flexShrink:0}}>
             <span style={{color:C.amber,fontWeight:700,fontSize:7.5,textTransform:"uppercase",
               letterSpacing:"0.12em",writingMode:"vertical-rl",transform:"rotate(180deg)",
@@ -267,12 +283,8 @@ export default function BatchProfileBar({ pricingCard = null }){
             {/* Independently bordered third row. It starts at column 2 so each
                 field aligns with a value column while its own label—not the
                 Conv/Wst/Mgn header—states its commercial meaning. */}
-            <SummaryRow title="Terms"
-              facts={[`Fr ${_displayFr===''?"—":_displayFr}`,`PT ≤${batchProfile.paymentDisc||"30"}d`,`Int ${_int.value}%`]}
-              status={_termOverrideCount?`${_termOverrideCount} override${_termOverrideCount===1?"":"s"}`:"Inherited"}
-              statusTone={_termOverrideCount?"warning":"neutral"}
-              style={{gridColumn:"1 / -1",alignSelf:"end",marginTop:2}}
-              contentStyle={{padding:5}}>
+            <div style={{gridColumn:"1 / -1",alignSelf:"end",marginTop:2,
+              border:`1px solid ${C.border}`,borderRadius:4,padding:"2px 0 1px"}}>
               <div style={{display:"grid",gridTemplateColumns:"52px 52px 52px",columnGap:5,alignItems:"end"}}>
                 <label style={{display:"grid",gap:3,minWidth:0}}>
                   <span style={termHdr}>Freight Rs/kg</span>
@@ -321,9 +333,10 @@ export default function BatchProfileBar({ pricingCard = null }){
                   </output>
                 </div>
               </div>
-            </SummaryRow>
+            </div>
           </div>
-        </div>);
+        </div>
+        </SummaryRow>);
       })()}
 
       {pricingCard&&<div className="batch-profile-pricing-card">{pricingCard}</div>}
