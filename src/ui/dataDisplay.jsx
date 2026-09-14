@@ -64,6 +64,8 @@ export const SummaryRow = ({
   defaultExpanded = false,
   expanded: controlledExpanded,
   onExpandedChange,
+  verticalTitleWhenExpanded = false,
+  titleStyle = {},
   style: sx = {},
   contentStyle = {},
 }) => {
@@ -79,11 +81,42 @@ export const SummaryRow = ({
     onExpandedChange?.(nextExpanded);
   };
 
+  const sharedTitleStyle = {
+    fontSize: T.body, fontWeight: 800, flexShrink: 0, ...titleStyle,
+  };
+
   return (
     <div style={{
       border: `1px solid ${C.border}`, borderRadius: 7, background: C.white,
       overflow: "hidden", fontFamily: sans, ...sx,
     }}>
+      {expanded && verticalTitleWhenExpanded ? (
+        <div style={{ display: "flex", minHeight: 38, alignItems: "stretch" }}>
+          <button
+            type="button"
+            aria-expanded={true}
+            aria-controls={contentId}
+            aria-label={`Collapse ${title}`}
+            title={`Collapse ${title}`}
+            onClick={toggle}
+            style={{
+              width: 24, padding: "5px 4px", border: 0,
+              borderRight: `1px solid ${C.border}`,
+              background: "transparent", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: sans, flexShrink: 0,
+            }}
+          >
+            <span style={{
+              ...sharedTitleStyle, writingMode: "vertical-rl",
+              transform: "rotate(180deg)", lineHeight: 1,
+            }}>{title}</span>
+          </button>
+          <div id={contentId} style={{ flex: 1, minWidth: 0, padding: "10px 12px", ...contentStyle }}>
+            {children}
+          </div>
+        </div>
+      ) : <>
       <button
         type="button"
         aria-expanded={expanded}
@@ -96,7 +129,7 @@ export const SummaryRow = ({
           fontFamily: sans,
         }}
       >
-        <span style={{ fontSize: T.body, fontWeight: 800, flexShrink: 0 }}>{title}</span>
+        <span style={sharedTitleStyle}>{title}</span>
         <span style={{
           display: "flex", alignItems: "center", gap: 6, minWidth: 0,
           flex: 1, overflow: "hidden", color: C.slateL, fontSize: T.label,
@@ -131,6 +164,7 @@ export const SummaryRow = ({
           {children}
         </div>
       )}
+      </>}
     </div>
   );
 };

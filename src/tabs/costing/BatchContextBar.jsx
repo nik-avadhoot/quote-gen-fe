@@ -4,8 +4,9 @@
 // C5. THIS CREATES NO FIELD AND NO DATA. It is the existing batch-level fields,
 // relocated out of SpecForm's scattered cards into one compact sticky bar.
 //
-// VISUAL GRAMMAR IS BATCH ENTRY'S, deliberately: three bordered cards with
-// rotated section labels — Customer · Commercials · Terms — on the same grids
+// VISUAL GRAMMAR IS BATCH ENTRY'S, deliberately: compact horizontal summaries
+// while closed, replaced by rotated section-label rails — Customer ·
+// Commercials · Terms — when opened. Expanded content uses the same grids
 // BatchProfileBar uses (auto 1fr auto 1fr for identity, a 24px + three-column
 // table for the Box/PP commercials, auto 1fr for terms). The same instrument at
 // two levels; a Maker who can read the Batch Profile can read this.
@@ -49,12 +50,11 @@ const lbl={fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"};
 const rowLbl={fontSize:9,fontWeight:700,color:C.slateL,whiteSpace:"nowrap"};
 const hdr={fontSize:8,fontWeight:700,color:C.slateL,textAlign:"center",
   textTransform:"uppercase",letterSpacing:"0.04em"};
-const vert={color:C.amber,fontWeight:700,fontSize:7.5,textTransform:"uppercase",
-  letterSpacing:"0.12em",writingMode:"vertical-rl",transform:"rotate(180deg)",whiteSpace:"nowrap"};
+const sectionLabel={color:C.amber,fontWeight:700,fontSize:7.5,textTransform:"uppercase",
+  letterSpacing:"0.12em",whiteSpace:"nowrap"};
 const card={background:C.white,border:`1px solid ${C.border}`,borderRadius:6,
   padding:"4px 8px 4px 4px",display:"flex",flexDirection:"row",gap:6,
   alignItems:"stretch",flexShrink:0};
-const vertWrap={display:"flex",alignItems:"center",justifyContent:"center",width:14,flexShrink:0};
 // The app's established read-only idiom, sized to occupy the same cell an input
 // would, so the two modes are one layout rather than two.
 const chip=ovr=>({padding:"2px 6px",borderRadius:3,fontSize:10,whiteSpace:"nowrap",
@@ -160,10 +160,10 @@ export default function BatchContextBar(){
           [v.plant,v.delivery].filter(Boolean).join(" → ")||"Route unresolved"]}
         status={editable?"Editable":(v.customerType||"existing").replace(/^./,c=>c.toUpperCase())}
         statusTone={editable?"warning":"neutral"}
+        verticalTitleWhenExpanded titleStyle={sectionLabel}
         style={{minWidth:300,maxWidth:420,flex:"1 1 360px",alignSelf:"stretch"}}
         contentStyle={{padding:0}}>
-      <div style={{...card,border:0,borderRadius:0}}>
-        <div style={vertWrap}><span style={vert}>Customer</span></div>
+      <div style={{...card,border:0,borderRadius:0,padding:"4px 8px"}}>
         <div style={{display:"grid",gridTemplateColumns:"auto 1fr auto 1fr",
           columnGap:5,rowGap:3,alignItems:"center"}}>
           <span style={lbl}>Client</span>
@@ -193,10 +193,10 @@ export default function BatchContextBar(){
           `PP ${effective("convRatePP")}/${effective("wastePP")}/${effective("marginPP")}`]}
         status={commercialOverrideCount?`${commercialOverrideCount} override${commercialOverrideCount===1?"":"s"}`:"Inherited"}
         statusTone={commercialOverrideCount?"warning":"neutral"}
+        verticalTitleWhenExpanded titleStyle={sectionLabel}
         style={{minWidth:260,maxWidth:340,flex:"1 1 300px",alignSelf:"stretch"}}
         contentStyle={{padding:0}}>
-      <div style={{...card,border:0,borderRadius:0}}>
-        <div style={vertWrap}><span style={vert}>Commercials</span></div>
+      <div style={{...card,border:0,borderRadius:0,padding:"4px 8px"}}>
         <div style={{display:"grid",gridTemplateColumns:"24px 52px 52px 52px",
           columnGap:5,rowGap:3,alignItems:"center",minWidth:0}}>
           <div style={hdr}/><div style={hdr}>Conv</div><div style={hdr}>Wst%</div><div style={hdr}>Mgn%</div>
@@ -211,10 +211,10 @@ export default function BatchContextBar(){
         facts={[`Fr ${frShown===''||frShown==null?"—":frShown}`,`PT ≤${v.paymentDisc||"30"}d`,`Int ${interestResolution.value}%`]}
         status={termsOverrideCount?`${termsOverrideCount} override${termsOverrideCount===1?"":"s"}`:"Inherited"}
         statusTone={termsOverrideCount?"warning":"neutral"}
+        verticalTitleWhenExpanded titleStyle={sectionLabel}
         style={{minWidth:220,flexShrink:0,alignSelf:"stretch"}}
         contentStyle={{padding:0}}>
-        <div style={{...card,border:0,borderRadius:0}}>
-        <div style={vertWrap}><span style={vert}>Terms</span></div>
+        <div style={{...card,border:0,borderRadius:0,padding:"4px 8px"}}>
         <div style={{display:"grid",gridTemplateColumns:"auto 1fr",
           columnGap:8,rowGap:4,alignItems:"center",flex:1}}>
           <span style={rowLbl}>Freight</span>

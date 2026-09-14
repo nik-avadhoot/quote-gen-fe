@@ -22,6 +22,9 @@ import { useFeatureFlag } from "../../lib/featureFlags.js";
 import { SummaryRow } from "../../ui/dataDisplay.jsx";
 import BatchClientField from "./BatchClientField.jsx";
 
+const profileSectionLabel={color:C.amber,fontWeight:700,fontSize:7.5,
+  textTransform:"uppercase",letterSpacing:"0.12em",whiteSpace:"nowrap"};
+
 export default function BatchProfileBar({ pricingCard = null }){
   const {batchAgeLabel,batchProfile,copyCostingToProfile,freight,importConstrFromSpec,locations,
     sectorCodes,sectors,setBatchProfile,showToast,startNewBatch}=useAppState();
@@ -79,14 +82,10 @@ export default function BatchProfileBar({ pricingCard = null }){
         facts={[batchProfile.client||"No client",batchProfile.sector||"No sector",
           [batchProfile.plant,batchProfile.delivery].filter(Boolean).join(" → ")||"Route unresolved"]}
         status={(batchProfile.customerType||"existing").replace(/^./,c=>c.toUpperCase())}
+        verticalTitleWhenExpanded titleStyle={profileSectionLabel}
         style={{minWidth:300,maxWidth:420,flex:"1 1 360px",alignSelf:"stretch"}}
         contentStyle={{padding:0}}>
-      <div style={{padding:"4px 8px 4px 4px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"center",width:14,flexShrink:0}}>
-          <span style={{color:C.amber,fontWeight:700,fontSize:7.5,textTransform:"uppercase",
-            letterSpacing:"0.12em",writingMode:"vertical-rl",transform:"rotate(180deg)",
-            whiteSpace:"nowrap"}}>Customer</span>
-        </div>
+      <div style={{padding:"4px 8px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
         <div style={{display:"grid",gridTemplateColumns:"auto 1fr auto 1fr",
           columnGap:5,rowGap:3,alignItems:"center"}}>
           {/* Row 1: Client | Sector */}
@@ -244,14 +243,10 @@ export default function BatchProfileBar({ pricingCard = null }){
             `Fr ${_displayFr===''?"—":_displayFr}`,`PT ≤${batchProfile.paymentDisc||"30"}d`,`Int ${_int.value}%`]}
           status={_commercialOverrideCount?`${_commercialOverrideCount} override${_commercialOverrideCount===1?"":"s"}`:"Inherited"}
           statusTone={_commercialOverrideCount?"warning":"neutral"}
+          verticalTitleWhenExpanded titleStyle={profileSectionLabel}
           style={{minWidth:300,maxWidth:420,flex:"1 1 360px",alignSelf:"stretch"}}
           contentStyle={{padding:0}}>
-        <div style={{padding:"4px 8px 4px 4px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"center",width:14,flexShrink:0}}>
-            <span style={{color:C.amber,fontWeight:700,fontSize:7.5,textTransform:"uppercase",
-              letterSpacing:"0.12em",writingMode:"vertical-rl",transform:"rotate(180deg)",
-              whiteSpace:"nowrap"}}>Commercials</span>
-          </div>
+        <div style={{padding:"4px 8px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
           {/* Header + data rows grid. The three data columns are PINNED at 52px,
               matching Costing's Batch Context bar (BatchContextBar.jsx:161) so the
               same three fields are the same size in both places. They were 1fr,
