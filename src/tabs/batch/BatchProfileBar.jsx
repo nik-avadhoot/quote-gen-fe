@@ -26,7 +26,7 @@ const profileSectionLabel={color:C.amber,fontWeight:700,fontSize:7.5,
   textTransform:"uppercase",letterSpacing:"0.12em",whiteSpace:"nowrap"};
 
 export default function BatchProfileBar({ pricingCard = null }){
-  const {batchAgeLabel,batchProfile,copyCostingToProfile,freight,importConstrFromSpec,locations,
+  const {batchAgeLabel,batchProfile,copyCostingToProfile,freight,locations,
     sectorCodes,sectors,setBatchProfile,showToast,startNewBatch}=useAppState();
 
   // ── U1 Slice D — Client is a GOVERNED SELECTION, not free text ───────────
@@ -337,32 +337,26 @@ export default function BatchProfileBar({ pricingCard = null }){
       {pricingCard&&<div className="batch-profile-pricing-card">{pricingCard}</div>}
 
       {/* ── 3. ACTIONS — Import + New Batch ── */}
-      <div style={{display:"flex",flexDirection:"column",gap:4,
-        justifyContent:"center",marginLeft:"auto",flexShrink:0}}>
-        <div style={{border:`1px solid ${C.border}`,borderRadius:6,
-          padding:"4px 7px",background:C.white}}>
-          <div style={{fontSize:7.5,color:C.slateL,fontWeight:700,textTransform:"uppercase",
-            letterSpacing:"0.06em",textAlign:"center",marginBottom:3}}>Import from Costing</div>
-          <div style={{display:"flex",gap:4}}>
-            <button onClick={copyCostingToProfile}
-              style={{flex:1,padding:"4px 0",borderRadius:4,border:"none",
-                background:"#2E6094",color:C.white,fontSize:10,fontWeight:600,cursor:"pointer"}}>
-              ↓ Profile
-            </button>
-            <button onClick={importConstrFromSpec}
-              style={{flex:1,padding:"4px 0",borderRadius:4,border:"none",
-                background:C.amber,color:C.white,fontSize:10,fontWeight:600,cursor:"pointer"}}>
-              + Constr
-            </button>
-          </div>
+      <SummaryRow title="Actions" facts={["Import profile","New batch"]} status="Ready"
+        verticalTitleWhenExpanded titleStyle={profileSectionLabel}
+        style={{minWidth:160,maxWidth:190,flex:"0 1 180px",alignSelf:"stretch",marginLeft:"auto"}}
+        contentStyle={{padding:0}}>
+        <div style={{height:"100%",padding:"4px 7px",boxSizing:"border-box",
+          display:"flex",gap:4,alignItems:"center"}}>
+          <button onClick={copyCostingToProfile}
+            title="Import the current Costing profile"
+            style={{flex:1,padding:"4px 0",borderRadius:4,border:"none",
+              background:"#2E6094",color:C.white,fontSize:10,fontWeight:600,cursor:"pointer"}}>
+            ↓ Import
+          </button>
+          <button onClick={startNewBatch}
+            title="Start a new Batch"
+            style={{flex:1,padding:"4px 0",borderRadius:4,border:"none",
+              background:C.amber,color:C.white,fontSize:10,fontWeight:600,cursor:"pointer"}}>
+            + New
+          </button>
         </div>
-        <button onClick={startNewBatch}
-          style={{padding:"5px 10px",borderRadius:5,border:`1px solid ${C.amber}`,
-          background:C.white,color:C.amber,fontSize:10,fontWeight:700,cursor:"pointer",
-          textAlign:"center"}}>
-          + New Batch
-        </button>
-      </div>
+      </SummaryRow>
 
     </div>
   );

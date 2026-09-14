@@ -143,10 +143,6 @@ code {
   flex: 0 1 240px;
 }
 
-.batch-profile-pricing-card .batch-pricing-header-card {
-  height: 100%;
-}
-
 .batch-profile-pricing-card .batch-pb-compact {
   padding: 7px;
 }
@@ -173,37 +169,6 @@ code {
 
 .batch-grid-delivery-header.is-missing-route .batch-grid-delivery-kicker,
 .batch-grid-delivery-header.is-unassigned .batch-grid-delivery-kicker { color: #9a5b22; }
-
-.batch-pricing-header-card {
-  display: flex;
-  box-sizing: border-box;
-  height: auto;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid #ead9c3;
-  border-radius: 7px;
-  background: #fbf8f3;
-  box-shadow: 0 1px 3px rgb(52 72 97 / 8%);
-}
-
-.batch-pricing-card-rail {
-  display: flex;
-  flex: 0 0 24px;
-  align-items: center;
-  justify-content: center;
-  border-right: 1px solid #ead9c3;
-  background: #fffaf2;
-  color: #d97825;
-  font: 800 9px/1 system-ui, 'Segoe UI', sans-serif;
-  letter-spacing: .11em;
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-}
-
-.batch-pricing-card-body {
-  flex: 1 1 auto;
-  min-width: 0;
-}
 
 .batch-pb-compact {
   box-sizing: border-box;
