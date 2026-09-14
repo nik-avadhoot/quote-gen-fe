@@ -14,7 +14,7 @@
 // Flap height = min(W/2, H) for RSC/HRSC. Die-cut represented as rounded rect.
 // KLD note: for die-cut SKUs, this is a reference approximation only.
 // Actual KLD from customer supersedes.
-function BoxDieline({L,W,H,boxType,dimType,ups,style={}}){
+function BoxDieline({L,W,H,boxType,dimType,ups,style={},fluid=false}){
   const l=parseFloat(L)||0,w=parseFloat(W)||0,h=parseFloat(H)||0;
   if(!l||!w||!h)return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",
@@ -55,6 +55,9 @@ function BoxDieline({L,W,H,boxType,dimType,ups,style={}}){
   const sc=Math.min(scaleX,scaleY,1.2); // cap upscale to 1.2×
   const svgW=Math.round(blankW*sc+2*PAD);
   const svgH=Math.round(blankH*sc+2*PAD);
+  const svgSize=(width,height)=>fluid
+    ?{viewBox:`0 0 ${width} ${height}`,width:"100%",height:"auto",preserveAspectRatio:"xMidYMid meet"}
+    :{width,height};
 
   const px=(mm)=>Math.round(mm*sc+PAD); // mm→px offset from origin
   const pw=(mm)=>Math.round(mm*sc);     // mm→px width/height
@@ -93,7 +96,7 @@ function BoxDieline({L,W,H,boxType,dimType,ups,style={}}){
   if(isBoard||isCustom){
     // Simple rectangle
     return(
-    <svg width={svgW} height={svgH} style={{display:"block",...style}}>
+    <svg {...svgSize(svgW,svgH)} style={{display:"block",...style}}>
       <rect x={x0} y={y0} width={pw(l)} height={pw(w)} fill={FILL} stroke={CUT} strokeWidth={strokeW}/>
       {isCustom&&<text x={x0+pw(l)/2} y={y0+pw(w)/2} textAnchor="middle" dominantBaseline="middle"
         fontSize={11} fill="#AAA">Custom KLD</text>}
@@ -105,7 +108,7 @@ function BoxDieline({L,W,H,boxType,dimType,ups,style={}}){
     // Approximation: outer cut (rounded rect) with fold lines for walls
     const cr=Math.min(pw(20),pw(w)*0.2);
     return(
-    <svg width={svgW} height={svgH} style={{display:"block",...style}}>
+    <svg {...svgSize(svgW,svgH)} style={{display:"block",...style}}>
       <rect x={x0} y={y0} width={pw(l)} height={pw(w)} rx={cr} ry={cr}
         fill={FILL} stroke={CUT} strokeWidth={strokeW}/>
       {/* Inner fold lines suggesting panel layout */}
@@ -171,8 +174,11 @@ function BoxDieline({L,W,H,boxType,dimType,ups,style={}}){
   // ── Legend ──
   const legX=x0, legY=dimY+10;
 
+  const renderedW=Math.max(svgW,totalW+2*PAD+20);
+  const renderedH=legY+18;
+
   return(
-    <svg width={Math.max(svgW,totalW+2*PAD+20)} height={legY+18} style={{display:"block",overflow:"visible",...style}}>
+    <svg {...svgSize(renderedW,renderedH)} style={{display:"block",overflow:"visible",...style}}>
       {panels}
       {/* Legend */}
       <line x1={legX} y1={legY+4} x2={legX+14} y2={legY+4} stroke={CUT} strokeWidth={1}/>

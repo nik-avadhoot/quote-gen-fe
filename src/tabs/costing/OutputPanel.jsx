@@ -60,7 +60,8 @@ const LayerDetail=({r,card})=>(
 );
 
 const DielineCard=({spec,card})=>(
-  <div style={{...card,padding:"8px 10px",marginBottom:0,background:"#FAFAFA",minWidth:0}}>
+  <div style={{...card,padding:"8px 10px",marginBottom:0,background:"#FAFAFA",minWidth:0,
+    display:"flex",flexDirection:"column"}}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:3}}>
       <span style={{fontSize:T.label,fontWeight:700,color:"#9A7B4A",textTransform:"uppercase",letterSpacing:"0.07em"}}>
         Die-Line Preview
@@ -72,16 +73,18 @@ const DielineCard=({spec,card})=>(
         }
       </span>
     </div>
-    <div style={{overflowX:"auto"}}>
+    <div style={{overflowX:"auto",display:"flex",alignItems:"center",flex:1,minHeight:0}}>
       <BoxDieline L={spec.L} W={spec.W} H={spec.H}
         boxType={spec.boxType||"RSC"} dimType={spec.dimType} ups={spec.ups}
-        style={{margin:"0 auto"}}/>
+        fluid style={{margin:"0 auto",width:"100%",height:"auto"}}/>
     </div>
   </div>
 );
 
 const sliderShell={height:92,display:"flex",alignItems:"center",justifyContent:"center"};
 const verticalSlider={width:92,transform:"rotate(-90deg)",accentColor:C.amber};
+const percentInput={width:54,padding:"4px 5px",border:`1px solid ${C.border}`,borderRadius:5,
+  background:C.white,color:C.amberD,fontFamily:mono,fontSize:T.value,fontWeight:700,textAlign:"right"};
 
 const MarginControl=({spec,s,r,card,marginSugg})=>(
   <div style={{...card,marginBottom:0,padding:"8px 7px",minWidth:0,textAlign:"center"}}>
@@ -89,18 +92,15 @@ const MarginControl=({spec,s,r,card,marginSugg})=>(
       letterSpacing:"0.06em"}}>Margin</div>
     <div style={{fontSize:T.value,fontWeight:700,color:C.slate,fontFamily:mono,marginTop:2}}>
       ₹{r.finalRate.toFixed(2)}</div>
-    <div style={{fontSize:T.heading,fontWeight:800,color:C.amber,fontFamily:mono,marginTop:3}}>
-      {spec.margin}%</div>
     <div style={sliderShell}>
       <input type="range" min={0} max={20} step={0.5} value={spec.margin}
         aria-label="Margin percentage" onChange={e=>s("margin",+e.target.value)} style={verticalSlider}/>
     </div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:3}}>
-      {[0,6,8,10,12,15].map(m=><button key={m} onClick={()=>s("margin",m)}
-        style={{padding:"3px 2px",borderRadius:5,fontSize:T.label,cursor:"pointer",minWidth:0,
-          border:`1px solid ${+spec.margin===m?C.amber:C.border}`,
-          background:+spec.margin===m?C.amberL:C.white,
-          color:+spec.margin===m?C.amberD:C.slateL,fontWeight:+spec.margin===m?700:400}}>{m}%</button>)}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,marginBottom:5}}>
+      <input type="number" min={0} max={20} step={0.5} value={spec.margin}
+        aria-label="Margin percentage value" onChange={e=>s("margin",Math.min(20,Math.max(0,+e.target.value)))}
+        style={percentInput}/>
+      <span style={{fontSize:T.value,fontWeight:700,color:C.amberD}}>%</span>
     </div>
     {marginSugg.suggested!==+spec.margin&&(spec.customerType!=="existing"||spec.volume||spec.priceContext!=="unknown")&&(
       <button onClick={()=>s("margin",marginSugg.suggested)} title={`Base 8%${marginSugg.adjustments.map(a=>" · "+a).join("")}${marginSugg.risk?" · "+marginSugg.risk:""}`}
@@ -124,18 +124,16 @@ const BsControl=({spec,s,card})=>{
     <div style={{...card,marginBottom:0,padding:"8px 7px",minWidth:0,textAlign:"center"}}>
       <div style={{fontSize:T.label,fontWeight:700,color:C.slateM,textTransform:"uppercase",
         letterSpacing:"0.05em",lineHeight:1.25}}>Fluting BS</div>
-      <div style={{fontSize:T.heading,fontWeight:800,color:C.amber,fontFamily:mono,marginTop:4}}>{current}%</div>
       <div style={sliderShell}>
         <input type="range" min={0} max={30} step={1} value={current}
           aria-label="Fluting BS contribution" onChange={e=>s("flutingBCF",+e.target.value/100)}
           style={verticalSlider}/>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:3}}>
-        {[0,10,20,30].map(pct=><button key={pct} onClick={()=>s("flutingBCF",pct/100)}
-          style={{padding:"3px 2px",borderRadius:5,fontSize:T.label,cursor:"pointer",minWidth:0,
-            border:`1px solid ${current===pct?C.amber:C.border}`,
-            background:current===pct?C.amberL:C.white,
-            color:current===pct?C.amberD:C.slateL,fontWeight:current===pct?700:400}}>{pct}%</button>)}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,marginBottom:5}}>
+        <input type="number" min={0} max={30} step={1} value={current}
+          aria-label="Fluting BS percentage value"
+          onChange={e=>s("flutingBCF",Math.min(30,Math.max(0,+e.target.value))/100)} style={percentInput}/>
+        <span style={{fontSize:T.value,fontWeight:700,color:C.amberD}}>%</span>
       </div>
       <details style={{fontSize:T.micro,color:C.slateL,marginTop:5,lineHeight:1.25,textAlign:"left"}}>
         <summary style={{cursor:"pointer",whiteSpace:"nowrap"}}>BS formula</summary>
@@ -301,9 +299,9 @@ export default function OutputPanel(){
         </div>}
 
         {r&&<>
-          {/* The control rail narrows the key-output block to roughly 75% of
-              the panel while keeping the box's primary outputs at the top. */}
-          <div style={{display:"grid",gridTemplateColumns:"minmax(112px,1fr) minmax(0,3fr)",gap:10,
+          {/* The one-sixth control rail keeps the box's primary outputs wide
+              and at the top without giving the slider disproportionate space. */}
+          <div style={{display:"grid",gridTemplateColumns:"minmax(96px,1fr) minmax(0,5fr)",gap:10,
             alignItems:"stretch",marginBottom:10}}>
             <MarginControl spec={spec} s={s} r={r} card={card} marginSugg={marginSugg}/>
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:7,minWidth:0}}>
@@ -324,7 +322,7 @@ export default function OutputPanel(){
           </div>
 
           {/* Physical identity and its resulting cost sit on the same line. */}
-          <div style={{display:"grid",gridTemplateColumns:"minmax(0,2fr) minmax(0,3fr)",gap:10,
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10,
             alignItems:"stretch",marginBottom:10}}>
             <DielineCard spec={spec} card={card}/>
             <CostBuildUp r={r} spec={spec} card={card} freightTag={freightTag}/>
@@ -332,7 +330,7 @@ export default function OutputPanel(){
 
           {/* BS is the layer calculation control, so it shares the row with
               the compact layer result rather than consuming a full-width row. */}
-          <div style={{display:"grid",gridTemplateColumns:"minmax(112px,1fr) minmax(0,3fr)",gap:10,
+          <div style={{display:"grid",gridTemplateColumns:"minmax(96px,1fr) minmax(0,5fr)",gap:10,
             alignItems:"stretch",marginBottom:10}}>
             <BsControl spec={spec} s={s} card={card}/>
             <LayerDetail r={r} card={card}/>
