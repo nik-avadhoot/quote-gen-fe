@@ -67,7 +67,7 @@ const inp=(ovr,w)=>({padding:"2px 4px",borderRadius:3,fontSize:10,width:w,minWid
 
 export default function BatchContextBar(){
   const { activeBatchRowId, applyContextCascade, contextValues, freight, locations,
-    profileDraft, sectorCodes, sectors, setContextField, setTab } = useAppState();
+    missing, profileDraft, r, sectorCodes, sectors, setContextField, setTab } = useAppState();
 
   // Editable ONLY while preparing a new batch. REVIEW is always read-only over
   // the live profile — contextValues already returns batchProfile there, and a
@@ -253,16 +253,23 @@ export default function BatchContextBar(){
         </div>
       </SummaryRow>
 
-      {/* ── 4. ACTIONS — read-only mode only; the bar's single tab stop ── */}
-      {!editable&&<div style={{display:"flex",alignItems:"center",marginLeft:"auto",flexShrink:0}}>
-        <button onClick={()=>setTab("batch")}
-          title="Open Batch Entry to change the Batch Profile"
-          style={{padding:"5px 10px",borderRadius:5,border:`1px solid ${C.amber}`,
-            background:C.white,color:C.amber,fontSize:10,fontWeight:700,cursor:"pointer",
-            whiteSpace:"nowrap"}}>
-          Edit Batch Profile
-        </button>
-      </div>}
+      {/* ── 4. STATUS + ACTIONS — readiness is display-only; editing stays gated ── */}
+      {(missing.blockers.length===0&&r||!editable)&&
+        <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:"auto",flexShrink:0}}>
+          {missing.blockers.length===0&&r&&
+            <span style={{padding:"4px 8px",borderRadius:999,
+              border:`1px solid ${C.green}55`,background:C.greenL,color:C.green,
+              fontSize:T.label,fontWeight:700,whiteSpace:"nowrap"}}>
+              ✅ Ready to quote{missing.warnings.length>0?` (${missing.warnings.length} warning${missing.warnings.length>1?"s":""} noted)`:""}
+            </span>}
+          {!editable&&<button onClick={()=>setTab("batch")}
+            title="Open Batch Entry to change the Batch Profile"
+            style={{padding:"5px 10px",borderRadius:5,border:`1px solid ${C.amber}`,
+              background:C.white,color:C.amber,fontSize:10,fontWeight:700,cursor:"pointer",
+              whiteSpace:"nowrap"}}>
+            Edit Batch Profile
+          </button>}
+        </div>}
     </div>
   );
 }

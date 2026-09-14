@@ -305,8 +305,6 @@ export default function OutputPanel(){
             </div>
           </div>);
         })()}
-        {missing.blockers.length===0&&r&&<div style={{marginBottom:8,fontSize:11,color:C.green,fontWeight:600}}>
-          ✅ Ready to quote{missing.warnings.length>0?` (${missing.warnings.length} warning${missing.warnings.length>1?"s":""} noted)`:""}</div>}
         {!r&&<div style={{padding:hasInputProgress?"5px 0":"16px 0"}}>
           <div style={{fontSize:T.value,fontWeight:600,color:C.slateM,
             marginBottom:hasInputProgress?6:12,textAlign:hasInputProgress?"left":"center"}}>
