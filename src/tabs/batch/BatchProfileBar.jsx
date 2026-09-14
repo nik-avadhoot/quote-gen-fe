@@ -16,9 +16,10 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { PLANTS } from "../../data/defaults.js";
 import { normalizeFreightOverrideInput, resolveField, resolveInterest } from "../../engine/resolveAuthority.js";
-import { C } from "../../theme.js";
+import { C, T } from "../../theme.js";
 import { useAppState } from "../../state/AppStateContext.js";
 import { useFeatureFlag } from "../../lib/featureFlags.js";
+import { SummaryRow } from "../../ui/dataDisplay.jsx";
 import BatchClientField from "./BatchClientField.jsx";
 
 export default function BatchProfileBar({ pricingCard = null }){
@@ -221,11 +222,12 @@ export default function BatchProfileBar({ pricingCard = null }){
           paymentTermsDays:batchProfile.paymentDisc,
           interestOverridePct:batchProfile.interest}});
         const _intOvr=_int.source==="pricing_group";
-        const hdr={fontSize:8,lineHeight:1,fontWeight:700,color:C.slateL,
+        const hdr={fontSize:T.micro,lineHeight:1,fontWeight:700,color:C.slateL,
           textAlign:"center",textTransform:"uppercase",letterSpacing:"0.04em"};
-        const lbl={fontSize:9,fontWeight:700,color:C.slateL,whiteSpace:"nowrap"};
-        const termHdr={fontSize:6.25,lineHeight:1,fontWeight:700,color:C.slateL,
+        const lbl={fontSize:T.label,fontWeight:700,color:C.slateL,whiteSpace:"nowrap"};
+        const termHdr={fontSize:T.micro,lineHeight:1,fontWeight:700,color:C.slateL,
           textAlign:"center",whiteSpace:"nowrap"};
+        const _termOverrideCount=Number(_isFrOvr)+Number(_intOvr);
         return(
         <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,
           padding:"4px 8px 4px 4px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
@@ -265,57 +267,61 @@ export default function BatchProfileBar({ pricingCard = null }){
             {/* Independently bordered third row. It starts at column 2 so each
                 field aligns with a value column while its own label—not the
                 Conv/Wst/Mgn header—states its commercial meaning. */}
-            <div style={{gridColumn:"2 / -1",display:"grid",
-              gridTemplateColumns:"52px 52px 52px",columnGap:5,alignItems:"end",
-              alignSelf:"stretch",alignContent:"end",
-              border:`1px solid ${C.border}`,borderRadius:4,padding:"2px 0 1px",marginTop:0}}>
-              <label style={{display:"grid",gap:3,minWidth:0}}>
-                <span style={termHdr}>Freight Rs/kg</span>
-                <input type="number" step="0.25" min="0" value={_displayFr}
-                  aria-label="Freight Rs/kg"
-                  onChange={e=>setBatchProfile(p=>({...p,
-                    freightOverride:normalizeFreightOverrideInput(e.target.value)}))}
-                  style={{boxSizing:"border-box",width:"100%",height:17,minWidth:0,padding:"0 2px",
-                    borderRadius:3,textAlign:"center",border:`1px solid ${_isFrOvr?C.amber:C.border}`,
-                    background:_isFrOvr?"#FFF8ED":C.white,fontSize:9,color:C.slate}}
-                  title={`Freight Rs/kg — ${_mxAvail?`matrix: ${_mxRaw}`:"matrix rate unavailable"}`
-                    +`${_isFrOvr?" | OVERRIDDEN":""}`}/>
-              </label>
+            <SummaryRow title="Terms"
+              facts={[`Fr ${_displayFr===''?"—":_displayFr}`,`PT ≤${batchProfile.paymentDisc||"30"}d`,`Int ${_int.value}%`]}
+              status={_termOverrideCount?`${_termOverrideCount} override${_termOverrideCount===1?"":"s"}`:"Inherited"}
+              statusTone={_termOverrideCount?"warning":"neutral"}
+              style={{gridColumn:"1 / -1",alignSelf:"end",marginTop:2}}
+              contentStyle={{padding:5}}>
+              <div style={{display:"grid",gridTemplateColumns:"52px 52px 52px",columnGap:5,alignItems:"end"}}>
+                <label style={{display:"grid",gap:3,minWidth:0}}>
+                  <span style={termHdr}>Freight Rs/kg</span>
+                  <input type="number" step="0.25" min="0" value={_displayFr}
+                    aria-label="Freight Rs/kg"
+                    onChange={e=>setBatchProfile(p=>({...p,
+                      freightOverride:normalizeFreightOverrideInput(e.target.value)}))}
+                    style={{boxSizing:"border-box",width:"100%",height:17,minWidth:0,padding:"0 2px",
+                      borderRadius:3,textAlign:"center",border:`1px solid ${_isFrOvr?C.amber:C.border}`,
+                      background:_isFrOvr?"#FFF8ED":C.white,fontSize:T.label,color:C.slate}}
+                    title={`Freight Rs/kg — ${_mxAvail?`matrix: ${_mxRaw}`:"matrix rate unavailable"}`
+                      +`${_isFrOvr?" | OVERRIDDEN":""}`}/>
+                </label>
 
-              <label style={{display:"grid",gap:3,minWidth:0}}>
-                <span style={termHdr} title="Payment Terms derives customer interest">PT</span>
-                {/* Payment Terms is the input; interest remains a resolved output. */}
-                <select value={batchProfile.paymentDisc||"30"}
-                  aria-label="Payment terms"
-                  onChange={e=>setBatchProfile(p=>({...p,paymentDisc:e.target.value}))}
-                  style={{boxSizing:"border-box",width:"100%",height:17,minWidth:0,padding:"0 2px",
-                    borderRadius:3,border:`1px solid ${C.border}`,fontSize:8.5,
-                    background:C.white,color:C.slate,cursor:"pointer"}}
-                  title={_intOvr
-                    ? `Customer interest ${_int.value}% — OVERRIDE stored on this Batch. `
-                      + `Clear it to derive from ${_int.annualInterestPct}% p.a. / ${_int.dayCountBasis}`
-                    : `Customer interest ${_int.value}% — derived from the approved `
-                      + `${_int.annualInterestPct}% p.a. on a ${_int.dayCountBasis}-day year`}>
-                  <option value="30">≤30d</option>
-                  <option value="45">≤45d</option>
-                  <option value="60">≤60d</option>
-                  <option value="90">≤90d</option>
-                </select>
-              </label>
+                <label style={{display:"grid",gap:3,minWidth:0}}>
+                  <span style={termHdr} title="Payment Terms derives customer interest">PT</span>
+                  {/* Payment Terms is the input; interest remains a resolved output. */}
+                  <select value={batchProfile.paymentDisc||"30"}
+                    aria-label="Payment terms"
+                    onChange={e=>setBatchProfile(p=>({...p,paymentDisc:e.target.value}))}
+                    style={{boxSizing:"border-box",width:"100%",height:17,minWidth:0,padding:"0 2px",
+                      borderRadius:3,border:`1px solid ${C.border}`,fontSize:T.micro,
+                      background:C.white,color:C.slate,cursor:"pointer"}}
+                    title={_intOvr
+                      ? `Customer interest ${_int.value}% — OVERRIDE stored on this Batch. `
+                        + `Clear it to derive from ${_int.annualInterestPct}% p.a. / ${_int.dayCountBasis}`
+                      : `Customer interest ${_int.value}% — derived from the approved `
+                        + `${_int.annualInterestPct}% p.a. on a ${_int.dayCountBasis}-day year`}>
+                    <option value="30">≤30d</option>
+                    <option value="45">≤45d</option>
+                    <option value="60">≤60d</option>
+                    <option value="90">≤90d</option>
+                  </select>
+                </label>
 
-              <div style={{display:"grid",gap:3,minWidth:0}}>
-                <span style={termHdr}>Interest</span>
-                <output aria-label="Customer interest"
-                  title={_intOvr?"Customer interest override stored on this Batch":"Customer interest derived from governed annual-interest policy"}
-                  style={{boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"center",
-                    height:17,minWidth:0,padding:"0 2px",borderRadius:3,
-                    border:`1px solid ${_intOvr?C.amber:C.border}`,textAlign:"center",
-                    background:_intOvr?"#FFF8ED":C.white,fontSize:7.5,fontWeight:700,
-                    color:_intOvr?C.amberD:C.slateL,whiteSpace:"nowrap",overflow:"hidden"}}>
-                  {_int.value}% · {_intOvr?"ovr":"der."}
-                </output>
+                <div style={{display:"grid",gap:3,minWidth:0}}>
+                  <span style={termHdr}>Interest</span>
+                  <output aria-label="Customer interest"
+                    title={_intOvr?"Customer interest override stored on this Batch":"Customer interest derived from governed annual-interest policy"}
+                    style={{boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"center",
+                      height:17,minWidth:0,padding:"0 2px",borderRadius:3,
+                      border:`1px solid ${_intOvr?C.amber:C.border}`,textAlign:"center",
+                      background:_intOvr?"#FFF8ED":C.white,fontSize:T.micro,fontWeight:700,
+                      color:_intOvr?C.amberD:C.slateL,whiteSpace:"nowrap",overflow:"hidden"}}>
+                    {_int.value}% · {_intOvr?"ovr":"der."}
+                  </output>
+                </div>
               </div>
-            </div>
+            </SummaryRow>
           </div>
         </div>);
       })()}

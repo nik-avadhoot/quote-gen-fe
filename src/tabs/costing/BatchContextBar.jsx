@@ -30,7 +30,8 @@
 import { PLANTS } from "../../data/defaults.js";
 import { resolveField, resolveInterest } from "../../engine/resolveAuthority.js";
 import { useAppState } from "../../state/AppStateContext.js";
-import { C } from "../../theme.js";
+import { C, T } from "../../theme.js";
+import { SummaryRow } from "../../ui/dataDisplay.jsx";
 
 // S7(c) SITE 5. PAY_INTEREST is gone: it was the second copy of the withdrawn
 // map, and the `|| 1.5` beside it was the forbidden fallback CDM-18 names
@@ -97,6 +98,10 @@ export default function BatchContextBar(){
   const matrixFr=freight?.[v.plant]?.[v.delivery]??0;
   const frOvr=v.freightOverride!==''&&v.freightOverride!==undefined&&v.freightOverride!==null;
   const frShown=frOvr?v.freightOverride:matrixFr;
+  const interestResolution=resolveInterest({pricingGroup:{
+    paymentTermsDays:v.paymentDisc, interestOverridePct:v.interest}});
+  const interestOvr=interestResolution.source==="pricing_group";
+  const termsOverrideCount=Number(frOvr)+Number(interestOvr);
 
   // ── writers (new-batch only) ────────────────────────────────────────────
   // Each is ONE action: the batch value moves, and the SKU value follows only
@@ -181,8 +186,12 @@ export default function BatchContextBar(){
       </div>
 
       {/* ── 3. TERMS — Freight + Payment·Interest ── */}
-      <div style={card}>
-        <div style={vertWrap}><span style={vert}>Terms</span></div>
+      <SummaryRow title="Terms"
+        facts={[`Fr ${frShown===''||frShown==null?"—":frShown}`,`PT ≤${v.paymentDisc||"30"}d`,`Int ${interestResolution.value}%`]}
+        status={termsOverrideCount?`${termsOverrideCount} override${termsOverrideCount===1?"":"s"}`:"Inherited"}
+        statusTone={termsOverrideCount?"warning":"neutral"}
+        style={{minWidth:220,flexShrink:0,alignSelf:"stretch"}}
+        contentStyle={{padding:5}}>
         <div style={{display:"grid",gridTemplateColumns:"auto 1fr",
           columnGap:8,rowGap:4,alignItems:"center"}}>
           <span style={rowLbl}>Freight</span>
@@ -197,31 +206,28 @@ export default function BatchContextBar(){
               :<span style={{...chip(frOvr),minWidth:34}} title={`Matrix: ${matrixFr}`}>
                  {frShown===''||frShown==null?"—":frShown}</span>}
             {/* the unit is written ONCE, as Batch Entry writes it */}
-            <span style={{fontSize:8,color:C.slateL}}>Rs/kg</span>
+            <span style={{fontSize:T.micro,color:C.slateL}}>Rs/kg</span>
           </div>
           <span style={rowLbl} title="Payment Terms is the input; customer interest is derived">PT · Int</span>
           {(()=>{
-            const r=resolveInterest({pricingGroup:{
-              paymentTermsDays:v.paymentDisc, interestOverridePct:v.interest}});
-            const ovr=r.source==="pricing_group";
-            const note=ovr
-              ? `Customer interest ${r.value}% — OVERRIDE stored on this Batch`
-              : `Customer interest ${r.value}% — derived from ${r.annualInterestPct}% p.a. `
-                + `on a ${r.dayCountBasis}-day year`;
+            const note=interestOvr
+              ? `Customer interest ${interestResolution.value}% — OVERRIDE stored on this Batch`
+              : `Customer interest ${interestResolution.value}% — derived from ${interestResolution.annualInterestPct}% p.a. `
+                + `on a ${interestResolution.dayCountBasis}-day year`;
             return editable
               ?<div style={{display:"flex",alignItems:"center",gap:4,minWidth:0}}>
                  <select value={v.paymentDisc||"30"} onChange={e=>pickPayment(e.target.value)}
                    title={note} style={{...inp(false,"100%"),cursor:"pointer"}}>
                    {PAY_OPTS.map(o=><option key={o[0]} value={o[0]}>{o[1]}</option>)}
                  </select>
-                 <span style={{fontSize:9,fontWeight:700,whiteSpace:"nowrap",
-                   color:ovr?C.amberD:C.slateL}}>{r.value}%</span>
+                 <span style={{fontSize:T.label,fontWeight:700,whiteSpace:"nowrap",
+                   color:interestOvr?C.amberD:C.slateL}}>{interestResolution.value}%</span>
                </div>
               :<span style={chip(false)} title={note}>
-                 {v.paymentDisc?`≤${v.paymentDisc}d`:"—"} · {r.value}%{ovr?" ovr":""}</span>;
+                 {v.paymentDisc?`≤${v.paymentDisc}d`:"—"} · {interestResolution.value}%{interestOvr?" ovr":""}</span>;
           })()}
         </div>
-      </div>
+      </SummaryRow>
 
       {/* ── 4. ACTIONS — read-only mode only; the bar's single tab stop ── */}
       {!editable&&<div style={{display:"flex",alignItems:"center",marginLeft:"auto",flexShrink:0}}>

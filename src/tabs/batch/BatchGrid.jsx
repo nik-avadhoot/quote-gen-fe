@@ -26,11 +26,12 @@ import { isPPType, sameSetCode } from "../../engine/rowType.js";
 import { findDivergence, isDiverged } from "../../lib/overrideDivergence.js";
 import { isUsableConstruction } from "../../lib/constructionIdentity.js";
 import { Btn } from "../../ui/primitives.jsx";
+import { compactGridRowSt } from "../../ui/styles.js";
 import { STATUS_DISPLAY, constrAutoName } from "../../lib/constructionName.js";
 import { canPinAddOn, MAX_PINNED_ADD_ONS } from "../../lib/pinnedAddOns.js";
 import { batchDeliveryGridEntries, deliverySectionItemCount } from "../../lib/batchDeliverySections.js";
 import { durableRowToLocalPreview } from "../../lib/batchRowModel.js";
-import { C, mono, sans } from "../../theme.js";
+import { C, T, mono, sans } from "../../theme.js";
 import { useAppState } from "../../state/AppStateContext.js";
 
 const BASE_GRID_COLUMN_COUNT=35;
@@ -63,7 +64,7 @@ function DeliverySectionHeader({ section, colSpan, onManage, onWorkspace }) {
   </tr>;
 }
 
-export default function BatchGrid(){
+export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
   const {activeBatchRowId,addBatchRow,autoCalcPPDims,autoCodeEnabled,autoCodeSeq,
     batchProfile,batchResults,batchRows,calculateAll,constructionLib,durableBatch,expandedRows,freight,
     generateCode,generateMissingCodes,getBatchRowStatus,invalidateAllBatchResults,
@@ -164,34 +165,54 @@ export default function BatchGrid(){
         {/* ↓↓↓ old LEFT panel content REMOVED ↓↓↓ */}
         {/* Grid toolbar */}
         <div style={{padding:"8px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",gap:8,
-          alignItems:"center",flexWrap:"wrap",background:C.cream,flexShrink:0}}>
+          alignItems:"center",flexWrap:"nowrap",background:C.cream,flexShrink:0}}>
           <Btn ch="⚡ Calculate All" v="primary" sm onClick={calculateAll}
-            disabled={batchRows.length===0||constructionLib.length===0}/>
+            disabled={batchRows.length===0||constructionLib.length===0}
+            style={{whiteSpace:"nowrap",flexShrink:0}}/>
           <Btn ch="→ Send All to Quote Items" v="success" sm onClick={sendAllToQuoteItems}
-            disabled={Object.keys(batchResults).length===0}/>
+            disabled={Object.keys(batchResults).length===0}
+            style={{whiteSpace:"nowrap",flexShrink:0}}/>
+          <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+            <button type="button" aria-pressed={focusMode} onClick={onToggleFocusMode}
+              style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${focusMode?C.green:C.border}`,
+                background:focusMode?C.greenL:C.white,color:focusMode?C.green:C.slateM,
+                fontSize:T.label,cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>
+              {focusMode?"Exit focus":"Focus mode"}
+            </button>
+            <details style={{position:"relative",flexShrink:0}}>
+              <summary style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.border}`,
+                background:C.white,color:C.slateM,fontSize:T.label,cursor:"pointer",fontWeight:700,
+                whiteSpace:"nowrap",listStyle:"none"}}>Code tools ▾</summary>
+              <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",zIndex:20,
+                width:230,padding:9,border:`1px solid ${C.border}`,borderRadius:7,
+                background:C.white,boxShadow:"0 8px 22px rgba(28,43,58,.18)",
+                display:"grid",gap:7}}>
+                <label style={{display:"flex",alignItems:"center",gap:5,fontSize:T.body,color:C.slateM,cursor:"pointer"}}>
+                  <input type="checkbox" checked={autoCodeEnabled} onChange={e=>setAutoCodeEnabled(e.target.checked)}
+                    style={{accentColor:C.amber}}/>
+                  Auto-code new rows
+                </label>
+                {autoCodeEnabled&&<button onClick={generateMissingCodes}
+                  style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.amber}`,
+                    background:C.amberL,color:C.amberD,fontSize:T.body,cursor:"pointer",fontWeight:600}}>
+                  ↯ Generate Missing Codes</button>}
+                <span style={{fontSize:T.label,color:C.slateL}}>Next format: {generateCode(autoCodeSeq)}</span>
+              </div>
+            </details>
+          </div>
           <button onClick={()=>{setBatchConstrOverlay(true);setBatchConstrTargetRowId(null);setBatchConstrOverlayQuery('');setBatchConstrOverlayFilter({sector:'',client:'',});}}
             style={{padding:"3px 10px",borderRadius:5,border:`1px solid ${C.amber}`,
-              background:C.amberL,color:C.amberD,fontSize:11,cursor:"pointer",fontWeight:700}}>
+              background:C.amberL,color:C.amberD,fontSize:11,cursor:"pointer",fontWeight:700,
+              whiteSpace:"nowrap",flexShrink:0}}>
             📚 Construction Library ({constructionLib.filter(c=>(c.status||'active')==='active').length} active)
           </button>
-          <div style={{borderLeft:`1px solid ${C.border}`,paddingLeft:8,display:"flex",gap:6}}>
+          <div style={{borderLeft:`1px solid ${C.border}`,paddingLeft:8,display:"flex",gap:6,flexShrink:0}}>
             {["Box","Plate","Part-L","Part-W"].map(t=>(
               <button key={t} onClick={()=>addBatchRow(t)}
                 style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${C.border}`,
-                  background:C.white,color:C.slateM,fontSize:11,cursor:"pointer",fontWeight:600}}>
-                + {t}</button>))}
-          </div>
-          <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
-            <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:C.slateM,cursor:"pointer"}}>
-              <input type="checkbox" checked={autoCodeEnabled} onChange={e=>setAutoCodeEnabled(e.target.checked)}
-                style={{accentColor:C.amber}}/>
-              Auto-code
-            </label>
-            {autoCodeEnabled&&<button onClick={generateMissingCodes}
-              style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${C.amber}`,
-                background:C.amberL,color:C.amberD,fontSize:11,cursor:"pointer",fontWeight:600}}>
-              ↯ Generate Missing Codes</button>}
-            <span style={{fontSize:10,color:C.slateL}}>Format: {generateCode(autoCodeSeq)}</span>
+                  background:C.white,color:C.slateM,fontSize:11,cursor:"pointer",fontWeight:600,
+                  whiteSpace:"nowrap",flexShrink:0}}>
+                 + {t}</button>))}
           </div>
         </div>
 
@@ -298,12 +319,48 @@ export default function BatchGrid(){
                         borderRadius:3,fontSize:10,textAlign:type==="number"?"center":"left",
                         fontFamily:type==="number"?mono:sans}}/>
                   );
+                  const isAssumed=!!row.setCodeAssumed;
+                  const isNonBox=row.itemType!=="Box";
+                  // D-26: THE RESOLUTION, LIFTED OUT OF THE CONTROL. One plain
+                  // per-row function serves both the expanded-row Confirm action
+                  // and SET Code blur. It is deliberately not a hook.
+                  const applyGlassSKUNos=()=>{
+                    // Glass SKU auto-fill for ALCOBEV Part-L / Part-W rows
+                    if(batchProfile.sector==="ALCOBEV"&&(row.itemType==="Part-L"||row.itemType==="Part-W")){
+                      const confirmedSetCode=(row.setCode||"").trim();
+                      const parentBox=batchRows.find(r=>
+                        r.itemType==="Box"&&!r.setCodeAssumed&&sameSetCode(r.setCode,confirmedSetCode)); // D-7
+                      // D-1: parent wins, this row is the fallback. Parts can be
+                      // sent from Costing before the Box exists, and an assumed
+                      // parent remains excluded from the resolution predicate.
+                      const effGlassSKU=parentBox?.glassSKUType||row.glassSKUType||"";
+                      if(effGlassSKU){
+                        const pm=partitionsMaster.find(x=>x.skuType===effGlassSKU);
+                        if(pm){
+                          const nos=row.itemType==="Part-L"?pm.lwise:pm.wwise;
+                          updC("nosPerSet",nos);
+                          showToast(`🍶 Nos/Set auto-filled: ${nos} (${effGlassSKU})`,'success',3000);
+                        }
+                      }else if(parentBox&&!parentBox.glassSKUType){
+                        showToast("⚠️ Glass SKU Type not yet set on the parent Box — set it first to auto-fill Nos/Set",'info',5000);
+                      }
+                    }
+                  };
+                  const handleConfirm=()=>{
+                    upd("setCodeAssumed",false);
+                    applyGlassSKUNos();
+                  };
+                  const handleClear=()=>{
+                    upd("setCode","");
+                    upd("setCodeAssumed",false);
+                    invalidateAllBatchResults();
+                  };
                   const dimRow=autoCalcPPDims(row);
                   const comp=res&&buildSpecFromRow(dimRow,constructionLib.find(c=>c.code===row.constructionCode),batchProfile)
                     ?checkSpecCompliance(buildSpecFromRow(dimRow,constructionLib.find(c=>c.code===row.constructionCode),batchProfile),res):[];
                   return(<Fragment key={`${section.key}:row:${row.id}`}>
                     {sectionHeader}
-                    <tr style={{background:isActive?"#EEF4FB":ri%2?C.cream:C.white,
+                    <tr style={{...compactGridRowSt,background:isActive?"#EEF4FB":ri%2?C.cream:C.white,
                       borderBottom:`1px solid ${C.border}44`}}>
                       {/* ── FROZEN COL 1: Status (left:0, w:28) — click to expand/collapse sub-row ── */}
                       <td onClick={()=>toggleRowExpand(row.id)}
@@ -387,134 +444,53 @@ export default function BatchGrid(){
                       </td>
                       {/* SET Code — with "Part of a SET" switch + assumed indicator + confirm/clear for non-Box rows */}
                       <td style={{padding:"3px 4px",minWidth:86}}>
-                        {(()=>{
-                          const isAssumed=!!row.setCodeAssumed;
-                          const isNonBox=row.itemType!=="Box";
-                          // D-26: THE RESOLUTION, LIFTED OUT OF THE CONTROL.
-                          // This used to live inside handleConfirm only — and handleConfirm renders
-                          // only while setCodeAssumed is true. Typing in the SET Code field clears
-                          // that flag below, which removes the confirm control from the DOM, so a
-                          // Maker who TYPED a code got auto-dims (they run on render, via
-                          // autoCalcPPDims) and SILENTLY NO Nos/Set. Two behaviours resolving the
-                          // same parent, one of them reachable only through a control that typing
-                          // destroys.
-                          //
-                          // One resolution, two entry points: the confirm button, and blur of the
-                          // SET Code input.
-                          const applyGlassSKUNos=()=>{
-                            // Glass SKU auto-fill for ALCOBEV Part-L / Part-W rows
-                            if(batchProfile.sector==="ALCOBEV"&&(row.itemType==="Part-L"||row.itemType==="Part-W")){
-                              const confirmedSetCode=(row.setCode||"").trim();
-                              const parentBox=batchRows.find(r=>
-                                r.itemType==="Box"&&!r.setCodeAssumed&&sameSetCode(r.setCode,confirmedSetCode)); // D-7
-                              // D-1: parent wins, this row is the fallback. Parts can be sent from
-                              // Costing before the Box exists, and a Box with setCodeAssumed===true is
-                              // excluded by the predicate above — so the parent is often simply absent.
-                              // Precedence rule, not a second source of truth: the Part carries the SET's
-                              // value forward until the head exists.
-                              const effGlassSKU=parentBox?.glassSKUType||row.glassSKUType||"";
-                              if(effGlassSKU){
-                                const pm=partitionsMaster.find(x=>x.skuType===effGlassSKU);
-                                if(pm){
-                                  const nos=row.itemType==="Part-L"?pm.lwise:pm.wwise;
-                                  updC("nosPerSet",nos); // row-scoped: nosPerSet changes this row's SET rate
-                                  showToast(`🍶 Nos/Set auto-filled: ${nos} (${effGlassSKU})`,'success',3000);
-                                }
-                              } else if(parentBox&&!parentBox.glassSKUType){
-                                showToast(`⚠️ Glass SKU Type not yet set on the parent Box — set it first to auto-fill Nos/Set`,'info',5000);
+                        <div style={{position:"relative",display:"inline-block"}}>
+                          <input type="checkbox" checked={!!row.setAutoFill}
+                            onChange={e=>{
+                              const on=e.target.checked;
+                              upd("setAutoFill",on);
+                              if(!on){
+                                upd("setCode","");
+                                upd("setCodeAssumed",false);
+                                invalidateAllBatchResults();
+                              }else if((row.itemType||"Box")==="Box"){
+                                upd("setCode",row.matCode||"");
+                                invalidateAllBatchResults();
+                              }else{
+                                const ri2=batchRows.findIndex(r=>r.id===row.id);
+                                const parentBox=[...batchRows.slice(0,ri2)].reverse().find(r=>r.itemType==="Box"&&r.matCode&&!r.setCodeAssumed);
+                                if(parentBox){upd("setCode",parentBox.setCode||parentBox.matCode||"");upd("setCodeAssumed",true);invalidateAllBatchResults();}
                               }
-                            }
-                          };
-                          // Confirm handler: clears assumed flag, triggers auto-dims + Glass SKU fill
-                          const handleConfirm=()=>{
-                            upd("setCodeAssumed",false);
-                            applyGlassSKUNos();
-                          };
-                          // Clear handler: blank SET Code, mark as standalone, disable SET Role
-                          const handleClear=()=>{
-                            upd("setCode","");
-                            upd("setCodeAssumed",false);
-                            invalidateAllBatchResults(); // cross-row: Part rows use this Box's setCode for auto-dim lookup
-                          };
-                          return(
-                          <div style={{display:"flex",flexDirection:"column",gap:1}}>
-                            <div style={{position:"relative",display:"inline-block"}}>
-                              <input type="checkbox" checked={!!row.setAutoFill}
-                                onChange={e=>{
-                                  const on=e.target.checked;
-                                  upd("setAutoFill",on);
-                                  if(!on){
-                                    upd("setCode","");
-                                    upd("setCodeAssumed",false);
-                                    invalidateAllBatchResults();
-                                  } else {
-                                    // Restore default: Box→own matCode; PP→nearest preceding confirmed Box setCode
-                                    if((row.itemType||"Box")==="Box"){
-                                      upd("setCode",row.matCode||"");
-                                      invalidateAllBatchResults();
-                                    } else {
-                                      const ri2=batchRows.findIndex(r=>r.id===row.id);
-                                      const parentBox=[...batchRows.slice(0,ri2)].reverse().find(r=>r.itemType==="Box"&&r.matCode&&!r.setCodeAssumed);
-                                      if(parentBox){upd("setCode",parentBox.setCode||parentBox.matCode||"");upd("setCodeAssumed",true);invalidateAllBatchResults();}
-                                    }
-                                  }
-                                }}
-                                style={{position:"absolute",left:3,top:"50%",transform:"translateY(-50%)",
-                                  accentColor:"#9A7B4A",cursor:"pointer",width:10,height:10,zIndex:1}}/>
-                              <input value={row.setCode||""} placeholder="SET code"
-                                // D-26: resolve on BLUR, not onChange — onChange fires per keystroke
-                                // and would resolve against half-typed codes.
-                                //
-                                // ⚠️ ONLY when the code actually CHANGED during this focus. Without
-                                // that guard, tabbing through the field re-runs the resolution and
-                                // overwrites a Nos/Set the Maker set deliberately — materialising
-                                // over an explicit value, the same hazard as D-9 and D-16.
-                                onFocus={e=>{_setCodeAtFocus.current=e.target.value;}}
-                                onBlur={e=>{if(e.target.value!==_setCodeAtFocus.current)applyGlassSKUNos();}}
-                                onChange={e=>{
-                                  // setCode is cross-row: autoCalcPPDims finds a Part row's parent Box by matching
-                                  // r.setCode across all batch rows. Changing any setCode can alter another row's
-                                  // auto-derived dims — invalidateBatchRow(row.id) is insufficient.
-                                  upd("setCode",e.target.value);
-                                  invalidateAllBatchResults();
-                                  if(isAssumed)upd("setCodeAssumed",false);
-                                }}
-                                style={{width:76,padding:"2px 4px 2px 18px",
-                                  border:`1px solid ${isAssumed?"#E8830A":C.border}`,
-                                  borderRadius:3,fontSize:10,fontFamily:mono,
-                                  background:isAssumed?"#FFF8ED":C.white}}/>
-                            </div>
-                            {isAssumed&&isNonBox&&(
-                              <div style={{display:"flex",gap:2,alignItems:"center"}}>
-                                <span style={{fontSize:7,color:"#E8830A",fontWeight:700,letterSpacing:"0.03em"}}>⚠ assumed</span>
-                                <button onClick={handleConfirm}
-                                  title="Confirm this SET Code is correct"
-                                  style={{fontSize:8,color:C.green,background:"none",border:`1px solid ${C.green}`,
-                                    borderRadius:2,cursor:"pointer",padding:"0 3px",lineHeight:1.4,fontWeight:700}}>✓</button>
-                                <button onClick={handleClear}
-                                  title="Clear SET Code — this item is standalone, not part of a SET"
-                                  style={{fontSize:8,color:C.red,background:"none",border:`1px solid ${C.red}33`,
-                                    borderRadius:2,cursor:"pointer",padding:"0 3px",lineHeight:1.4}}>✕</button>
-                              </div>)}
-                          </div>);
-                        })()}
+                            }}
+                            style={{position:"absolute",left:3,top:"50%",transform:"translateY(-50%)",
+                              accentColor:"#9A7B4A",cursor:"pointer",width:10,height:10,zIndex:1}}/>
+                          <input value={row.setCode||""} placeholder="SET code"
+                            // D-26: resolve on BLUR, not onChange — onChange fires per keystroke
+                            // and would resolve against half-typed codes.
+                            // ⚠️ ONLY when the code actually CHANGED during this focus.
+                            onFocus={e=>{_setCodeAtFocus.current=e.target.value;}}
+                            onBlur={e=>{if(e.target.value!==_setCodeAtFocus.current)applyGlassSKUNos();}}
+                            onChange={e=>{
+                              // SET Code is cross-row; changing it can alter another
+                              // row's auto-derived dimensions, so invalidate all.
+                              upd("setCode",e.target.value);
+                              invalidateAllBatchResults();
+                              if(isAssumed)upd("setCodeAssumed",false);
+                            }}
+                            style={{width:76,padding:"2px 14px 2px 18px",
+                              border:`1px solid ${isAssumed?"#E8830A":C.border}`,
+                              borderRadius:3,fontSize:10,fontFamily:mono,
+                              background:isAssumed?"#FFF8ED":C.white}}/>
+                          {isAssumed&&isNonBox&&<span aria-label="SET Code is assumed; expand this row to confirm or clear it"
+                            title="Assumed SET Code — expand this row to confirm or clear"
+                            style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",
+                              width:10,height:10,borderRadius:"50%",background:C.amber,color:C.white,
+                              fontSize:7,fontWeight:800,lineHeight:"10px",textAlign:"center"}}>!</span>}
+                        </div>
                       </td>
-                      {/* Nos/Set — shows 🍶 badge for ALCOBEV Part rows with glassSKUType set */}
+                      {/* Nos/Set — Glass-SKU detail stays in the expanded row */}
                       <td style={{padding:"3px 4px",textAlign:"center",minWidth:50}}>
-                        {(()=>{
-                          const isAlcoPart=batchProfile.sector==="ALCOBEV"&&(row.itemType==="Part-L"||row.itemType==="Part-W");
-                          return(
-                          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
-                            {inpC("nosPerSet",40,"number")}
-                            {isAlcoPart&&row.glassSKUType&&(
-                              <span style={{fontSize:7,color:"#2E6094",background:"#EEF4FB",
-                                borderRadius:2,padding:"0 3px",whiteSpace:"nowrap",maxWidth:44,
-                                overflow:"hidden",textOverflow:"ellipsis"}}
-                                title={`Glass SKU: ${row.glassSKUType}`}>
-                                🍶 {row.glassSKUType.substring(0,8)}
-                              </span>)}
-                          </div>);
-                        })()}
+                        {inpC("nosPerSet",40,"number")}
                       </td>
                       {/* Box Type */}
                       <td style={{padding:"3px 4px",minWidth:58}}>
@@ -756,6 +732,28 @@ export default function BatchGrid(){
                             </button>
                           </div>}
                           <div style={{display:"flex",gap:24,flexWrap:"wrap",alignItems:"flex-start",justifyContent:"flex-end"}}>
+                            {/* Conditional SET confirmation belongs here so the compact
+                                row remains a constant height. The handlers and the
+                                parent-resolution chain are unchanged. */}
+                            {isAssumed&&isNonBox&&(
+                              <div style={{minWidth:190}}>
+                                <div style={{fontSize:T.label,color:C.amberD,fontWeight:700,
+                                  textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>
+                                  ⚠ Assumed SET Code</div>
+                                <div style={{display:"flex",alignItems:"center",gap:5}}>
+                                  <span style={{padding:"3px 7px",border:`1px solid ${C.amber}`,
+                                    borderRadius:4,background:C.amberL,color:C.amberD,
+                                    fontFamily:mono,fontSize:T.body,fontWeight:700}}>{row.setCode||"—"}</span>
+                                  <button onClick={handleConfirm}
+                                    style={{padding:"3px 7px",border:`1px solid ${C.green}`,
+                                      borderRadius:4,background:C.greenL,color:C.green,
+                                      fontSize:T.label,fontWeight:700,cursor:"pointer"}}>Confirm</button>
+                                  <button onClick={handleClear}
+                                    style={{padding:"3px 7px",border:`1px solid ${C.red}55`,
+                                      borderRadius:4,background:C.redL,color:C.red,
+                                      fontSize:T.label,cursor:"pointer"}}>Clear</button>
+                                </div>
+                              </div>)}
                             {/* ── Glass SKU Type (ALCOBEV Main Box) ── */}
                             {batchProfile.sector==="ALCOBEV"&&row.itemType==="Box"&&(
                               <div style={{minWidth:200}}>

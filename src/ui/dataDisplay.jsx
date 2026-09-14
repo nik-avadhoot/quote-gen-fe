@@ -8,7 +8,7 @@
 // both, so a future screen does not reinvent the badge colours per table.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useId, useState } from "react";
-import { C, mono, sans } from "../theme.js";
+import { C, T, mono, sans } from "../theme.js";
 
 // A permanent internal code (Plant Code, Family Code, SKU code, ...) is
 // identity, not a label — always mono, always as typed, never truncated.
@@ -96,10 +96,10 @@ export const SummaryRow = ({
           fontFamily: sans,
         }}
       >
-        <span style={{ fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{title}</span>
+        <span style={{ fontSize: T.body, fontWeight: 800, flexShrink: 0 }}>{title}</span>
         <span style={{
           display: "flex", alignItems: "center", gap: 6, minWidth: 0,
-          flex: 1, overflow: "hidden", color: C.slateL, fontSize: 10,
+          flex: 1, overflow: "hidden", color: C.slateL, fontSize: T.label,
           whiteSpace: "nowrap",
         }}>
           {facts.map((fact, index) => (
@@ -113,7 +113,7 @@ export const SummaryRow = ({
           <span style={{
             borderRadius: 999, padding: "2px 7px", flexShrink: 0,
             color: tone.color, background: tone.background,
-            fontSize: 9, fontWeight: 800, lineHeight: 1.4,
+            fontSize: T.micro, fontWeight: 800, lineHeight: 1.4,
           }}>
             {status}
           </span>

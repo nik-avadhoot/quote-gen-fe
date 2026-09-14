@@ -123,20 +123,46 @@ code {
   min-width: 0;
 }
 
+.batch-focus-summary { display: none; }
+.batch-workspace-profile-card.is-focus-mode .batch-focus-summary { display: block; }
+.batch-workspace-profile-card.is-focus-mode .batch-profile-full { display: none; }
+
 .batch-profile-bar {
   min-width: 0;
   overflow: visible;
 }
 
 .batch-profile-pricing-card {
-  width: 340px;
-  min-width: 340px;
-  max-width: 340px;
-  flex: 0 0 340px;
+  width: auto;
+  min-width: 220px;
+  max-width: 240px;
+  flex: 0 1 240px;
 }
 
 .batch-profile-pricing-card .batch-pricing-header-card {
   height: 100%;
+}
+
+.batch-profile-pricing-card .batch-pb-compact {
+  padding: 7px;
+}
+
+.batch-profile-pricing-card .batch-pb-workspace-line,
+.batch-profile-pricing-card .batch-pb-compact-row {
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.batch-profile-pricing-card .batch-pb-workspace-line > input {
+  min-width: 0;
+  flex-basis: 150px;
+}
+
+.batch-profile-pricing-card .batch-pb-open-actions,
+.batch-profile-pricing-card .batch-pb-governed-actions {
+  width: 100%;
+  margin-left: 0;
+  flex-wrap: wrap;
 }
 
 .batch-profile-pricing-card .batch-pb-workspace-line > input { min-width: 0; }
