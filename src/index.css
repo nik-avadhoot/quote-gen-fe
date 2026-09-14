@@ -106,6 +106,15 @@ code {
   background: var(--code-bg);
 }
 
+/* Scrollable screens opt into one consistent final breathing space without
+   having to coordinate their existing top and side padding values. */
+.screen-end-padded::after {
+  display: block;
+  height: 48px;
+  content: "";
+  pointer-events: none;
+}
+
 /* Batch Entry header cards share one compact flex band. */
 .batch-workspace-profile-card {
   position: relative;
