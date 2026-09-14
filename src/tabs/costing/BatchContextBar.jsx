@@ -31,6 +31,7 @@
 import { PLANTS } from "../../data/defaults.js";
 import { resolveField, resolveInterest } from "../../engine/resolveAuthority.js";
 import { useAppState } from "../../state/AppStateContext.js";
+import { normalizeProfileOverrideInput } from "../../state/costingDraftModel.js";
 import { C, T } from "../../theme.js";
 import { SummaryRow } from "../../ui/dataDisplay.jsx";
 
@@ -133,10 +134,12 @@ export default function BatchContextBar(){
     :<span style={chip(false)}>{(opts.find(o=>o[0]===val)||[null,txt(val)])[1]}</span>;
   const num=k=>editable
     ?<input type="number" step="0.25" value={v[k]??""} title={tip(k)}
-       onChange={e=>setContextField(k,e.target.value===""?def[k]:+e.target.value,
+       placeholder={def[k]==null?"":String(def[k])}
+       onChange={e=>setContextField(k,normalizeProfileOverrideInput(e.target.value),
          k==="marginPP"?null:k)}
        style={{...inp(isOvr(k),"100%"),textAlign:"center"}}/>
-    :<span style={chip(isOvr(k))} title={tip(k)}>{txt(v[k])}</span>;
+    :<span style={chip(isOvr(k))} title={tip(k)}>
+       {txt(isOvr(k)?v[k]:def[k])}</span>;
   const commercialOverrideCount=["convRate","waste","margin","convRatePP","wastePP","marginPP"]
     .filter(isOvr).length;
   const effective=k=>isOvr(k)?v[k]:def[k];

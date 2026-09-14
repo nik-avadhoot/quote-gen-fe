@@ -15,7 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { buildSpecFromRow, calcCostingOutcome, checkSpecCompliance, freightBlockerText } from "../engine/costing.js";
 import { isFeatureEnabled } from "../lib/featureFlags.js";
-import { resolveField, resolveInterest } from "../engine/resolveAuthority.js";
+import { resolveBatchCommercialDefaults, resolveField, resolveInterest } from "../engine/resolveAuthority.js";
 import { materializeEffectiveRates } from "../engine/rateMaster.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
 import { findDuplicate, isUsableConstruction } from "../lib/constructionIdentity.js";
@@ -26,6 +26,8 @@ import { getItem, setItem } from "../lib/persist.js";
 
 export function useQuoteActions(st){
   const { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchFreight, batchProfile, batchResults, batchRows, boxTrim, constructionLib, freight, items, locations, missing, partitionsMaster, r, rates, restoreRef, sectors, setAiNotes, setAutoCodeSeq, setBatchFreight, setBatchResults, setBatchRows, setConstructionLib, setItems, setQuoteView, setSavedQuotes, setTab, setTemplateB64, setTemplateLoaded, showToast, spec } = st;
+  const batchCommercialDefaults=resolveBatchCommercialDefaults(batchProfile,
+    sectors.find(sector=>sector.code===batchProfile.sector));
 
 
   // ── BACKUP & RESTORE ──────────────────────────────────────────────────────
@@ -399,12 +401,14 @@ export function useQuoteActions(st){
       // effective values the engine used, not the profile defaults.
       const rowWaste=row.wasteConv_waste;
       const rowConv=row.wasteConv_conv;
-      const profWaste=isPP?(batchProfile.wastePP??5):(batchProfile.waste??5);
-      const profConv=isPP?(batchProfile.convRatePP??12.5):(batchProfile.convRate??7);
+      const profWaste=isPP?batchCommercialDefaults.wastePP:batchCommercialDefaults.waste;
+      const profConv=isPP?batchCommercialDefaults.convRatePP:batchCommercialDefaults.convRate;
+      const profMargin=isPP?batchCommercialDefaults.marginPP:batchCommercialDefaults.margin;
       sp.waste=isPP?sp.waste:(rowWaste!==""&&rowWaste!=null?+rowWaste:profWaste);
       sp.convRate=isPP?sp.convRate:(rowConv!==""&&rowConv!=null?+rowConv:profConv);
       sp.wastePP=isPP?(rowWaste!==""&&rowWaste!=null?+rowWaste:profWaste):sp.wastePP;
       sp.convRatePP=isPP?(rowConv!==""&&rowConv!=null?+rowConv:profConv):sp.convRatePP;
+      sp.margin=row.marginOverride!==""&&row.marginOverride!=null?+row.marginOverride:profMargin;
       // WAVE 3: as in calcBatchRow above - the Batch figures already on sp are
       // what reaches the item, and from there the exporter and backend.
       // ─────────────────────────────────────────────────────────────────────

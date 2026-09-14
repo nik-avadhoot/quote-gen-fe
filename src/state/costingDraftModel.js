@@ -190,6 +190,38 @@ export const PROFILE_DRAFT_FIELDS=['client','sector','customerType','priceContex
   'plant','delivery','paymentDisc','interest','freightOverride',
   'waste','convRate','wastePP','convRatePP','margin','marginPP'];
 
+// A genuinely new customer/batch has no commercial overrides yet. Keeping
+// these fields null is what lets the selected Sector (and, for Interest, the
+// approved payment-term rule) remain the authority. The old New Draft seed
+// wrote system fallback numbers here before a Sector was selected, silently
+// turning every one into a Batch override.
+export function freshNewClientProfileValues(){
+  return {client:'',sector:'',plant:'',delivery:'',
+    margin:null,marginPP:null,interest:null,paymentDisc:'30',freightOverride:'',
+    waste:null,convRate:null,wastePP:null,convRatePP:null,
+    customerType:'existing',priceContext:'unknown'};
+}
+
+// The Batch Builder's + New Batch reset follows the same inheritance rule as
+// Costing's New Draft. A governed Batch may supply deliberate profile values;
+// nulls stay null so its selected Sector remains the next authority. Explicit
+// zero is preserved because it is a real Batch decision.
+export function freshBatchProfileValues(governedBatch=null){
+  if(!governedBatch)return freshNewClientProfileValues();
+  const profile=governedBatch.current_profile||{};
+  const profileValue=key=>profile[key]??null;
+  return {...freshNewClientProfileValues(),
+    sector:governedBatch.sector?.sector_code||'',
+    plant:governedBatch.plant?.name||governedBatch.plant?.plant_code||'',
+    waste:profileValue('waste_cbb_pct'),
+    convRate:profileValue('conv_box_rate'),
+    margin:profileValue('margin_box_pct'),
+    wastePP:profileValue('waste_pp_pct'),
+    convRatePP:profileValue('conv_pp_rate'),
+    marginPP:profileValue('margin_pp_pct'),
+  };
+}
+
 // CONTEXT-ONLY fields: one authority, never mirrored into spec. The resolver in
 // useCostingDraft overlays these onto the spec every render, so nothing is
 // stored twice and nothing can drift.
@@ -207,6 +239,27 @@ export const CONTEXT_ONLY_FIELDS=['client','sector','customerType','priceContext
 // advance. Rows stored before Wave 3 may still carry an interestOverride or
 // freightRowOverride key; they are inert and were deliberately not migrated.
 export const SKU_EXCEPTION_FIELDS=['waste','convRate','wastePP','convRatePP','margin'];
+
+// Seed a fresh SKU from the Batch tier without materialising inheritance.
+// A present null/blank Batch field means "inherit" and therefore becomes a
+// blank SKU exception. Missing fields retain the legacy safe fallbacks so old
+// stored profiles and the no-Batch scratchpad remain usable.
+export function seedSkuDefaults(batchDefaults){
+  const src=isPlainObject(batchDefaults)?batchDefaults:null;
+  const value=(key,fallback)=>{
+    if(!src||!Object.prototype.hasOwnProperty.call(src,key))return fallback;
+    const v=src[key];
+    return v===null||v===undefined?'':v;
+  };
+  return {margin:value('margin',8),
+    waste:value('waste',5),convRate:value('convRate',7),
+    wastePP:value('wastePP',5),convRatePP:value('convRatePP',12.5)};
+}
+
+// Numeric Batch inputs store blank as null (inherit), never as the currently
+// resolved Sector number. Explicit zero is a real override and must survive.
+export const normalizeProfileOverrideInput=raw=>
+  (raw===''||raw===null||raw===undefined)?null:+raw;
 
 export function isValidProfileDraft(pd){
   if(pd===null)return true;

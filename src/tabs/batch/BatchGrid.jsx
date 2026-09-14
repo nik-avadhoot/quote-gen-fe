@@ -22,6 +22,7 @@
 import { Fragment, useMemo, useRef } from "react";
 import { BOX_TYPES, PRINTING_TECHNOLOGIES } from "../../data/defaults.js";
 import { buildSpecFromRow, checkSpecCompliance } from "../../engine/costing.js";
+import { resolveBatchCommercialDefaults } from "../../engine/resolveAuthority.js";
 import { isPPType, sameSetCode } from "../../engine/rowType.js";
 import { findDivergence, isDiverged } from "../../lib/overrideDivergence.js";
 import { isUsableConstruction } from "../../lib/constructionIdentity.js";
@@ -68,7 +69,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
   const {activeBatchRowId,addBatchRow,autoCalcPPDims,autoCodeEnabled,autoCodeSeq,
     batchProfile,batchResults,batchRows,calculateAll,constructionLib,durableBatch,expandedRows,freight,
     generateCode,generateMissingCodes,getBatchRowStatus,invalidateAllBatchResults,
-    invalidateBatchRow,loadBatchRowIntoCosting,partitionsMaster,pinnedAddOns,
+    invalidateBatchRow,loadBatchRowIntoCosting,partitionsMaster,pinnedAddOns,sectors,
     sendAllToQuoteItems,setAutoCodeEnabled,setBatchConstrOverlay,
     setBatchConstrOverlayFilter,setBatchConstrOverlayQuery,setBatchConstrTargetRowId,
     setBatchProfile,setBatchRows,setBatchWorkspaceRequest,showToast,togglePinAddOn,toggleRowExpand}=useAppState();
@@ -80,6 +81,8 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
   // blank-screen crashes in this file before (see CLAUDE.md). One ref serves every
   // row because only one input holds focus at a time.
   const _setCodeAtFocus=useRef("");
+  const _profileDefaults=useMemo(()=>resolveBatchCommercialDefaults(batchProfile,
+    sectors.find(sector=>sector.code===batchProfile.sector)),[batchProfile,sectors]);
 
   // ── D-28: which parameters DISAGREE across rows that share one export slot ──
   // The workbook holds one interest/freight for the whole quote, and one waste/conv
@@ -106,12 +109,12 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
     // Waste and Conv keep theirs: those ARE still per-row.
     return {
       // Box/PP-pair level — the effective value is the override, else the profile default
-      waste:build(r=>isPP(r)?(batchProfile.wastePP??5):(batchProfile.waste??5),
+      waste:build(r=>isPP(r)?_profileDefaults.wastePP:_profileDefaults.waste,
                   (r,b)=>set(r,"wasteConv_waste")?r.wasteConv_waste:b),
-      conv: build(r=>isPP(r)?(batchProfile.convRatePP??12.5):(batchProfile.convRate??7),
+      conv: build(r=>isPP(r)?_profileDefaults.convRatePP:_profileDefaults.convRate,
                   (r,b)=>set(r,"wasteConv_conv")?r.wasteConv_conv:b),
     };
-  },[batchRows,batchProfile]);
+  },[batchRows,_profileDefaults]);
   const _deliveryGridEntries=useMemo(
     ()=>batchDeliveryGridEntries(durableBatch,batchRows),[durableBatch,batchRows]);
   const openDeliveryManager=(mode,section)=>{
@@ -606,7 +609,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                       <td style={{padding:"3px 4px",textAlign:"center",minWidth:52}}>
                         {(()=>{
                           const isPP=isPPType(row.itemType); // R-2
-                          const profVal=isPP?(batchProfile.wastePP??5):(batchProfile.waste??5);
+                          const profVal=isPP?_profileDefaults.wastePP:_profileDefaults.waste;
                           const isOvr=row.wasteConv_waste!==""&&row.wasteConv_waste!=null;
                           return<input type="number" step="0.25" value={row.wasteConv_waste??""}
                             placeholder={String(profVal)}
@@ -624,7 +627,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                       <td style={{padding:"3px 4px",textAlign:"center",minWidth:58}}>
                         {(()=>{
                           const isPP=isPPType(row.itemType); // R-2
-                          const profVal=isPP?(batchProfile.convRatePP??12.5):(batchProfile.convRate??7);
+                          const profVal=isPP?_profileDefaults.convRatePP:_profileDefaults.convRate;
                           const isOvr=row.wasteConv_conv!==""&&row.wasteConv_conv!=null;
                           return<input type="number" step="0.25" value={row.wasteConv_conv??""}
                             placeholder={String(profVal)}
@@ -643,11 +646,11 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                         <input type="number" step="0.25" value={row.marginOverride??""}
                           placeholder={String(
                             (row.itemType==="Plate"||row.itemType==="Part-L"||row.itemType==="Part-W")
-                              ?(batchProfile.marginPP??batchProfile.margin??8)
-                              :(batchProfile.margin??8)
+                              ?_profileDefaults.marginPP
+                              :_profileDefaults.margin
                           )}
                           onChange={e=>updC("marginOverride",e.target.value===""?"":+e.target.value)}
-                          title={row.marginOverride!=null&&row.marginOverride!==""?"Row override":`Inherits: ${(row.itemType==="Plate"||row.itemType==="Part-L"||row.itemType==="Part-W")?(batchProfile.marginPP??batchProfile.margin??8):(batchProfile.margin??8)}% from profile`}
+                          title={row.marginOverride!=null&&row.marginOverride!==""?"Row override":`Inherits: ${(row.itemType==="Plate"||row.itemType==="Part-L"||row.itemType==="Part-W")?_profileDefaults.marginPP:_profileDefaults.margin}% from Batch/Sector defaults`}
                           style={{width:46,padding:"2px 4px",border:`1px solid ${row.marginOverride!=null&&row.marginOverride!==""?C.amber:C.border}`,
                             borderRadius:3,fontSize:10,textAlign:"center",fontFamily:mono,
                             background:row.marginOverride!=null&&row.marginOverride!==""?"#FFF8ED":C.white}}/>

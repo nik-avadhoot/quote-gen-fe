@@ -22,8 +22,9 @@
 // byte-identical to the monolith; only the surrounding closure changed.
 // ═══════════════════════════════════════════════════════════════════════════
 import { INIT_SPEC } from "../data/defaults.js";
-import { deepEqual } from "./costingDraftModel.js";
+import { deepEqual, freshBatchProfileValues, freshNewClientProfileValues, seedSkuDefaults } from "./costingDraftModel.js";
 import { buildSpecFromRow } from "../engine/costing.js";
+import { resolveBatchCommercialDefaults } from "../engine/resolveAuthority.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
 import {
   constructionLayerIssues, findUsableConstructionMatch,
@@ -32,7 +33,9 @@ import {
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useCostingBatchBridge(st){
-  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, setAutoFill, setBatchProfile, setDurableBatch, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setNewBatchDialogOpen, setSetAutoFill, setTab, showToast, spec, specRaw } = st;
+  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, sectors, setAutoFill, setBatchProfile, setDurableBatch, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setNewBatchDialogOpen, setSetAutoFill, setTab, showToast, spec, specRaw } = st;
+  const batchCommercialDefaults=resolveBatchCommercialDefaults(batchProfile,
+    sectors.find(sector=>sector.code===batchProfile.sector));
 
   const loadBatchRowIntoCosting=(row)=>{
     // Gate: block Deep Dive if this row has an unconfirmed SET Code
@@ -49,8 +52,14 @@ export function useCostingBatchBridge(st){
     // Apply row-level overrides — same logic as calcBatchRow so deepdive reflects exact costing
     const rowWaste=row.wasteConv_waste;
     const rowConv=row.wasteConv_conv;
-    if(rowWaste!==""&&rowWaste!=null){if(isPP)sp.wastePP=+rowWaste;else sp.waste=+rowWaste;}
-    if(rowConv!==""&&rowConv!=null){if(isPP)sp.convRatePP=+rowConv;else sp.convRate=+rowConv;}
+    const effectiveWaste=rowWaste!==""&&rowWaste!=null?+rowWaste
+      :(isPP?batchCommercialDefaults.wastePP:batchCommercialDefaults.waste);
+    const effectiveConv=rowConv!==""&&rowConv!=null?+rowConv
+      :(isPP?batchCommercialDefaults.convRatePP:batchCommercialDefaults.convRate);
+    if(isPP){sp.wastePP=effectiveWaste;sp.convRatePP=effectiveConv;}
+    else{sp.waste=effectiveWaste;sp.convRate=effectiveConv;}
+    sp.margin=(row.marginOverride!==""&&row.marginOverride!=null)?+row.marginOverride
+      :(isPP?batchCommercialDefaults.marginPP:batchCommercialDefaults.margin);
     // WAVE 3: the two row-override reads were here. Freight and Interest are
     // BATCH-level only now, so the review copy keeps what buildSpecFromRow
     // seeded from the profile - freightOverride:prof.freightOverride||"" and
@@ -100,18 +109,11 @@ export function useCostingBatchBridge(st){
   // forbids - and would hand the G1 guards a value nobody typed.
   const _blankContext={client:"",sector:"",plant:"",delivery:"",
     customerType:"",priceContext:"",paymentDisc:""};
-  // SKU exceptions start life TRACKING the batch default, with CONCRETE Box/PP
-  // waste and conversion - never blank. specFromProfile used to leave those four
-  // blank; a blank presented as inherited is D-25's job, not this series'.
-  const _skuFromDefaults=(explicit)=>{
-    const bd=explicit||batchDefaults||{};
-    // C7a: interest and freightOverride are NOT seeded. They resolve from the
-    // Batch Context every render, so seeding a copy here would be the mirroring
-    // the model forbids - and would hand a Costing-authored value to the engine.
-    return {margin:bd.margin??8,
-      waste:bd.waste??5,convRate:bd.convRate??7,
-      wastePP:bd.wastePP??5,convRatePP:bd.convRatePP??12.5};
-  };
+  // SKU exceptions track the Batch tier. Null/blank Batch values stay blank in
+  // the SKU so the selected Sector remains live; explicit Batch overrides are
+  // copied as editable starting values. Interest and Freight are intentionally
+  // absent because they resolve from Batch Context every render.
+  const _skuFromDefaults=(explicit)=>seedSkuDefaults(explicit??batchDefaults);
   const specFromProfile=()=>({
     ...INIT_SPEC,
     ..._blankContext,
@@ -183,7 +185,8 @@ export function useCostingBatchBridge(st){
   };
 
   // S2 / S3 - New Draft. The draft profile is seeded either from the live profile
-  // (same client) or from the concrete defaults a fresh Batch Profile takes.
+  // (same client) or as a fresh profile with no commercial overrides. In the
+  // latter case the selected Sector becomes the effective Batch default.
   const _newDraft=(values)=>{
     if(!_confirmDiscardWork(
       "Start a new draft?" + "\n\n" +
@@ -195,10 +198,7 @@ export function useCostingBatchBridge(st){
     showToast("✦ New draft started — the parked batch is untouched",'info',5000);
   };
   const newDraftKeepClient=()=>_newDraft({...batchProfile});
-  const newDraftNewClient=()=>_newDraft({client:'',sector:'',plant:'',delivery:'',
-    margin:8,marginPP:8,interest:0.5,paymentDisc:'30',freightOverride:'',
-    waste:5,convRate:7,wastePP:5,convRatePP:12.5,
-    customerType:'existing',priceContext:'unknown'});
+  const newDraftNewClient=()=>_newDraft(freshNewClientProfileValues());
 
   // X3 - discard the new-batch draft and return to a clean START on the live
   // batch. Carries NONE of the abandoned draft: not its identity, dimensions,
@@ -220,33 +220,26 @@ export function useCostingBatchBridge(st){
     const row=batchRows.find(r=>r.id===activeBatchRowId);
     if(!row){showToast("⚠️ That batch row no longer exists",'info');return;}
     const isPPRowType=isPPType(row.itemType); // R-2
-    const profileMarginForRow=isPPRowType?(batchProfile.marginPP??batchProfile.margin??8):(batchProfile.margin??8);
+    const profileMarginForRow=isPPRowType?batchCommercialDefaults.marginPP:batchCommercialDefaults.margin;
 
     // ── A1-03: Compute waste/conv overrides to push back ─────────────────────
-    // Determine what profile+library would produce for this row (same logic as
+    // Determine what Batch/Sector authority produces for this row (same logic as
     // calcBatchRow and loadBatchRowIntoCosting) then compare with spec's actual
     // values. If they differ, record the override so Calculate All reproduces
     // the same result the professional saw and approved in the Costing tab.
     const constEntry=constructionLib.find(c=>c.code===row.constructionCode);
-    const profWaste=isPPRowType?(batchProfile.wastePP??5):(batchProfile.waste??5);
-    const profConv=isPPRowType?(batchProfile.convRatePP??12.5):(batchProfile.convRate??7);
-    // buildSpecFromRow uses constEntry.waste/conv first, then profile — mirror that here
-    const libWaste=isPPRowType
-      ?(constEntry?.wastePP!=null?constEntry.wastePP:profWaste)
-      :(constEntry?.waste!=null?constEntry.waste:profWaste);
-    const libConv=isPPRowType
-      ?(constEntry?.convRatePP!=null?constEntry.convRatePP:profConv)
-      :(constEntry?.convRate!=null?constEntry.convRate:profConv);
+    const profWaste=isPPRowType?batchCommercialDefaults.wastePP:batchCommercialDefaults.waste;
+    const profConv=isPPRowType?batchCommercialDefaults.convRatePP:batchCommercialDefaults.convRate;
     // A1: Use resolveSpecWasteConv (declared beside _calcSpec) so blank is treated
     // as "inherit sector default" — not coerced to 0 via +"". Both the Costing
     // calculator and this write-back now use the same resolution chain.
     const _rwc=resolveSpecWasteConv(isPPRowType);
     const specWaste=_rwc.waste;
     const specConv=_rwc.conv;
-    // Only write an override if the resolved value differs from lib/profile resolution
+    // Only write an override if the resolved value differs from Batch/Sector resolution
     // AND the Maker explicitly typed a value (blank = inherit, so never write an override for blank)
-    const wasteOverride=(!_rwc.isWasteBlank&&Math.abs(specWaste-libWaste)>0.001)?specWaste:"";
-    const convOverride=(!_rwc.isConvBlank&&Math.abs(specConv-libConv)>0.001)?specConv:"";
+    const wasteOverride=(!_rwc.isWasteBlank&&Math.abs(specWaste-profWaste)>0.001)?specWaste:"";
+    const convOverride=(!_rwc.isConvBlank&&Math.abs(specConv-profConv)>0.001)?specConv:"";
 
     // ── PROVENANCE: DID THE MAKER ACTUALLY MOVE THIS FIELD? ─────────────────
     // The delta-vs-profile writes above answer "what value?" but never "did
@@ -413,8 +406,8 @@ export function useCostingBatchBridge(st){
     // field this Push did not write would be a false clean.
     // Waste/conv: ONE pair per row type. The other pair is never written, so an
     // edit to it can never be formalised from this row.
-    const _effWaste=_rowEff(_after("wasteConv_waste",row.wasteConv_waste),libWaste);
-    const _effConv =_rowEff(_after("wasteConv_conv" ,row.wasteConv_conv ),libConv );
+    const _effWaste=_rowEff(_after("wasteConv_waste",row.wasteConv_waste),profWaste);
+    const _effConv =_rowEff(_after("wasteConv_conv" ,row.wasteConv_conv ),profConv );
     _mark(isPPRowType?"wastePP":"waste",Math.abs(specWaste-_effWaste)<0.001);
     _mark(isPPRowType?"convRatePP":"convRate",Math.abs(specConv-_effConv)<0.001);
     // boxType is deliberately absent: it is Construction-gated below.
@@ -426,7 +419,7 @@ export function useCostingBatchBridge(st){
     // and the row shows as calculated when its inputs no longer match the result.
     invalidateBatchRow(activeBatchRowId);
 
-    // constEntry already declared above for waste/conv override calculation
+    // constEntry also carries the shared construction comparison below.
     const layersChanged=constEntry&&JSON.stringify(constEntry.layers||{})!==JSON.stringify(spec.layers||{});
     const constructionChanged=constEntry&&(
       constEntry.boxType!==spec.boxType||+constEntry.ply!==+spec.ply||
@@ -690,7 +683,6 @@ export function useCostingBatchBridge(st){
         constrCode=nextCode;
       }
     }
-
     // ── Build new batch row pre-populated from spec ───────────────────────────
     const newId=Date.now();
     const matCode=spec.material_code||"";
@@ -704,8 +696,8 @@ export function useCostingBatchBridge(st){
     // zeroed PP conversion cost silently. Blank must remain blank (inherit profile).
     // profWasteNew/profConvNew: what batchProfile would produce for this row type —
     // the baseline the delta is compared against (mirrors pushCostingToBatchRow exactly).
-    const profWasteNew=isPPItem?(batchProfile.wastePP??5):(batchProfile.waste??5);
-    const profConvNew=isPPItem?(batchProfile.convRatePP??12.5):(batchProfile.convRate??7);
+    const profWasteNew=isPPItem?batchCommercialDefaults.wastePP:batchCommercialDefaults.waste;
+    const profConvNew=isPPItem?batchCommercialDefaults.convRatePP:batchCommercialDefaults.convRate;
     const _rwcNew=resolveSpecWasteConv(isPPItem);
     const specWasteNew=_rwcNew.waste;
     const specConvNew=_rwcNew.conv;
@@ -713,7 +705,7 @@ export function useCostingBatchBridge(st){
     const wasteOverrideNew=(!_rwcNew.isWasteBlank&&Math.abs(specWasteNew-profWasteNew)>0.001)?specWasteNew:"";
     const convOverrideNew=(!_rwcNew.isConvBlank&&Math.abs(specConvNew-profConvNew)>0.001)?specConvNew:"";
 
-    const profMarginNew=isPPItem?(batchProfile.marginPP??batchProfile.margin??8):(batchProfile.margin??8);
+    const profMarginNew=isPPItem?batchCommercialDefaults.marginPP:batchCommercialDefaults.margin;
     const marginOverrideNew=(spec.margin!=null&&spec.margin!==""&&Math.abs(+spec.margin-profMarginNew)>0.001)?spec.margin:"";
 
     // C7a: no interest/freight delta is computed. Both now resolve FROM the
@@ -934,21 +926,7 @@ export function useCostingBatchBridge(st){
                   setItem('cbb_batch_previous',JSON.stringify({..._prev,archivedAt:Date.now()}));
               }
             }catch{ /* unparseable autosave — leave any existing archive intact */ }
-            const durableProfile=governedBatch?.current_profile;
-            const profileValue=(key,localDefault)=>governedBatch
-              ?(durableProfile?.[key]??null)
-              :localDefault;
-            const fresh={client:'',
-              sector:governedBatch?.sector?.sector_code||'',
-              plant:governedBatch?.plant?.name||'',delivery:'',
-              margin:profileValue('margin_box_pct',8),
-              marginPP:profileValue('margin_pp_pct',8),
-              interest:governedBatch?null:0.5,paymentDisc:'30',freightOverride:'',
-              waste:profileValue('waste_cbb_pct',5),
-              convRate:profileValue('conv_box_rate',7),
-              wastePP:profileValue('waste_pp_pct',5),
-              convRatePP:profileValue('conv_pp_rate',12.5),
-              customerType:'existing',priceContext:'unknown'};
+            const fresh=freshBatchProfileValues(governedBatch);
             setBatchProfile(fresh);
             // C5 · B2: seed the draft from the `fresh` object we just built, NOT
             // from batchProfile - that state does not update until the next

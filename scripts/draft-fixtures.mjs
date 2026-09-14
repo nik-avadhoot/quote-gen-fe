@@ -21,7 +21,8 @@ import { deepEqual, freshEnvelope, freshReviewCopy, isDirty, isPlainObject,
   isValidEnvelope, mergeSpec, nextReviewBaseline,
   PUSH_CONSTRUCTION_FIELDS, isValidProfileDraft, isDraftDirty, freshProfileDraft,
   shouldAdvanceSkuValue, CONTEXT_ONLY_FIELDS, SKU_EXCEPTION_FIELDS,
-  PROFILE_DRAFT_FIELDS, DRAFT_VERSION } from "../src/state/costingDraftModel.js";
+  PROFILE_DRAFT_FIELDS, DRAFT_VERSION, freshBatchProfileValues, freshNewClientProfileValues,
+  normalizeProfileOverrideInput, seedSkuDefaults } from "../src/state/costingDraftModel.js";
 
 let fails = 0;
 const ok = (name, cond, extra = "") => {
@@ -438,6 +439,52 @@ console.log("-- freshProfileDraft: a new draft profile is clean --");
   ok("valid shape",                    isValidProfileDraft(pd));
   ok("baseline equals values",         !isDirty(pd.values,pd.baseline));
   ok("so a fresh new-batch draft is clean", !isDraftDirty({L:1},{L:1},pd));
+}
+
+console.log("");
+console.log("-- New Draft / new client: Sector remains the Batch-default authority --");
+{
+  const profile=freshNewClientProfileValues();
+  const inherited=['waste','convRate','wastePP','convRatePP','margin','marginPP','interest'];
+  ok("fresh profile stores no commercial overrides",
+     inherited.every(key=>profile[key]===null));
+  ok("fresh profile clears prior Batch identity and logistics",
+     ['client','sector','plant','delivery'].every(key=>profile[key]===''));
+  ok("fresh profile retains the neutral new-customer classifications",
+     profile.customerType==='existing'&&profile.priceContext==='unknown'&&profile.paymentDisc==='30');
+
+  const sku=seedSkuDefaults(profile);
+  ok("fresh SKU leaves all five exception fields blank to inherit",
+     ['waste','convRate','wastePP','convRatePP','margin'].every(key=>sku[key]===''));
+  const explicit=seedSkuDefaults({waste:0,convRate:6.5,wastePP:3,convRatePP:0,margin:11});
+  ok("explicit Batch overrides, including zero, still seed the SKU",
+     explicit.waste===0&&explicit.convRate===6.5&&explicit.wastePP===3
+       &&explicit.convRatePP===0&&explicit.margin===11);
+  const legacy=seedSkuDefaults({});
+  ok("an old profile missing the fields keeps safe legacy seeds",
+     legacy.waste===5&&legacy.convRate===7&&legacy.wastePP===5
+       &&legacy.convRatePP===12.5&&legacy.margin===8);
+
+  ok("clearing a Context value stores null inheritance",
+     normalizeProfileOverrideInput('')===null);
+  ok("zero remains an explicit Context override",
+     normalizeProfileOverrideInput('0')===0);
+  ok("a typed Sector-default number remains an explicit override",
+     normalizeProfileOverrideInput('5.75')===5.75);
+
+  const localBatch=freshBatchProfileValues();
+  ok("+ New Batch local reset also leaves commercials inheriting",
+     inherited.every(key=>localBatch[key]===null));
+  const governed=freshBatchProfileValues({
+    sector:{sector_code:'TEXTILE'},plant:{plant_code:'NAG'},
+    current_profile:{waste_cbb_pct:null,conv_box_rate:null,margin_box_pct:null,
+      waste_pp_pct:0,conv_pp_rate:0,margin_pp_pct:9},
+  });
+  ok("governed + New Batch keeps its selected Sector and Plant",
+     governed.sector==='TEXTILE'&&governed.plant==='NAG');
+  ok("governed nulls inherit while deliberate zero and value survive",
+     governed.waste===null&&governed.convRate===null&&governed.margin===null
+       &&governed.wastePP===0&&governed.convRatePP===0&&governed.marginPP===9);
 }
 
 console.log("");

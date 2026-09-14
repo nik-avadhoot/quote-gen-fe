@@ -171,6 +171,8 @@ const appCss = readFileSync(new URL("../src/index.css", import.meta.url), "utf8"
 const newBatchPanel = readFileSync(new URL("../src/tabs/batch/NewGovernedBatchPanel.jsx", import.meta.url), "utf8");
 const pricingState = readFileSync(new URL("../src/state/usePricingBasisState.js", import.meta.url), "utf8");
 const costingBridge = readFileSync(new URL("../src/state/useCostingBatchBridge.js", import.meta.url), "utf8");
+const batchGrid = readFileSync(new URL("../src/tabs/batch/BatchGrid.jsx", import.meta.url), "utf8");
+const quoteActions = readFileSync(new URL("../src/state/useQuoteActions.js", import.meta.url), "utf8");
 const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
 const sidebar = readFileSync(new URL("../src/ui/Sidebar.jsx", import.meta.url), "utf8");
 check(selector.includes("Session-only U3 selection · durable linkage begins in U4")
@@ -454,9 +456,11 @@ check(pricingState.includes("durableBatch")
   && batchEntry.includes("key={durableBatch?.id || \"unbound\"}")
   && costingBridge.includes("const startNewBatch=()=>setNewBatchDialogOpen(true)")
   && costingBridge.includes("const completeNewBatchStart=(governedBatch=null)=>")
-  && costingBridge.includes("profileValue('waste_cbb_pct',5)")
-  && costingBridge.includes("interest:governedBatch?null:0.5"),
-  "U4-FE-23 one durable Batch binding joins the header, grid reset and workspace without clearing on the first click")
+  && costingBridge.includes("freshBatchProfileValues(governedBatch)")
+  && batchGrid.includes("resolveBatchCommercialDefaults(batchProfile")
+  && quoteActions.includes("batchCommercialDefaults.wastePP")
+  && quoteActions.includes("batchCommercialDefaults.marginPP"),
+  "U4-FE-23 new Batch reset preserves Sector inheritance across grid, calculation and Send")
 check(newBatchPanel.includes('apiFetch("/batches/create-options")')
   && newBatchPanel.includes('runMutation("/batches"')
   && newBatchPanel.includes("family_id: Number(familyId)")

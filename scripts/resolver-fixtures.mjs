@@ -30,7 +30,7 @@
 import { CALC_DEFAULTS } from "../src/engine/calcDefaults.js";
 import { APPROVED_DAY_COUNT_BASIS, STRUCTURED_PAYMENT_TERMS,
   deriveInterestPct, isStructuredPaymentTerm } from "../src/engine/interestBasis.js";
-import { isBlank, normalizeFreightOverrideInput, resolveField, resolveFreight, resolveInterest, resolveRowAuthority } from "../src/engine/resolveAuthority.js";
+import { isBlank, normalizeFreightOverrideInput, resolveBatchCommercialDefaults, resolveField, resolveFreight, resolveInterest, resolveRowAuthority } from "../src/engine/resolveAuthority.js";
 import { establishEffectiveMaterialRate, resolveSupplierCreditCost } from "../src/engine/rateMaster.js";
 import { CREDIT_PCT } from "../src/data/defaults.js";
 
@@ -127,6 +127,20 @@ console.log("\n── the Sector tier Batch Entry never had (B-1) ──");
   eq("and says so", r.source, "sector");
   ok("which differs from the system fallback - the tier is not decorative",
      r.value !== CALC_DEFAULTS.convBoxFallbackRate);
+}
+
+console.log("\n── Batch Builder presents and sends the same inherited defaults ──");
+{
+  const defaults=resolveBatchCommercialDefaults({},SECTOR);
+  eq("blank Batch Box waste resolves from Sector", defaults.waste, 5);
+  eq("blank Batch Box conversion resolves from Sector", defaults.convRate, 5.75);
+  eq("blank Batch PP waste preserves the Sector zero", defaults.wastePP, 0);
+  eq("blank Batch PP conversion preserves the Sector zero", defaults.convRatePP, 0);
+  eq("blank Batch margin reaches its approved system fallback", defaults.margin,
+    CALC_DEFAULTS.marginFallbackPct);
+  const sectorMargin=resolveBatchCommercialDefaults({}, {...SECTOR,marginPct:14});
+  eq("a Sector margin reaches both blank Batch arms", sectorMargin.margin, 14);
+  eq("and the PP margin uses that same Sector authority", sectorMargin.marginPP, 14);
 }
 
 // A SECTOR ZERO MUST SURVIVE. Eight sectors legitimately carry wastePP = 0 and
