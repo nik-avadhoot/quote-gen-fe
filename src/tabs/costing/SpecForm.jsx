@@ -25,7 +25,7 @@ import { C, mono, sans } from "../../theme.js";
 // Hoisted out of the render path — see header note.
 const SubHdr=({title})=>(
   <div style={{fontSize:9,fontWeight:700,color:C.slateL,textTransform:"uppercase",
-    letterSpacing:"0.09em",marginBottom:4}}>{title}</div>);
+    letterSpacing:"0.09em",marginBottom:4,textAlign:"center"}}>{title}</div>);
 
 export default function SpecForm(){
   const {
@@ -118,7 +118,7 @@ export default function SpecForm(){
           </div>
           {/* SKU / Product — always editable; in REVIEW it is pushable via the Push button */}
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>
               SKU / Product *{activeBatchRowId&&<span style={{fontSize:8,color:C.green,marginLeft:4,fontWeight:400}}>(pushable)</span>}
             </div>
             <Inp value={spec.product} onChange={v=>s("product",v)}/>
@@ -213,7 +213,7 @@ export default function SpecForm(){
         })()}
         {/* Glass SKU Type — Alcobev partitions only */}
         {spec.sector==="ALCOBEV"&&(spec.rowType==="Part-L"||spec.rowType==="Part-W")&&<div style={{marginTop:6,padding:"8px 10px",background:"#EEF4FB",border:"1px solid #6A9FD433",borderRadius:6}}>
-          <div style={{fontSize:9,color:"#2E6094",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>
+          <div style={{fontSize:9,color:"#2E6094",fontWeight:700,textTransform:"uppercase",marginBottom:4,textAlign:"center"}}>
             Glass SKU Type <span style={{fontSize:8,fontWeight:400}}>(auto-fills Nos/Set)</span>
           </div>
           <Sel value={spec.skuType||""} onChange={v=>{
@@ -244,20 +244,20 @@ export default function SpecForm(){
         The retained construction is a starting default only, not a recommendation for this SET role.
       </div>}
       <div style={card}>
-        <SH title="Dimensions & Construction"/>
+        <SH title="Box Specifications"/>
         {/* Row 1: L W H Ups Dim */}
         <div style={{display:"grid",gridTemplateColumns:"62px 62px 62px 1fr 56px",gap:"4px 5px",marginBottom:4}}>
           {[["L","L (mm)"],["W","W (mm)"],["H","H (mm)"]].map(([k,lbl])=>(
             <div key={k}>
-              <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{lbl}</div>
+              <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>{lbl}</div>
               <Inp value={spec[k]} onChange={v=>s(k,v)} type="number"/>
             </div>))}
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Ups</div>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>Ups</div>
             <Inp value={spec.ups} onChange={v=>s("ups",+v)} type="number"/>
           </div>
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Dim</div>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>Dim</div>
             <Sel value={spec.dimType} onChange={v=>s("dimType",v)} opts={["ID","OD"]}/>
           </div>
         </div>
@@ -266,15 +266,15 @@ export default function SpecForm(){
             for non-price-driving print specification metadata. */}
         <div style={{display:"grid",gridTemplateColumns:"84px 68px 56px minmax(0,1fr)",gap:"4px 5px",marginBottom:2}}>
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Box Type</div>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>Box Type</div>
             <Sel value={spec.boxType} onChange={v=>s("boxType",v)} opts={BOX_TYPES}/>
           </div>
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Ply</div>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>Ply</div>
             <Sel value={spec.ply} onChange={v=>s("ply",+v)} opts={[{v:3,l:"3-ply"},{v:5,l:"5-ply"}]}/>
           </div>
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Colours</div>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>Colours</div>
             <input type="number" min="0" step="1" value={spec.number_of_colours??""}
               disabled={!!activeBatchRowId} aria-label="Number of colours"
               title={activeBatchRowId
@@ -290,7 +290,7 @@ export default function SpecForm(){
                 cursor:activeBatchRowId?"not-allowed":"text"}}/>
           </div>
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Print Tech</div>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>Print Tech</div>
             <select value={spec.printing_technology??""}
               disabled={!!activeBatchRowId} aria-label="Print technology"
               title={activeBatchRowId
@@ -313,7 +313,7 @@ export default function SpecForm(){
         <SH title="Paper Construction"/>
         <div style={{display:"grid",gridTemplateColumns:"72px 1fr 80px 52px",gap:"3px 5px",
           fontSize:9,color:C.slateL,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>
-          <div>Layer</div><div>Grade</div><div style={{textAlign:"center"}}>GSM</div><div style={{textAlign:"center"}}>Flute</div>
+          <div style={{textAlign:"center"}}>Layer</div><div style={{textAlign:"center"}}>Grade</div><div style={{textAlign:"center"}}>GSM</div><div style={{textAlign:"center"}}>Flute</div>
         </div>
         {[["TOP","TOP Liner",false,null],["F1","F1 Medium",true,"flute_F1"],
           ["L1","L1 Liner",false,null],["F2","F2 Medium",true,"flute_F2"],["L2","L2 Liner",false,null]]
@@ -332,7 +332,7 @@ export default function SpecForm(){
           </div>))}
       </div>
       <div style={card}>
-        <SH title="Board Specifications"/>
+        <SH title="Output Specifications"/>
         {(()=>{
           // Tolerance order cycles on click: min → avg → max → min
           const TOL_SEQ=["min","avg","max"];
@@ -460,7 +460,7 @@ export default function SpecForm(){
         {/* Volume + MOQ — compact 2-col layout */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 8px",marginBottom:5}}>
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>
               Volume (nos/month) <span style={{color:C.red}}>*</span></div>
             <Inp value={spec.volume} onChange={v=>s("volume",v)} type="number" step="100" placeholder="boxes/mo"/>
             {r?.calcMOQ&&<div style={{fontSize:9,color:C.slateL,marginTop:2,display:"flex",gap:4}}>
@@ -471,7 +471,7 @@ export default function SpecForm(){
             </div>}
           </div>
           <div>
-            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>
+            <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",marginBottom:2,textAlign:"center"}}>
               Proposed MOQ (boxes)</div>
             <div style={{display:"flex",gap:4,alignItems:"center"}}>
               <Inp value={spec.salesMOQ} onChange={v=>s("salesMOQ",v)} type="number" placeholder="boxes"/>
@@ -652,7 +652,7 @@ export default function SpecForm(){
           {[["printing","Printing","Rs/pc"],["stitching","Stitching","Rs/pc"],["coating","Coating","Rs/pc"],["handling","Non-Std Hdlg","Rs/pc"],
             ["moqCharge","MOQ Chg","Rs/pc"],["packing","Packing","Rs/pc"],["other","Other","Rs/pc"],["unloading","Unloading","Rs/pc"]].map(([k,lbl,unit])=>(
             <div key={k}>
-              <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:1}}>{lbl}</div>
+              <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:1,textAlign:"center"}}>{lbl}</div>
               <div style={{display:"flex",alignItems:"center",gap:2}}>
                 <input value={spec[k]??0} type="number" step="0.25" onChange={e=>s(k,+e.target.value)}
                   style={{width:"100%",padding:"4px 5px",border:`1px solid ${C.border}`,borderRadius:4,fontSize:11,textAlign:"center",boxSizing:"border-box",fontFamily:mono}}/>
