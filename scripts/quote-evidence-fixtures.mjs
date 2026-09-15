@@ -105,7 +105,7 @@ check(shell.includes('tab==="approvalinbox"') && shell.includes('mode="inbox"')
   "U5-FE-23 Approval Inbox remains routed while Quote History is consolidated into Quotes");
 check(sidebar.includes('item("approvalinbox"') && sidebar.includes('hasCapability(profile,"check_quote")')
   && sidebar.includes('item("items"') && !sidebar.includes('item("quotehistory"')
-  && workspace.includes('{ id: "history", label: "Quote History" }')
+  && workspace.includes('{ id: "history", label: "Quote History", provenance: "immutable" }')
   && workspace.includes('<QuoteCatalogueScreen mode="history"'),
   "U5-FE-24 Approval Inbox stays capability-aware and Quote History is the third Quotes tab");
 check(uiState.includes('const[quoteView,setQuoteView]=useState("working-items")')

@@ -5,11 +5,15 @@ import { useAppState } from "../state/AppStateContext.js";
 import QuoteCatalogueScreen from "./QuoteCatalogueScreen.jsx";
 import QuoteItemsTab from "./QuoteItemsTab.jsx";
 import QuotesScreen from "./QuotesScreen.jsx";
+import { ProvenanceTag } from "../ui/dataDisplay.jsx";
 
+// Each view carries the shared provenance tag, so local working items and
+// immutable governed evidence are told apart by a stable visual signal, not
+// only by banner text (UX policy §3).
 const QUOTE_VIEWS = [
-  { id: "working-items", label: "Working Quote Items" },
-  { id: "governed", label: "Governed Quote evidence" },
-  { id: "history", label: "Quote History" },
+  { id: "working-items", label: "Working Quote Items", provenance: "local" },
+  { id: "governed", label: "Governed Quote evidence", provenance: "immutable" },
+  { id: "history", label: "Quote History", provenance: "immutable" },
 ];
 
 export default function QuotesWorkspace({ fixtureOnly = false, initialView = "working-items", onExitFixture }) {
@@ -73,7 +77,9 @@ export default function QuotesWorkspace({ fixtureOnly = false, initialView = "wo
     <div className="quotes-view-switch" role="tablist" aria-label="Quotes views">
       {QUOTE_VIEWS.map(option => <button type="button" role="tab" key={option.id}
         aria-selected={view === option.id} className={view === option.id ? "is-active" : ""}
-        onClick={() => selectView(option.id)}>{option.label}</button>)}
+        onClick={() => selectView(option.id)}>
+        {option.label} <ProvenanceTag kind={option.provenance} style={{ marginLeft: 4, verticalAlign: "middle" }} />
+      </button>)}
     </div>
     {view === "governed" && <QuotesScreen fixtureOnly={fixtureOnly} embedded showFixtureBanner={false}
       onOpenSourceBatch={fixtureOnly ? null : openSourceBatch} sourceBatchState={sourceBatchState} />}

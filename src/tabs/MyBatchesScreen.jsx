@@ -4,7 +4,7 @@ import { U4_BATCH_CATALOGUE_ILLUSTRATION, searchableBatchText } from "../lib/bat
 import { classifyResponse } from "../lib/backendError.js";
 import { useAppState } from "../state/AppStateContext.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
-import { LifecycleBadge, PermanentCode } from "../ui/dataDisplay.jsx";
+import { LifecycleBadge, PermanentCode, ProvenanceTag } from "../ui/dataDisplay.jsx";
 
 const ACTION_LABELS = {
   calculate: "Calculate", send: "Send", submit: "Submit",
@@ -189,8 +189,9 @@ export default function MyBatchesScreen({ fixtureOnly = false, onExitFixture }) 
             <td><div className="batch-catalogue-actions"><button type="button" onClick={() => openBatch(row)}
               disabled={opening.status === "loading"}>
               {opening.status === "loading" && String(opening.id) === String(row.id) ? "Opening…" : "Open in Batch Builder"}
+              {" "}<ProvenanceTag kind="governed" style={{ verticalAlign: "middle" }} />
             </button><button type="button" onClick={() => openQuoteEvidence(row)} disabled={fixtureOnly}>
-              Open Quote evidence
+              Open Quote evidence{" "}<ProvenanceTag kind="immutable" style={{ verticalAlign: "middle" }} />
             </button></div></td>
           </tr>)}</tbody>
         </table></div>}

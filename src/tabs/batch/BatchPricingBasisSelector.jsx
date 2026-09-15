@@ -193,12 +193,14 @@ export default function BatchPricingBasisSelector({
                 onClick={() => setDraft(current => ({ ...current,
                   releaseId: automatic?.id ?? null, selectionMode: "automatic_default" }))}
                 disabled={read.status !== "ready"} title="Use the automatic default">AUTO</button>
+              {/* §2.5: an unchanged selection reads "Saved" on the button itself,
+                  so the disabled state is never explained by tooltip alone. */}
               <button type="button" className="batch-pb-save" onClick={persist}
                 disabled={!canPersist || saving}
                 title={!dirty ? "No Pricing Basis change to save"
                   : !canPersist ? "Choose an eligible Release, or use the automatic default"
                     : "Persist through the governed Batch operation"}>
-                {saving ? "Saving…" : "Save"}
+                {saving ? "Saving…" : dirty ? "Save" : "Saved"}
               </button>
             </div>}
           </div>

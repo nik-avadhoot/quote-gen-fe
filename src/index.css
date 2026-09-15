@@ -2043,6 +2043,30 @@ code {
   letter-spacing: .025em;
   text-transform: uppercase;
 }
+/* Pending navigation reasons are visually distinct (UX policy §3):
+   Restricted = needs a capability grant; Planned/Future/Disabled = not built or
+   not enabled; Included = lives inside another screen; Activation = backend
+   activation pending. */
+.sidebar-nav-pending.is-restricted small {
+  border-color: rgb(229 138 63 / 60%);
+  color: #f3a35e;
+}
+.sidebar-nav-pending.is-restricted small::before { content: "🔒 "; }
+.sidebar-nav-pending.is-planned small,
+.sidebar-nav-pending.is-future small,
+.sidebar-nav-pending.is-disabled small {
+  border-style: dashed;
+  color: rgb(255 255 255 / 42%);
+}
+.sidebar-nav-pending.is-planned strong,
+.sidebar-nav-pending.is-future strong,
+.sidebar-nav-pending.is-disabled strong { font-style: italic; }
+.sidebar-nav-pending.is-included small { border-color: rgb(255 255 255 / 12%); }
+.sidebar-nav-pending.is-activation small {
+  border-color: rgb(120 180 230 / 55%);
+  color: rgb(170 210 240);
+}
+
 .sidebar-shell.is-collapsed .sidebar-nav { padding-inline: 7px; }
 .sidebar-shell.is-collapsed .sidebar-nav-section + .sidebar-nav-section { margin-top: 6px; }
 .sidebar-shell.is-collapsed .sidebar-nav-items { gap: 3px; padding: 0; }

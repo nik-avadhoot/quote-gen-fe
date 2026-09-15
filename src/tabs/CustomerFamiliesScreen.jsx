@@ -51,7 +51,7 @@ import {
   retireLocationConfirmMessage, hasIncompleteDetails, LOCATION_TYPE_OPTS,
 } from "../lib/customerLocationActions.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
-import { LifecycleBadge, PermanentCode, SummaryRow, VersionHistory } from "../ui/dataDisplay.jsx";
+import { LifecycleBadge, PermanentCode, ProvenanceTag, SummaryRow, VersionHistory } from "../ui/dataDisplay.jsx";
 import CapabilityGate from "../ui/CapabilityGate.jsx";
 import { Btn, Inp, Sel } from "../ui/primitives.jsx";
 import { inputSt } from "../ui/styles.js";
@@ -960,6 +960,8 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
       <div style={{ marginTop: 16 }}>
         <div style={{ fontSize: T.label, fontWeight: 800, color: C.slateM, textTransform: "uppercase", marginBottom: 6 }}>
           Current Customers / Prospects — {current.length}
+          {/* Edits here are governed, versioned Master changes — not local drafts. */}
+          <ProvenanceTag kind="governed" style={{ marginLeft: 6, verticalAlign: "middle" }} />
         </div>
         {!current.length && <div style={{ fontSize: T.body, color: C.slateL }}>None currently.</div>}
         {!!current.length && <div style={{ overflowX: "auto", border: `1px solid ${C.border}`, borderRadius: 7 }}>

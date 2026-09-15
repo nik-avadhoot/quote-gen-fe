@@ -44,6 +44,40 @@ export const LifecycleBadge = ({ status }) => {
   );
 };
 
+// One visual signal for where a value lives (UX policy §3 "working vs
+// governed"): local browser state, a governed record that can still change
+// through versioned operations, or immutable evidence. The word is always
+// visible; the title only adds detail.
+const PROVENANCE = {
+  local: {
+    label: "Local", title: "Kept in this browser only — not a governed record",
+    color: C.amberD, background: C.amberL, border: `1px dashed ${C.amber}`,
+  },
+  governed: {
+    label: "Governed", title: "Saved to the governed database; changes are versioned and audited",
+    color: C.slateM, background: C.white, border: `1px solid ${C.slateL}`,
+  },
+  immutable: {
+    label: "Immutable", title: "Frozen evidence — never edited in place",
+    color: C.white, background: C.slateM, border: `1px solid ${C.slateM}`,
+  },
+};
+
+export const ProvenanceTag = ({ kind, label, style: sx = {} }) => {
+  const p = PROVENANCE[kind] || PROVENANCE.local;
+  return (
+    <span title={p.title} style={{
+      display: "inline-flex", alignItems: "center", gap: 3, borderRadius: 999,
+      padding: "1px 6px", fontSize: T.micro, fontWeight: 800, lineHeight: 1.4,
+      letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap",
+      color: p.color, background: p.background, border: p.border, fontFamily: sans, ...sx,
+    }}>
+      {kind === "immutable" && <span aria-hidden="true">🔒</span>}
+      {label || p.label}
+    </span>
+  );
+};
+
 const SUMMARY_STATUS_TONES = {
   neutral: { color: C.slateM, background: C.paper },
   positive: { color: C.green, background: C.greenL },

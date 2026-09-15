@@ -49,29 +49,23 @@ export default function LoginScreen({ onU3Illustration, onU4CatalogueIllustratio
           {busy ? "Signing in…" : "Sign in"}
         </button>
 
-        {onU3Illustration && (
-          <button type="button" onClick={onU3Illustration}
-            style={{ width: "100%", marginTop: 10, padding: "7px 0", borderRadius: 6,
-              border: `1px solid ${C.border}`, background: C.cream, color: C.slateM,
-              fontWeight: 650, fontSize: 10.5, cursor: "pointer", fontFamily: sans }}>
-            Preview U3–U4 · labelled fixture only
-          </button>
-        )}
-        {onU5Illustration && (
-          <button type="button" onClick={onU5Illustration}
-            style={{ width: "100%", marginTop: 7, padding: "7px 0", borderRadius: 6,
-              border: `1px solid ${C.border}`, background: C.cream, color: C.slateM,
-              fontWeight: 650, fontSize: 10.5, cursor: "pointer", fontFamily: sans }}>
-            Preview U5 Quote evidence · fixture only
-          </button>
-        )}
-        {onU4CatalogueIllustration && (
-          <button type="button" onClick={onU4CatalogueIllustration}
-            style={{ width: "100%", marginTop: 7, padding: "7px 0", borderRadius: 6,
-              border: `1px solid ${C.border}`, background: C.cream, color: C.slateM,
-              fontWeight: 650, fontSize: 10.5, cursor: "pointer", fontFamily: sans }}>
-            Preview My Batches · labelled fixture only
-          </button>
+        {/* Development-only fixture previews (App.jsx passes these handlers only
+            in a DEV build). Demoted below a divider as plain text links so they
+            never compete with Sign in (UX policy §3). */}
+        {(onU3Illustration || onU5Illustration || onU4CatalogueIllustration) && (
+          <div style={{ marginTop: 18, paddingTop: 10, borderTop: `1px dashed ${C.border}` }}>
+            <div style={{ fontSize: 8.5, color: C.slateL, fontWeight: 700, textTransform: "uppercase",
+              letterSpacing: "0.06em", marginBottom: 4 }}>Developer previews · fixture data only</div>
+            {[[onU3Illustration, "U3–U4 Pricing Basis"],
+              [onU5Illustration, "U5 Quote evidence"],
+              [onU4CatalogueIllustration, "My Batches"]].filter(([handler]) => handler).map(([handler, label]) => (
+              <button key={label} type="button" onClick={handler}
+                style={{ display: "block", padding: "2px 0", border: 0, background: "transparent",
+                  color: C.slateL, fontSize: 10, textDecoration: "underline", cursor: "pointer", fontFamily: sans }}>
+                Preview {label}
+              </button>
+            ))}
+          </div>
         )}
       </form>
     </div>

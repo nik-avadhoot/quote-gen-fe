@@ -105,9 +105,13 @@ export default function Sidebar(){
           <span>{section}</span><small>{entries.length}</small><b aria-hidden="true">{openSections.has(section) ? "−" : "+"}</b>
         </button>}
         {(sidebarCollapsed || openSections.has(section))&&<div className="sidebar-nav-items">{entries.map(entry=>{
-          if (entry.pending) return !sidebarCollapsed&&<div key={entry.label} className="sidebar-nav-pending"
+          // The reason is styled, not just named: a Restricted item needs a
+          // capability grant, while Planned/Future/Disabled ones are not built or
+          // not enabled yet — the user's next step differs completely.
+          if (entry.pending) { const status = pendingStatus(entry.detail);
+            return !sidebarCollapsed&&<div key={entry.label} className={`sidebar-nav-pending is-${status.toLowerCase()}`}
             title={`${entry.label} · ${entry.detail}`} aria-disabled="true"><span className="sidebar-nav-icon">{entry.icon}</span>
-            <strong>{entry.label}</strong><small>{pendingStatus(entry.detail)}</small></div>;
+            <strong>{entry.label}</strong><small>{status}</small></div>; }
           const { id:t, icon, label:l, count, detail }=entry;
           return <button key={t} onClick={()=>{
             setOpenSections(current => current.has(section)

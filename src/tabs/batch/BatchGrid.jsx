@@ -172,7 +172,9 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
           <Btn ch="⚡ Calculate All" v="primary" sm onClick={calculateAll}
             disabled={batchRows.length===0||constructionLib.length===0}
             style={{whiteSpace:"nowrap",flexShrink:0}}/>
-          <Btn ch="→ Send All to Quote Items" v="success" sm onClick={sendAllToQuoteItems}
+          {/* §2.5: the disabled reason is stated on the button, not only by its greyed state. */}
+          <Btn ch={Object.keys(batchResults).length===0?"→ Send All to Quote Items (calculate first)":"→ Send All to Quote Items"}
+            v="success" sm onClick={sendAllToQuoteItems}
             disabled={Object.keys(batchResults).length===0}
             style={{whiteSpace:"nowrap",flexShrink:0}}/>
           <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
