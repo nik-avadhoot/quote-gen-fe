@@ -390,6 +390,16 @@ export function skuSetGroups(rows) {
   return order.map(k => byKey[k]);
 }
 
+// Panel focus fills the SKU Master area with one panel, inside the app window
+// (never the browser Fullscreen API). The split is kept for when focus ends.
+export const PANEL_FOCUS = ["list", "detail"];
+
+export function panelLayout(split, focus) {
+  if (focus === "list") return { listWidth: "100%", showList: true, showDetail: false, showDivider: false };
+  if (focus === "detail") return { listWidth: "0px", showList: false, showDetail: true, showDivider: false };
+  return { listWidth: `calc(${clampSplit(split)}% - 3.5px)`, showList: true, showDetail: true, showDivider: true };
+}
+
 export function clampSplit(percent) {
   const n = Number(percent);
   if (!Number.isFinite(n)) return SPLIT_DEFAULT;

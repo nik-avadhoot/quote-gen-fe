@@ -11,9 +11,9 @@
 // entry and the mount, and that the screen is read-only.
 import fs from "node:fs";
 import {
-  NOT_VISIBLE, PENDING, SPEC_FIELD_KEYS, SPLIT_DEFAULT, UNAVAILABLE, adoptionLabel, applicabilityLocationLabel,
+  NOT_VISIBLE, PANEL_FOCUS, PENDING, SPEC_FIELD_KEYS, SPLIT_DEFAULT, UNAVAILABLE, adoptionLabel, applicabilityLocationLabel,
   canOpenSkuMaster, clampSplit, constructionLabel, customerLabel, dimensionSummary, familyLabel, formatMeasure,
-  gridCellText, latestVersionFacts, normaliseSkuCatalogue, plantItemCodeLabel, qtyPerSetText, replacementLabel,
+  gridCellText, latestVersionFacts, normaliseSkuCatalogue, panelLayout, plantItemCodeLabel, qtyPerSetText, replacementLabel,
   schemaPendingNotice, skuCatalogueQuery, skuPlantScope, skuSearchValidation, skuSetGroups, skuSetView,
   specFieldCell, specRowFromCatalogue, specRowFromDetail, specificationRows, unrecordedFieldsNotice, visibilityText,
 } from "../src/lib/skuMasterModel.js";
@@ -220,6 +220,19 @@ check(SPLIT_DEFAULT === 50 && clampSplit(10) === 25 && clampSplit(90) === 75 && 
   && clampSplit("x") === 50,
   "U2-SKU-FE-44 the split opens at 50 : 50 and stays between 25 % and 75 %");
 
+// ───────────────────────────────────────────────────────────── panel focus
+const both = panelLayout(62, null);
+const listFocus = panelLayout(62, "list");
+const detailFocus = panelLayout(62, "detail");
+check(both.showList && both.showDetail && both.showDivider && both.listWidth === "calc(62% - 3.5px)"
+  && panelLayout(90, null).listWidth === "calc(75% - 3.5px)",
+  "U2-SKU-FE-55 without focus both panels and the divider show at the clamped split");
+check(listFocus.showList && !listFocus.showDetail && !listFocus.showDivider && listFocus.listWidth === "100%"
+  && !detailFocus.showList && detailFocus.showDetail && !detailFocus.showDivider,
+  "U2-SKU-FE-56 focusing a panel fills the area with it and hides the other panel and the divider");
+check(PANEL_FOCUS.join() === "list,detail",
+  "U2-SKU-FE-57 exactly the list and the detail panel can take focus");
+
 // ──────────────────────────────────────────────────── gating and read-only
 const screen = read("../src/tabs/SkuMasterScreen.jsx");
 const sidebar = read("../src/ui/Sidebar.jsx");
@@ -255,6 +268,22 @@ check(screen.includes('role="separator"') && screen.includes("onPointerDown={sta
 check(screen.includes("SKU_SPEC_GROUPS") && screen.includes("PRODUCTION_BACKLOG") && screen.includes("specFieldCell(c.key, row, ctx)")
   && screen.includes("specFieldCell(f.key, row, ctx)"),
   "U2-SKU-FE-54 grid and deep-dive both render from the registry through the one field rule");
+
+check(screen.includes('onClick={() => toggleFocus("list")}') && screen.includes('onClick={() => toggleFocus("detail")}')
+  && screen.includes('aria-pressed={focusPanel === "list"}') && screen.includes('aria-pressed={focusPanel === "detail"}')
+  && screen.includes("layout.showList &&") && screen.includes("layout.showDetail &&") && screen.includes("layout.showDivider &&"),
+  "U2-SKU-FE-58 each panel has its own focus toggle, and focus hides the other panel and the divider");
+check(screen.includes("setSidebarCollapsed(true)") && screen.includes("setSidebarCollapsed(sidebarBeforeFocus.current)")
+  && (screen.match(/setSidebarCollapsed\(sidebarBeforeFocus\.current\)/g) || []).length === 2,
+  "U2-SKU-FE-59 focus collapses the app navigation and restores it on exit and when the screen unmounts");
+check(screen.includes('e.key === "Escape" && focusRef.current') && screen.includes("onKeyDown={exitFocusOnEscape}")
+  && !/requestFullscreen|fullscreenElement|window\.addEventListener\("keydown"/.test(screen),
+  "U2-SKU-FE-60 Escape exits focus through a screen-scoped handler; the browser Fullscreen API is never used");
+check(screen.includes('disabled={selectedId == null && focusPanel !== "detail"}')
+  && screen.includes('focusPanel === "detail" ? 3'),
+  "U2-SKU-FE-61 detail focus needs a selected SKU and spreads fields across three columns");
+check(app.includes("<AppStateProvider>\n      <SkuMasterScreen fixtureOnly"),
+  "U2-SKU-FE-62 the fixture preview mounts inside the app state provider like the other previews");
 
 console.log(`\n${passes} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);

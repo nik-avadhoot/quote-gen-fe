@@ -10,7 +10,11 @@
 // Left: SKUs row by row with the CDM-43 fields in SPEC sheet groups and sheet
 // order, code and short name frozen. Right: one SKU in depth. The divider opens
 // at 50 : 50 and can be dragged, or moved with the arrow keys, between 25 % and
-// 75 %; double-click restores 50 : 50.
+// 75 %; double-click restores 50 : 50. Either panel can take focus and fill the
+// SKU Master area inside the app window: the other panel and the divider hide,
+// the app navigation collapses (the Batch Builder focus-mode precedent), and
+// Exit focus or Escape restores both panels, the split and the navigation. The
+// browser Fullscreen API is deliberately not used.
 //
 // ── HONEST STATES ─────────────────────────────────────────────────────────
 // loading, access denied (403 — never an empty list), error with retry,
@@ -29,6 +33,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
+import { useAppState } from "../state/AppStateContext.js";
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
 import { SKU_FIXTURE_DETAILS, fixtureSkuCatalogue } from "../lib/skuMasterFixture.js";
@@ -38,7 +43,7 @@ import {
 import {
   APPLICABILITY_SCOPE_LABELS, REFERENCE_KIND_LABELS, SKU_STATUSES, SPLIT_DEFAULT, adoptionLabel,
   applicabilityLocationLabel, clampSplit, constructionLabel, customerLabel, familyLabel, gridCellText,
-  normaliseSkuCatalogue, plantItemCodeLabel, plantLabel, replacementLabel, schemaPendingNotice,
+  normaliseSkuCatalogue, panelLayout, plantItemCodeLabel, plantLabel, replacementLabel, schemaPendingNotice,
   skuCatalogueQuery, skuPlantScope, skuSearchValidation, skuSetGroups, skuSetView, specFieldCell,
   specRowFromCatalogue, specRowFromDetail, visibilityText,
 } from "../lib/skuMasterModel.js";
@@ -62,6 +67,10 @@ const control = { fontSize: T.body, padding: "4px 7px", borderRadius: 5, border:
 const chip = (on, onInk = C.white, onBg = C.slateM) => ({ height: 22, padding: "1px 8px", borderRadius: 999, cursor: "pointer",
   fontSize: T.label, fontWeight: 700, whiteSpace: "nowrap", fontFamily: sans,
   color: on ? onInk : C.slateM, background: on ? onBg : C.white, border: `1px solid ${on ? onBg : C.border}` });
+// Same treatment as Batch Builder's Focus mode toggle.
+const focusButton = (on, disabled) => ({ padding: "3px 9px", borderRadius: 5, border: `1px solid ${on ? C.green : C.border}`,
+  background: on ? C.greenL : C.white, color: disabled ? C.slateL : on ? C.green : C.slateM, fontSize: T.label,
+  cursor: disabled ? "default" : "pointer", fontWeight: 700, whiteSpace: "nowrap", fontFamily: sans, opacity: disabled ? 0.6 : 1 });
 
 const isPlain = state => state === "value" || state === "na";
 const fieldTag = f => f.origin === "new" ? "NEW" : f.origin === "app" ? "APP" : f.authority ? "CON" : "";
@@ -97,6 +106,26 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   const [hiddenGroups, setHiddenGroups] = useState([]);
   const [groupBySet, setGroupBySet] = useState(false);
   const bodyRef = useRef(null);
+  const { setSidebarCollapsed, sidebarCollapsed } = useAppState();
+  const [focusPanel, setFocusPanel] = useState(null); // null · "list" · "detail"
+  const focusRef = useRef(null);
+  const sidebarBeforeFocus = useRef(sidebarCollapsed);
+
+  const setFocus = next => {
+    const was = focusRef.current;
+    if (next && !was) {
+      sidebarBeforeFocus.current = sidebarCollapsed;
+      setSidebarCollapsed(true);
+    }
+    if (!next && was) setSidebarCollapsed(sidebarBeforeFocus.current);
+    focusRef.current = next;
+    setFocusPanel(next);
+  };
+  const toggleFocus = panel => setFocus(focusRef.current === panel ? null : panel);
+  // Leaving the screen while focused must not strand the navigation collapsed.
+  useEffect(() => () => {
+    if (focusRef.current) setSidebarCollapsed(sidebarBeforeFocus.current);
+  }, [setSidebarCollapsed]);
 
   const scope = fixtureOnly ? ["NAG", "PUN"] : skuPlantScope(profile);
   const query = skuCatalogueQuery(filters);
@@ -192,6 +221,10 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
     if (e.key === "ArrowLeft") { e.preventDefault(); setSplit(s => clampSplit(s - 5)); }
     if (e.key === "ArrowRight") { e.preventDefault(); setSplit(s => clampSplit(s + 5)); }
   };
+  // Scoped to this screen, and only while a panel is focused.
+  const exitFocusOnEscape = e => {
+    if (e.key === "Escape" && focusRef.current) { e.preventDefault(); setFocus(null); }
+  };
 
   const fixtureBanner = fixtureOnly && (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 16px", background: C.amberL,
@@ -214,10 +247,11 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   const partyFiltersVisible = customerVisibility === "visible";
   const gridCtx = { visibility: catalogue.visibility || {}, schemaPending: catalogue.schemaPending || {} };
   const pendingNotice = schemaPendingNotice(catalogue.schemaPending);
-  const fieldCols = split >= 62 ? 1 : 2;
+  const layout = panelLayout(split, focusPanel);
+  const fieldCols = focusPanel === "detail" ? 3 : split >= 62 ? 1 : 2;
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", fontFamily: sans, background: C.cream }}>
+    <div onKeyDown={exitFocusOnEscape} style={{ height: "100%", display: "flex", flexDirection: "column", fontFamily: sans, background: C.cream }}>
       {fixtureBanner}
       <div style={{ padding: "10px 16px 8px", borderBottom: `1px solid ${C.border}`, background: C.white }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
@@ -240,8 +274,8 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
       </div>
 
       <div ref={bodyRef} style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        <div style={{ width: `calc(${split}% - 3.5px)`, flex: "0 0 auto", minWidth: 0, display: "flex", flexDirection: "column",
-          background: C.white }}>
+        {layout.showList && <div aria-label="SKU list" style={{ width: layout.listWidth, flex: layout.showDetail ? "0 0 auto" : "1 1 auto",
+          minWidth: 0, display: "flex", flexDirection: "column", background: C.white }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px 7px",
             borderBottom: `1px solid ${C.border}`, background: "#FBF8F3" }}>
             <form onSubmit={applySearch} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -286,6 +320,9 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
               <span style={{ flex: "1 1 auto" }} />
               <button type="button" onClick={() => setGroupBySet(v => !v)} aria-pressed={groupBySet}
                 style={chip(groupBySet, C.white, C.green)}>Group rows by SKU Set</button>
+              <button type="button" aria-pressed={focusPanel === "list"} onClick={() => toggleFocus("list")}
+                title={focusPanel === "list" ? "Show both panels again (Esc)" : "Fill the SKU Master area with the list"}
+                style={focusButton(focusPanel === "list")}>{focusPanel === "list" ? "Exit focus" : "Focus list"}</button>
             </div>
           </div>
 
@@ -310,11 +347,12 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
               {catalogue.status === "ready" ? `${gridRows.length} SKU${gridRows.length === 1 ? "" : "s"}` : "—"}
               {catalogue.truncated ? ` · first ${catalogue.limit} shown — refine the search` : ""}
             </span>
+            {focusPanel === "list" && <span>List in focus · Esc to exit</span>}
             <span style={{ marginLeft: "auto" }}>Blank = not recorded · CON = Construction authority · NEW = added field · APP = set in the app</span>
           </div>
-        </div>
+        </div>}
 
-        <div role="separator" aria-orientation="vertical" aria-label="Resize SKU list and SKU detail"
+        {layout.showDivider && <div role="separator" aria-orientation="vertical" aria-label="Resize SKU list and SKU detail"
           aria-valuemin={25} aria-valuemax={75} aria-valuenow={split} tabIndex={0}
           onPointerDown={startDrag} onDoubleClick={() => setSplit(SPLIT_DEFAULT)} onKeyDown={nudgeSplit}
           title="Drag to resize · double-click for 50 : 50"
@@ -322,17 +360,25 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
             borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center", gap: 3, touchAction: "none", userSelect: "none" }}>
           {[0, 1, 2].map(i => <span key={i} style={{ width: 3, height: 3, borderRadius: "50%", background: "#B5A898" }} />)}
-        </div>
+        </div>}
 
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: C.cream }}>
+        {layout.showDetail && <div aria-label="SKU detail" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: C.cream }}>
           <div style={{ height: 32, flex: "0 0 32px", display: "flex", alignItems: "center", gap: 5, padding: "0 12px",
             borderBottom: `1px solid ${C.border}`, background: "#FBF8F3" }}>
             <span style={{ fontSize: T.micro, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: C.slateL }}>SKU deep-dive</span>
-            <span style={{ marginLeft: "auto", fontSize: T.label, color: C.slateL }}>Panels {split} : {100 - split}</span>
-            {[[50, "50:50"], [35, "35:65"], [65, "65:35"]].map(([v, label]) => (
+            <span style={{ marginLeft: "auto", fontSize: T.label, color: C.slateL }}>
+              {focusPanel === "detail" ? "Detail in focus · Esc to exit" : `Panels ${split} : ${100 - split}`}
+            </span>
+            {!focusPanel && [[50, "50:50"], [35, "35:65"], [65, "65:35"]].map(([v, label]) => (
               <button key={label} type="button" onClick={() => setSplit(v)} aria-pressed={split === v}
                 style={{ ...chip(split === v), borderRadius: 4, fontFamily: mono }}>{label}</button>
             ))}
+            <button type="button" aria-pressed={focusPanel === "detail"} onClick={() => toggleFocus("detail")}
+              disabled={selectedId == null && focusPanel !== "detail"}
+              title={focusPanel === "detail" ? "Show both panels again (Esc)"
+                : selectedId == null ? "Select a SKU first" : "Fill the SKU Master area with this SKU"}
+              style={focusButton(focusPanel === "detail", selectedId == null && focusPanel !== "detail")}>
+              {focusPanel === "detail" ? "Exit focus" : "Focus detail"}</button>
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 14px 56px" }}>
             {selectedId == null && <EmptyState title="Select a SKU" hint="Its identity, quote and costing fields, SKU Set, versions, references and Location applicability open here." />}
@@ -349,7 +395,7 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
             {selectedId != null && detail.status === "ready" &&
               <SkuDeepDive data={detail.data} fieldCols={fieldCols} onSelectSku={setSelectedId} />}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

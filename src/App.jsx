@@ -51,7 +51,9 @@ function Gate() {
     </AppStateProvider>;
   }
   if (!profile && import.meta.env.DEV && fixtureIllustration === "u2-skus") {
-    return <SkuMasterScreen fixtureOnly onExitFixture={() => setFixtureIllustration(null)} />;
+    return <AppStateProvider>
+      <SkuMasterScreen fixtureOnly onExitFixture={() => setFixtureIllustration(null)} />
+    </AppStateProvider>;
   }
   if (!profile) return <LoginScreen
     onU2SkuIllustration={import.meta.env.DEV ? () => setFixtureIllustration("u2-skus") : undefined}
