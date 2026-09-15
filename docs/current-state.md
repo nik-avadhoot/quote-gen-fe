@@ -64,9 +64,11 @@ record—not another documentation reorganisation.
   and Product Owner validation remain deferred. The Customer Family/Sector migrations are activated
   as `20260915100440` and `20260915100521` (catalogue gate 7/7); the governed Sector master still
   has zero rows, which blocks Family/Prospect/Batch creation until governed Sectors exist.
-- U2 has a read-only, caller-scoped SKU Master (catalogue, immutable versions, specifications,
-  Construction identity, references, Location applicability) behind `u2_sku_master`, fixture-browser
-  verified only.
+- U2 has a read-only, caller-scoped SKU Master behind `u2_sku_master`, rebuilt on Canonical
+  Amendment 02 (CDM-43/44): a split view with the 39 quote and costing SPEC fields row by row, a
+  single-SKU deep-dive, SKU Sets with quantity per member, and the production-data backlog listed
+  only. Its migration is prepared but not applied, so those new fields read as pending on the live
+  project. Fixture-browser verified only.
 - A Family G authenticated-read correction is committed but not applied; until it is, caller-token
   Quote History and Approval Inbox reads that reach a Family G row are refused.
 - U5 read-only Quote workflow presentation is implemented and automated-test verified locally:
