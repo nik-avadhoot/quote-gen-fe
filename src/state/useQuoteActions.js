@@ -72,7 +72,9 @@ export function useQuoteActions(st){
     // saves the second as "…(1).json" and provenance becomes guesswork within hours.
     // HHMM added; the _ts inside the file remains the authority.
     const _p2=n=>String(n).padStart(2,'0');
-    a.download=`CFB_QOS_Backup_${d.getFullYear()}${_p2(d.getMonth()+1)}${_p2(d.getDate())}`
+    // Named for the MFGCanvas platform. Restore validates the file's contents
+    // (_version), never its name, so older CFB_QOS_Backup_* files still restore.
+    a.download=`MFGCanvas_Backup_${d.getFullYear()}${_p2(d.getMonth()+1)}${_p2(d.getDate())}`
       +`_${_p2(d.getHours())}${_p2(d.getMinutes())}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
@@ -90,7 +92,7 @@ export function useQuoteActions(st){
     try{
       const text=await f.text();
       const snap=JSON.parse(text);
-      if(!snap._version)throw new Error('Not a valid CFB QOS backup file');
+      if(!snap._version)throw new Error('Not a valid MFGCanvas backup file');
       // ── DP-2: confirm BEFORE the write, not after the reload ─────────────────
       // Restoring a file replaces the batch grid. Before D-5 the recovery banner
       // stood between a restore and the grid being repopulated, which is the guard

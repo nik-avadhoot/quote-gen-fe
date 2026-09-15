@@ -1903,6 +1903,9 @@ code {
 .sidebar-brand-copy { display: flex; min-width: 0; flex-direction: column; line-height: 1.15; }
 .sidebar-brand-copy strong { overflow: hidden; font-size: 13px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-brand-copy small { margin-top: 3px; color: rgb(255 255 255 / 68%); font-size: 8px; letter-spacing: .1em; }
+/* Three-line brand: MFGCanvas · positioning line · module in use. */
+.sidebar-brand-copy small + small { margin-top: 1px; }
+.sidebar-brand-copy .sidebar-brand-module { color: #f3a35e; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .sidebar-nav {
   flex: 1;
   overflow-x: hidden;

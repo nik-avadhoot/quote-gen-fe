@@ -46,7 +46,7 @@ const exportExcelFull=(items,rates,freight)=>{
 
   // ── CBB+PP sheet ──────────────────────────────────────────────────────────
   const cbbRows=[
-    ["CFB QUOTATION MASTER — COSTING SHEET (CBB + PLATES & PARTITIONS)"],
+    ["AVADHOOT PACKS — COSTING SHEET (CBB + PLATES & PARTITIONS)"],
     ["Client / Party:",firstSpec.client||"","","","Plant / Location:",firstSpec.plant||"","","","Date:",today,"","Ref:",items.map(i=>i.spec.material_code).filter(Boolean).join(", ")],
     ["Sector:",firstSpec.sector||"","","","Producing Plant:",firstSpec.plant||"","","","Default Freight Loc:",firstSpec.delivery||""],
     ["Conv Rate Rs/kg (Box):",firstSpec.convRate||7,"","Conv Rate Rs/kg (Board):",10.5,"","Waste% (Box):",(firstSpec.waste||5)+"%","","Margin%:",(firstSpec.margin||8)+"%","","Customer Interest%:",
@@ -176,7 +176,7 @@ const exportExcelFull=(items,rates,freight)=>{
   ];
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(defRows),"DEFAULTS");
 
-  const _dx=new Date();const fname=`CFB_Quote_${(firstSpec.client||"New").replace(/\s/g,"_")}_${_dx.getFullYear()}${String(_dx.getMonth()+1).padStart(2,"0")}${String(_dx.getDate()).padStart(2,"0")}.xlsx`;
+  const _dx=new Date();const fname=`AvadhootPacks_Quote_${(firstSpec.client||"New").replace(/\s/g,"_")}_${_dx.getFullYear()}${String(_dx.getMonth()+1).padStart(2,"0")}${String(_dx.getDate()).padStart(2,"0")}.xlsx`;
   XLSX.writeFile(wb,fname);
 };
 
@@ -192,7 +192,7 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
   const _dX=new Date();
   const _dtStr=`${_dX.getFullYear()}${String(_dX.getMonth()+1).padStart(2,'0')}${String(_dX.getDate()).padStart(2,'0')}`;
   const f0exp=items[0]?.spec||{};
-  const fnameExp=`CFB_Quote_${(f0exp.client||'New').replace(/\s/g,'_')}_${_dtStr}.xlsx`;
+  const fnameExp=`AvadhootPacks_Quote_${(f0exp.client||'New').replace(/\s/g,'_')}_${_dtStr}.xlsx`;
 
   // Try Python export server first (full openpyxl formatting preserved)
   try{

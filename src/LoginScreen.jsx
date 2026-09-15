@@ -28,10 +28,12 @@ export default function LoginScreen({ onU3Illustration, onU4CatalogueIllustratio
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
           <div aria-hidden="true" style={{ width: 32, height: 32, background: C.amber, borderRadius: 6, display: "flex",
             alignItems: "center", justifyContent: "center", color: C.white, fontSize: 11, fontWeight: 800,
-            letterSpacing: "0.04em" }}>CA</div>
+            letterSpacing: "0.04em" }}>MC</div>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.slate }}>
-            Canvas App
-            <div style={{ fontSize: 9, color: C.slateL, fontWeight: 400 }}>Quotation module · Avadhoot Packs</div>
+            MFGCanvas
+            <div style={{ fontSize: 9, color: C.slateL, fontWeight: 400 }}>Built for Corrugated Packaging</div>
+            <div style={{ fontSize: 9, color: C.amberD, fontWeight: 700, textTransform: "uppercase",
+              letterSpacing: "0.05em", marginTop: 1 }}>Quotation Module</div>
           </div>
         </div>
 

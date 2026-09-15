@@ -94,12 +94,13 @@ export default function Sidebar(){
   return(
   <aside className={`sidebar-shell${sidebarCollapsed ? " is-collapsed" : ""}`} aria-label="Main navigation">
     <div className="sidebar-brand">
-      {/* Platform brand first, current module and organisation second: Canvas
-          App is the base for further modules; Quotation is the module in use. */}
-      <div className="sidebar-brand-mark" title="Canvas App · Quotation">CA</div>
+      {/* Platform brand first (the base for further modules), its positioning
+          line, then the module in use. */}
+      <div className="sidebar-brand-mark" title="MFGCanvas · Quotation Module">MC</div>
       {!sidebarCollapsed&&<div className="sidebar-brand-copy">
-        <strong>Canvas App</strong>
-        <small>QUOTATION · AVADHOOT PACKS</small>
+        <strong>MFGCanvas</strong>
+        <small>Built for Corrugated Packaging</small>
+        <small className="sidebar-brand-module">Quotation Module</small>
       </div>}
     </div>
     <nav className="sidebar-nav">
