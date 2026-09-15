@@ -3,17 +3,17 @@
 //
 // Extracted from QuotationApp.jsx (Phase 7b). Structural move only.
 //
-// Three sections: Customer Details, Commercials (including Terms), Actions.
+// Cards: Customer Details, Commercials, Terms, then the Pricing card passed in.
 //
-// ⚠️ The two buttons in the Actions section are MARKUP ONLY here. Their
-// handlers — copyCostingToProfile (the C11 guard) and startNewBatch (D-2) —
-// were lifted into state/useCostingBatchBridge.js by Phase 7's prerequisite
-// commit, precisely so this extraction could not disturb them. Do not inline
-// either handler back into this file.
+// ⚠️ Import profile and New batch now render in BatchGrid's toolbar, beside
+// Focus mode. Their handlers — copyCostingToProfile (the C11 guard) and
+// startNewBatch (D-2) — still live in state/useCostingBatchBridge.js; the
+// toolbar buttons are markup only. Do not inline either handler anywhere.
 //
 // See D-13: both guards block this state and both point the user at
 // + New Batch, which is the destructive action. Recorded, deliberately unfixed.
 // ═══════════════════════════════════════════════════════════════════════════
+import { cloneElement, useState } from "react";
 import { PLANTS } from "../../data/defaults.js";
 import { normalizeFreightOverrideInput, resolveField, resolveInterest } from "../../engine/resolveAuthority.js";
 import { C, T } from "../../theme.js";
@@ -26,8 +26,8 @@ const profileSectionLabel={color:C.amber,fontWeight:700,fontSize:7.5,
   textTransform:"uppercase",letterSpacing:"0.12em",whiteSpace:"nowrap"};
 
 export default function BatchProfileBar({ pricingCard = null }){
-  const {batchAgeLabel,batchProfile,copyCostingToProfile,freight,locations,
-    sectorCodes,sectors,setBatchProfile,showToast,startNewBatch}=useAppState();
+  const {batchAgeLabel,batchProfile,freight,locations,
+    sectorCodes,sectors,setBatchProfile,showToast}=useAppState();
 
   // ── U1 Slice D — Client is a GOVERNED SELECTION, not free text ───────────
   // Product Owner ruling, 2026-09-08. The whole control moved into
@@ -51,15 +51,34 @@ export default function BatchProfileBar({ pricingCard = null }){
   // exactly as they were.
   const clientFieldEnabled=useFeatureFlag("u1_batch_party_link");
 
+  // Disclosure state for the four profile cards, lifted here so the
+  // "Batch Profile" label can open or collapse them together. Presentation
+  // only — no Batch field reads or writes this.
+  const [openCards,setOpenCards]=useState({customer:false,commercials:false,terms:false,pricing:false});
+  const anyCardOpen=Object.values(openCards).some(Boolean);
+  const setCardOpen=key=>open=>setOpenCards(current=>({...current,[key]:open}));
+  const toggleAllCards=()=>{
+    const next=!anyCardOpen;
+    setOpenCards({customer:next,commercials:next,terms:next,pricing:next});
+  };
+
   return(
     <div className="batch-profile-bar" style={{background:"#FEF8F0",borderBottom:`2px solid ${C.amber}`,
       padding:"4px 12px 4px",flexShrink:0,display:"flex",gap:8,alignItems:"stretch"}}>
 
-      {/* ── SECTION LABEL ── */}
-      <div style={{display:"flex",alignItems:"center",marginRight:2}}>
-        <span style={{color:C.amber,fontWeight:800,fontSize:10,textTransform:"uppercase",
-          letterSpacing:"0.1em",whiteSpace:"nowrap",background:C.amberL,
-          border:`1px solid ${C.amber}55`,borderRadius:4,padding:"3px 6px"}}>Batch Profile</span>
+      {/* ── SECTION LABEL — mirrors the card labels: horizontal while every card
+          is closed, vertical while any card is open. It opens all cards when
+          all are closed, otherwise collapses all. ── */}
+      <div style={{display:"flex",alignItems:anyCardOpen?"stretch":"center",marginRight:2}}>
+        <button type="button" onClick={toggleAllCards} aria-expanded={anyCardOpen}
+          title={anyCardOpen?"Collapse all Batch Profile cards":"Open all Batch Profile cards"}
+          style={{color:C.amber,fontWeight:800,textTransform:"uppercase",whiteSpace:"nowrap",
+            background:C.amberL,border:`1px solid ${C.amber}55`,borderRadius:4,cursor:"pointer",
+            fontFamily:"inherit",lineHeight:1,
+            ...(anyCardOpen
+              ?{writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:T.micro,
+                letterSpacing:"0.08em",padding:"6px 4px"}
+              :{fontSize:10,letterSpacing:"0.1em",padding:"3px 6px"})}}>Batch Profile</button>
       </div>
 
       {/* ── D-5: batch age — SURFACED, NOT GATED ────────────────────────────────
@@ -82,21 +101,22 @@ export default function BatchProfileBar({ pricingCard = null }){
         facts={[batchProfile.client||"No client",batchProfile.sector||"No sector",
           [batchProfile.plant,batchProfile.delivery].filter(Boolean).join(" → ")||"Route unresolved"]}
         status={(batchProfile.customerType||"existing").replace(/^./,c=>c.toUpperCase())}
+        expanded={openCards.customer} onExpandedChange={setCardOpen("customer")}
         verticalTitleWhenExpanded titleStyle={profileSectionLabel}
         style={{minWidth:300,maxWidth:420,flex:"1 1 360px",alignSelf:"stretch"}}
         contentStyle={{padding:0}}>
-      <div style={{padding:"4px 8px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
+      <div style={{padding:"3px 8px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
         <div style={{display:"grid",gridTemplateColumns:"auto 1fr auto 1fr",
-          columnGap:5,rowGap:3,alignItems:"center"}}>
+          columnGap:5,rowGap:2,alignItems:"center"}}>
           {/* Row 1: Client | Sector */}
-          <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Client</span>
+          <span style={{fontSize:9,lineHeight:1,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Client</span>
           {clientFieldEnabled
             ?<BatchClientField batchProfile={batchProfile} setBatchProfile={setBatchProfile}
                showToast={showToast}/>
             :<input value={batchProfile.client||""} onChange={e=>setBatchProfile(p=>({...p,client:e.target.value}))}
                style={{padding:"2px 6px",borderRadius:3,border:`1px solid ${C.border}`,
-                 fontSize:10,background:C.white,color:C.slate,width:90,minWidth:0}}/>}
-          <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Sector</span>
+                 fontSize:10,background:C.white,color:C.slate,width:90,minWidth:0,height:19,boxSizing:"border-box"}}/>}
+          <span style={{fontSize:9,lineHeight:1,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Sector</span>
           <select value={batchProfile.sector||""} onChange={e=>{
               // S7(c) SITE 1. Choosing a Sector used to stamp its four numbers into
               // the profile as literals. That made every one of them look like a
@@ -106,12 +126,12 @@ export default function BatchProfileBar({ pricingCard = null }){
               // the effective values immediately without any stored value moving.
               setBatchProfile(p=>({...p,sector:e.target.value}));
             }} style={{padding:"2px 4px",borderRadius:3,border:`1px solid ${C.border}`,
-              fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90}}>
+              fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90,height:19,boxSizing:"border-box"}}>
             <option value="">— select —</option>
             {sectorCodes.map(s=><option key={s} value={s}>{s}</option>)}
           </select>
           {/* Row 2: Plant | Delivery */}
-          <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Plant</span>
+          <span style={{fontSize:9,lineHeight:1,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Plant</span>
           <select value={batchProfile.plant||""} onChange={e=>{
               const nv=e.target.value;
               setBatchProfile(p=>{
@@ -126,11 +146,11 @@ export default function BatchProfileBar({ pricingCard = null }){
                 return newP;
               });
             }} style={{padding:"2px 4px",borderRadius:3,border:`1px solid ${C.border}`,
-              fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90}}>
+              fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90,height:19,boxSizing:"border-box"}}>
             <option value="">— select —</option>
             {PLANTS.map(o=><option key={o} value={o}>{o}</option>)}
           </select>
-          <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Delivery</span>
+          <span style={{fontSize:9,lineHeight:1,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Delivery</span>
           <select value={batchProfile.delivery||""} onChange={e=>{
               const nv=e.target.value;
               setBatchProfile(p=>{
@@ -140,26 +160,26 @@ export default function BatchProfileBar({ pricingCard = null }){
                 return newP;
               });
             }} style={{padding:"2px 4px",borderRadius:3,border:`1px solid ${C.border}`,
-              fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90}}>
+              fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90,height:19,boxSizing:"border-box"}}>
             <option value="">— select —</option>
             {locations.map(o=><option key={o} value={o}>{o}</option>)}
           </select>
           {/* Row 3: Cust Type | Price Context */}
-          <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Cust Type</span>
+          <span style={{fontSize:9,lineHeight:1,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Cust Type</span>
           <select value={batchProfile.customerType||'existing'}
             onChange={e=>setBatchProfile(p=>({...p,customerType:e.target.value}))}
             style={{padding:"2px 4px",borderRadius:3,border:`1px solid ${C.border}`,
-              fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90}}>
+              fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90,height:19,boxSizing:"border-box"}}>
             <option value="existing">Existing</option>
             <option value="new">New</option>
             <option value="strategic">Strategic</option>
             <option value="spot">Spot</option>
           </select>
-          <span style={{fontSize:9,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Price Ctx</span>
+          <span style={{fontSize:9,lineHeight:1,color:C.slateL,fontWeight:600,whiteSpace:"nowrap"}}>Price Ctx</span>
           <select value={batchProfile.priceContext||'unknown'}
             onChange={e=>setBatchProfile(p=>({...p,priceContext:e.target.value}))}
             style={{padding:"2px 4px",borderRadius:3,border:`1px solid ${C.border}`,
-              fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90}}>
+              fontSize:9,background:C.white,color:C.slate,cursor:"pointer",minWidth:0,width:90,height:19,boxSizing:"border-box"}}>
             <option value="unknown">Unknown</option>
             <option value="sensitive">Sensitive</option>
             <option value="premium">Premium</option>
@@ -211,9 +231,9 @@ export default function BatchProfileBar({ pricingCard = null }){
               border:`1px solid ${ovr?C.amber:C.border}`,
               background:ovr?"#FFF8ED":C.white,fontSize:10,color:C.slate}}/>;
         };
-        // TERMS remains a separate commercial authority area, but now shares the
-        // Commercials card. Its three fields align with the three value columns
-        // without inheriting the Conv/Wst/Mgn header meanings.
+        // TERMS is a separate commercial authority area and again has its own
+        // card, as Costing's context bar already shows it, so neither card grows
+        // past the profile row's baseline. Its fields and guards are unchanged.
         // An absent plant × destination lane remains unavailable, while an explicit
         // zero remains a real governed rate. Stored overrides are detected by
         // presence, not by comparison with today's matrix value.
@@ -230,21 +250,19 @@ export default function BatchProfileBar({ pricingCard = null }){
         const hdr={fontSize:T.micro,lineHeight:1,fontWeight:700,color:C.slateL,
           textAlign:"center",textTransform:"uppercase",letterSpacing:"0.04em"};
         const lbl={fontSize:T.label,fontWeight:700,color:C.slateL,whiteSpace:"nowrap"};
-        const termHdr={fontSize:T.micro,lineHeight:1,fontWeight:700,color:C.slateL,
-          textAlign:"center",whiteSpace:"nowrap"};
         const _termOverrideCount=Number(_isFrOvr)+Number(_intOvr);
         const _effective=(key,fallback)=>isOvr(key)?batchProfile[key]:fallback;
         const _commercialOverrideCount=["convRate","waste","margin","convRatePP","wastePP","marginPP"]
-          .filter(isOvr).length+_termOverrideCount;
-        return(
+          .filter(isOvr).length;
+        return(<>
         <SummaryRow title="Commercials"
           facts={[`Box ${_effective("convRate",defConvBox)}/${_effective("waste",defWstBox)}/${_effective("margin",defMgnBox)}`,
-            `PP ${_effective("convRatePP",defConvPP)}/${_effective("wastePP",defWstPP)}/${_effective("marginPP",defMgnPP)}`,
-            `Fr ${_displayFr===''?"—":_displayFr}`,`PT ≤${batchProfile.paymentDisc||"30"}d`,`Int ${_int.value}%`]}
+            `PP ${_effective("convRatePP",defConvPP)}/${_effective("wastePP",defWstPP)}/${_effective("marginPP",defMgnPP)}`]}
           status={_commercialOverrideCount?`${_commercialOverrideCount} override${_commercialOverrideCount===1?"":"s"}`:"Inherited"}
           statusTone={_commercialOverrideCount?"warning":"neutral"}
+          expanded={openCards.commercials} onExpandedChange={setCardOpen("commercials")}
           verticalTitleWhenExpanded titleStyle={profileSectionLabel}
-          style={{minWidth:300,maxWidth:420,flex:"1 1 360px",alignSelf:"stretch"}}
+          style={{minWidth:240,maxWidth:300,flex:"0 1 250px",alignSelf:"stretch"}}
           contentStyle={{padding:0}}>
         <div style={{padding:"4px 8px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
           {/* Header + data rows grid. The three data columns are PINNED at 52px,
@@ -258,7 +276,7 @@ export default function BatchProfileBar({ pricingCard = null }){
             // The 17px controls previously sat in equal ~29px tracks: their visible
             // edge gap was about 12px. Two 23px tracks leave 6px (half that gap),
             // while the flexible final track receives the recovered height.
-            gridTemplateRows:"8px 23px 23px minmax(0, 1fr)",height:"100%",
+            gridTemplateRows:"12px 23px 23px",
             columnGap:5,rowGap:0,alignItems:"center",minWidth:0}}>
             <div style={hdr}/>
             <div style={hdr}>Conv</div>
@@ -274,15 +292,26 @@ export default function BatchProfileBar({ pricingCard = null }){
             {numField("convRatePP",50,defConvPP)}
             {numField("wastePP",48,defWstPP)}
             {numField("marginPP",46,defMgnPP)}
+          </div>
+        </div>
+        </SummaryRow>
 
-            {/* Independently bordered third row. It starts at column 2 so each
-                field aligns with a value column while its own label—not the
-                Conv/Wst/Mgn header—states its commercial meaning. */}
-            <div style={{gridColumn:"1 / -1",alignSelf:"end",marginTop:2,
-              border:`1px solid ${C.border}`,borderRadius:4,padding:"2px 0 1px"}}>
-              <div style={{display:"grid",gridTemplateColumns:"52px 52px 52px",columnGap:5,alignItems:"end"}}>
-                <label style={{display:"grid",gap:3,minWidth:0}}>
-                  <span style={termHdr}>Freight Rs/kg</span>
+        {/* ── 3. TERMS — its own card, one field per row (label | field), matching
+            the Customer/Commercials row rhythm. Space below the three rows is
+            left free on purpose for later additions. ── */}
+        <SummaryRow title="Terms"
+          facts={[`Fr ${_displayFr===''?"—":_displayFr}`,`PT ≤${batchProfile.paymentDisc||"30"}d`,`Int ${_int.value}%`]}
+          status={_termOverrideCount?`${_termOverrideCount} override${_termOverrideCount===1?"":"s"}`:"Inherited"}
+          statusTone={_termOverrideCount?"warning":"neutral"}
+          expanded={openCards.terms} onExpandedChange={setCardOpen("terms")}
+          verticalTitleWhenExpanded titleStyle={profileSectionLabel}
+          style={{minWidth:170,maxWidth:190,flex:"0 1 180px",alignSelf:"stretch"}}
+          contentStyle={{padding:0}}>
+        <div style={{padding:"4px 8px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"auto 56px",gridTemplateRows:"21px 21px 21px",
+                columnGap:5,rowGap:0,alignItems:"center"}}>
+                <label style={{display:"contents"}}>
+                  <span style={lbl}>Freight Rs/kg</span>
                   <input type="number" step="0.25" min="0" value={_displayFr}
                     aria-label="Freight Rs/kg"
                     onChange={e=>setBatchProfile(p=>({...p,
@@ -294,8 +323,8 @@ export default function BatchProfileBar({ pricingCard = null }){
                       +`${_isFrOvr?" | OVERRIDDEN":""}`}/>
                 </label>
 
-                <label style={{display:"grid",gap:3,minWidth:0}}>
-                  <span style={termHdr} title="Payment Terms derives customer interest">PT</span>
+                <label style={{display:"contents"}}>
+                  <span style={lbl} title="Payment Terms derives customer interest">PT</span>
                   {/* Payment Terms is the input; interest remains a resolved output. */}
                   <select value={batchProfile.paymentDisc||"30"}
                     aria-label="Payment terms"
@@ -315,8 +344,8 @@ export default function BatchProfileBar({ pricingCard = null }){
                   </select>
                 </label>
 
-                <div style={{display:"grid",gap:3,minWidth:0}}>
-                  <span style={termHdr}>Interest</span>
+                <div style={{display:"contents"}}>
+                  <span style={lbl}>Interest</span>
                   <output aria-label="Customer interest"
                     title={_intOvr?"Customer interest override stored on this Batch":"Customer interest derived from governed annual-interest policy"}
                     style={{boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"center",
@@ -328,35 +357,16 @@ export default function BatchProfileBar({ pricingCard = null }){
                   </output>
                 </div>
               </div>
-            </div>
-          </div>
         </div>
-        </SummaryRow>);
+        </SummaryRow>
+        </>);
       })()}
 
-      {pricingCard&&<div className="batch-profile-pricing-card">{pricingCard}</div>}
-
-      {/* ── 3. ACTIONS — Import + New Batch ── */}
-      <SummaryRow title="Actions" facts={["Import profile","New batch"]} status="Ready"
-        verticalTitleWhenExpanded titleStyle={profileSectionLabel}
-        style={{minWidth:160,maxWidth:190,flex:"0 1 180px",alignSelf:"stretch",marginLeft:"auto"}}
-        contentStyle={{padding:0}}>
-        <div style={{height:"100%",padding:"4px 7px",boxSizing:"border-box",
-          display:"flex",gap:4,alignItems:"center"}}>
-          <button onClick={copyCostingToProfile}
-            title="Import the current Costing profile"
-            style={{flex:1,padding:"4px 0",borderRadius:4,border:"none",
-              background:"#2E6094",color:C.white,fontSize:10,fontWeight:600,cursor:"pointer"}}>
-            ↓ Import
-          </button>
-          <button onClick={startNewBatch}
-            title="Start a new Batch"
-            style={{flex:1,padding:"4px 0",borderRadius:4,border:"none",
-              background:C.amber,color:C.white,fontSize:10,fontWeight:600,cursor:"pointer"}}>
-            + New
-          </button>
-        </div>
-      </SummaryRow>
+      {pricingCard&&<div className="batch-profile-pricing-card">
+        {cloneElement(pricingCard,{expanded:openCards.pricing,onExpandedChange:setCardOpen("pricing")})}
+      </div>}
+      {/* Import profile / New batch live in the Batch grid toolbar beside Focus
+          mode, freeing this row's width for the separate Terms card. */}
 
     </div>
   );

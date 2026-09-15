@@ -47,6 +47,8 @@ export default function Sidebar(){
         ?[item("conlib","CL","Construction Library",constructionLib.length)]
         :[pending("CL","Construction Library",
           isFeatureEnabled("u2_construction_library") ? "Capability required" : "U2 destination not enabled")]),
+      ...(isFeatureEnabled("u2_gsm_master")
+        ?[item("gsm","GS","GSM Master",undefined,"Paper GSM values offered by construction layer pickers")]:[]),
       pending("PA","Plant Construction Adoption","In Construction Library"),
       pending("SK","SKUs","Versions, specifications and Location applicability included"),
     ]],

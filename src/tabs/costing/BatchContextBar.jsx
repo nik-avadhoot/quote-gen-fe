@@ -28,6 +28,7 @@
 // approved annual rate. Interest still has no independent editor here; what it
 // shows is now the RESOLVED value and its source, not a stored literal.
 // ═══════════════════════════════════════════════════════════════════════════
+import { useState } from "react";
 import { PLANTS } from "../../data/defaults.js";
 import { resolveField, resolveInterest } from "../../engine/resolveAuthority.js";
 import { useAppState } from "../../state/AppStateContext.js";
@@ -69,6 +70,16 @@ const inp=(ovr,w)=>({padding:"2px 4px",borderRadius:3,fontSize:10,width:w,minWid
 export default function BatchContextBar(){
   const { activeBatchRowId, applyContextCascade, contextValues, freight, locations,
     missing, profileDraft, r, sectorCodes, sectors, setContextField, setTab } = useAppState();
+
+  // Same label behaviour as BatchProfileBar: the band label opens every card
+  // when all are closed and collapses all otherwise. Presentation only.
+  const [openCards,setOpenCards]=useState({customer:false,commercials:false,terms:false});
+  const anyCardOpen=Object.values(openCards).some(Boolean);
+  const setCardOpen=key=>open=>setOpenCards(current=>({...current,[key]:open}));
+  const toggleAllCards=()=>{
+    const next=!anyCardOpen;
+    setOpenCards({customer:next,commercials:next,terms:next});
+  };
 
   // Editable ONLY while preparing a new batch. REVIEW is always read-only over
   // the live profile — contextValues already returns batchProfile there, and a
@@ -150,11 +161,17 @@ export default function BatchContextBar(){
       lineHeight:1.25,overflowX:"auto"}}>
 
       {/* ── BAND LABEL ── */}
-      <div style={{display:"flex",alignItems:"center",marginRight:2,flexShrink:0}}>
-        <span style={{color:C.amber,fontSize:T.label,fontWeight:800,letterSpacing:"0.1em",
-          textTransform:"uppercase",whiteSpace:"nowrap",background:C.amberL,
-          border:`1px solid ${C.amber}55`,borderRadius:4,padding:"3px 6px"}}>
-          {editable?"New Batch":"Context"}</span>
+      <div style={{display:"flex",alignItems:anyCardOpen?"stretch":"center",marginRight:2,flexShrink:0}}>
+        <button type="button" onClick={toggleAllCards} aria-expanded={anyCardOpen}
+          title={anyCardOpen?"Collapse all context cards":"Open all context cards"}
+          style={{color:C.amber,fontWeight:800,textTransform:"uppercase",whiteSpace:"nowrap",
+            background:C.amberL,border:`1px solid ${C.amber}55`,borderRadius:4,cursor:"pointer",
+            fontFamily:"inherit",lineHeight:1,
+            ...(anyCardOpen
+              ?{writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:T.micro,
+                letterSpacing:"0.08em",padding:"6px 4px"}
+              :{fontSize:T.label,letterSpacing:"0.1em",padding:"3px 6px"})}}>
+          {editable?"New Batch":"Context"}</button>
       </div>
 
       {/* ── 1. CUSTOMER — 3 × 2 grid, Batch Entry's field order ── */}
@@ -163,6 +180,7 @@ export default function BatchContextBar(){
           [v.plant,v.delivery].filter(Boolean).join(" → ")||"Route unresolved"]}
         status={editable?"Editable":(v.customerType||"existing").replace(/^./,c=>c.toUpperCase())}
         statusTone={editable?"warning":"neutral"}
+        expanded={openCards.customer} onExpandedChange={setCardOpen("customer")}
         verticalTitleWhenExpanded titleStyle={sectionLabel}
         style={{minWidth:300,maxWidth:420,flex:"1 1 360px",alignSelf:"stretch"}}
         contentStyle={{padding:0}}>
@@ -196,6 +214,7 @@ export default function BatchContextBar(){
           `PP ${effective("convRatePP")}/${effective("wastePP")}/${effective("marginPP")}`]}
         status={commercialOverrideCount?`${commercialOverrideCount} override${commercialOverrideCount===1?"":"s"}`:"Inherited"}
         statusTone={commercialOverrideCount?"warning":"neutral"}
+        expanded={openCards.commercials} onExpandedChange={setCardOpen("commercials")}
         verticalTitleWhenExpanded titleStyle={sectionLabel}
         style={{minWidth:260,maxWidth:340,flex:"1 1 300px",alignSelf:"stretch"}}
         contentStyle={{padding:0}}>
@@ -214,6 +233,7 @@ export default function BatchContextBar(){
         facts={[`Fr ${frShown===''||frShown==null?"—":frShown}`,`PT ≤${v.paymentDisc||"30"}d`,`Int ${interestResolution.value}%`]}
         status={termsOverrideCount?`${termsOverrideCount} override${termsOverrideCount===1?"":"s"}`:"Inherited"}
         statusTone={termsOverrideCount?"warning":"neutral"}
+        expanded={openCards.terms} onExpandedChange={setCardOpen("terms")}
         verticalTitleWhenExpanded titleStyle={sectionLabel}
         style={{minWidth:220,flexShrink:0,alignSelf:"stretch"}}
         contentStyle={{padding:0}}>

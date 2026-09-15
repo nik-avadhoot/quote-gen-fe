@@ -260,10 +260,15 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
           : "Customer Master is still loading — the match indicator appears once it arrives."} />
 
       {masters.status === "ok" && stored && (
-        <span title={identityCaveat(resolved.kind, resolved.exact.length)}
+        <span title={identityCaveat(resolved.kind, resolved.exact.length)
+            + (resolvedParty ? ` · Family: ${familyOf[resolvedParty.id] || "not recorded"}` : "")}
           style={{ fontSize: 8, fontWeight: 700, padding: "1px 3px", borderRadius: 3,
             background: badge.bg, color: badge.fg, border: `1px solid ${badge.fg}33`,
-            flexShrink: 0, cursor: "help" }}>{badge.mark}</span>
+            flexShrink: 0, cursor: "help", fontFamily: resolvedParty?.customer_code ? "monospace" : "inherit" }}>
+          {/* Display only: the stored value stays the bare name (ruling above).
+              The code is shown beside the ≈ mark, never asserted as identity. */}
+          {badge.mark}{resolvedParty?.customer_code ? ` ${resolvedParty.customer_code}` : ""}
+        </span>
       )}
 
       <button type="button" onClick={() => { setDraft(stored); setOpen(o => !o); }}

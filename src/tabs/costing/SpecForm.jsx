@@ -17,6 +17,7 @@ import { BOX_TYPES, PRINTING_TECHNOLOGIES } from "../../data/defaults.js";
 import { isPPType, sameSetCode } from "../../engine/rowType.js";
 import { Btn, Inp, SH, Sel } from "../../ui/primitives.jsx";
 import { inputSt } from "../../ui/styles.js";
+import GsmSelect from "../../ui/GsmSelect.jsx";
 import { useAppState } from "../../state/AppStateContext.js";
 import { sameConstruction } from "../../lib/constructionIdentity.js";
 import { constrAutoName } from "../../lib/constructionName.js";
@@ -360,7 +361,8 @@ export default function SpecForm({onChooseConstruction}){
               style={{...inputSt,fontFamily:mono,fontSize:11}}>
               {gradeCodes.map(c=><option key={c} value={c}>{c||"— select —"}</option>)}
             </select>
-            <Inp value={spec.layers[k]?.gsm||""} onChange={v=>s(`layers.${k}.gsm`,v)} type="number" placeholder="GSM"/>
+            <GsmSelect value={spec.layers[k]?.gsm||""} onChange={v=>s(`layers.${k}.gsm`,v)}
+              ariaLabel={`${lbl} GSM`} style={{...inputSt,fontFamily:mono,fontSize:11}}/>
             {isF?<Sel value={spec[fk]||""} onChange={v=>s(fk,v)}
               opts={[{v:"",l:"—"},...["A","B","C","E"].map(f=>({v:f,l:f}))]}/>
             :<div style={{textAlign:"center",fontSize:11,color:C.slateL}}>—</div>}

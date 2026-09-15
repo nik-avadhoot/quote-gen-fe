@@ -174,17 +174,34 @@ export default function BatchPricingBasisSelector({
     return (
       <div className="batch-pb-selector-compact" aria-label="Working Batch Pricing Basis">
         <div className="batch-pb-compact-controls">
-          <div className="batch-pb-compact-row batch-pb-date-row">
+          {/* Three rows: BATCH + open controls · DATE + open-Batch identity and
+              save · RELEASE + mode + note. Presentation only. */}
+          <div className="batch-pb-compact-row batch-pb-batch-row">
             {batchReferenceField}
+            {batchOpenControls}
+          </div>
+          <div className="batch-pb-compact-row batch-pb-date-row">
             <strong className="batch-pb-compact-label">DATE</strong>
             <label className="batch-pb-date-field" title="Pricing date">
               <span className="batch-pb-sr-label">Pricing date</span>
               <input type="date" aria-label="Pricing date" value={draft.pricingDate || ""}
                 onChange={event => setDraft(current => ({ ...current, pricingDate: event.target.value }))} />
             </label>
-            {batchOpenControls}
+            {batchMeta}
+            {durable && <div className="batch-pb-governed-actions">
+              <button type="button" className="batch-pb-icon-action"
+                onClick={() => setDraft(current => ({ ...current,
+                  releaseId: automatic?.id ?? null, selectionMode: "automatic_default" }))}
+                disabled={read.status !== "ready"} title="Use the automatic default">AUTO</button>
+              <button type="button" className="batch-pb-save" onClick={persist}
+                disabled={!canPersist || saving}
+                title={!dirty ? "No Pricing Basis change to save"
+                  : !canPersist ? "Choose an eligible Release, or use the automatic default"
+                    : "Persist through the governed Batch operation"}>
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>}
           </div>
-          {batchMeta}
           <div className="batch-pb-compact-row batch-pb-release-row">
             <strong className="batch-pb-compact-label">RELEASE</strong>
             <label className="batch-pb-release-field" title="Governed Pricing Basis Release">
@@ -215,19 +232,6 @@ export default function BatchPricingBasisSelector({
               <span>{noteText}</span>
               {read.status === "error" && <button type="button" onClick={() => setReloadKey(key => key + 1)}>Retry</button>}
             </span>
-            {durable && <div className="batch-pb-governed-actions">
-              <button type="button" className="batch-pb-icon-action"
-                onClick={() => setDraft(current => ({ ...current,
-                  releaseId: automatic?.id ?? null, selectionMode: "automatic_default" }))}
-                disabled={read.status !== "ready"} title="Use the automatic default">AUTO</button>
-              <button type="button" className="batch-pb-save" onClick={persist}
-                disabled={!canPersist || saving}
-                title={!dirty ? "No Pricing Basis change to save"
-                  : !canPersist ? "Choose an eligible Release, or use the automatic default"
-                    : "Persist through the governed Batch operation"}>
-                {saving ? "Saving…" : "Save"}
-              </button>
-            </div>}
           </div>
         </div>
       </div>

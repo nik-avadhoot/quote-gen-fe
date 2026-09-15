@@ -67,12 +67,12 @@ function DeliverySectionHeader({ section, colSpan, onManage, onWorkspace }) {
 
 export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
   const {activeBatchRowId,addBatchRow,autoCalcPPDims,autoCodeEnabled,autoCodeSeq,
-    batchProfile,batchResults,batchRows,calculateAll,constructionLib,durableBatch,expandedRows,freight,
+    batchProfile,batchResults,batchRows,calculateAll,constructionLib,copyCostingToProfile,durableBatch,expandedRows,freight,
     generateCode,generateMissingCodes,getBatchRowStatus,invalidateAllBatchResults,
     invalidateBatchRow,loadBatchRowIntoCosting,partitionsMaster,pinnedAddOns,sectors,
     sendAllToQuoteItems,setAutoCodeEnabled,setBatchConstrOverlay,
     setBatchConstrOverlayFilter,setBatchConstrOverlayQuery,setBatchConstrTargetRowId,
-    setBatchProfile,setBatchRows,setBatchWorkspaceRequest,showToast,togglePinAddOn,toggleRowExpand}=useAppState();
+    setBatchProfile,setBatchRows,setBatchWorkspaceRequest,showToast,startNewBatch,togglePinAddOn,toggleRowExpand}=useAppState();
   // D-26: the SET Code value as it stood when the input took focus, so blur can
   // tell an edit from a tab-through and only re-resolve Nos/Set on a real change.
   //
@@ -176,6 +176,19 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
             disabled={Object.keys(batchResults).length===0}
             style={{whiteSpace:"nowrap",flexShrink:0}}/>
           <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+            {/* Profile actions, moved here from the Batch Profile bar. Same handlers. */}
+            <button type="button" onClick={copyCostingToProfile}
+              title="Import the current Costing profile"
+              style={{padding:"4px 9px",borderRadius:5,border:"none",background:"#2E6094",
+                color:C.white,fontSize:T.label,cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>
+              ↓ Import profile
+            </button>
+            <button type="button" onClick={startNewBatch}
+              title="Start a new Batch"
+              style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.amber}`,background:C.white,
+                color:C.amberD,fontSize:T.label,cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>
+              + New batch
+            </button>
             <button type="button" aria-pressed={focusMode} onClick={onToggleFocusMode}
               style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${focusMode?C.green:C.border}`,
                 background:focusMode?C.greenL:C.white,color:focusMode?C.green:C.slateM,

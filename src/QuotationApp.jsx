@@ -16,6 +16,7 @@ import ProducingPlantsScreen from "./tabs/ProducingPlantsScreen.jsx";
 import ConstructionLibraryScreen from "./tabs/ConstructionLibraryScreen.jsx";
 import CustomerFamiliesScreen from "./tabs/CustomerFamiliesScreen.jsx";
 import PricingBasisScreen from "./tabs/PricingBasisScreen.jsx";
+import GsmMasterScreen from "./tabs/GsmMasterScreen.jsx";
 
 // ── Shell chrome (Phase 8 refactor) ──────────────────────────────────────
 import Sidebar from "./ui/Sidebar.jsx";
@@ -75,6 +76,7 @@ function QuotationApp(){
           {tab==="families"&&isFeatureEnabled("u1_customer_families")&&hasCapability(profile,"read_party_master")&&<CustomerFamiliesScreen showToast={showToast}/>}
           {tab==="conlib"&&isFeatureEnabled("u2_construction_library")&&hasCapability(profile,"read_construction_library")&&<ConstructionLibraryScreen/>}
           {tab==="pricingbasis"&&isFeatureEnabled("u3_pricing_basis")&&<PricingBasisScreen/>}
+          {tab==="gsm"&&isFeatureEnabled("u2_gsm_master")&&<GsmMasterScreen/>}
         </div>
       </div>
     </div>

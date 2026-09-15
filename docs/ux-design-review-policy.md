@@ -1,6 +1,8 @@
 # UX Design Review — Policy & Action Items
 
-**Status: proposal, not yet promoted into `open-work.md`.** This document is the output of a
+**Status: triaged into `open-work.md` (UX Batches 1–8), which tracks implementation status.** The
+§4.1 Pricing-card width guidance (~220–240px) is superseded: the card is sized like its sibling
+cards. This document is the output of a
 page-by-page UX review conducted outside the normal implementation flow. Per
 [`README.md`](README.md)'s authority order, it carries no standing authority on its own — treat it
 as a source to triage into `open-work.md` (or `feature-requests.md`) before any item here is

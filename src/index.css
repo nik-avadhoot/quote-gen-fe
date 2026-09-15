@@ -141,18 +141,25 @@ code {
    Batch controls onto their own line. */
 .batch-profile-pricing-card {
   width: auto;
-  min-width: 280px;
-  max-width: 420px;
-  flex: 1 1 360px;
+  min-width: 260px;
+  max-width: 360px;
+  flex: 1 1 300px;
 }
 
 .batch-profile-pricing-card .batch-pb-compact {
   padding: 7px;
 }
 
+/* Three rows: the Release select is fixed so the inline note keeps some width,
+   and the open-Batch identity sits beside DATE instead of on its own line. */
 .batch-profile-pricing-card .batch-pb-release-field {
-  min-width: 64px;
-  flex: 1 1 90px;
+  min-width: 0;
+  flex: 0 0 110px;
+}
+
+.batch-profile-pricing-card .batch-pb-date-row .batch-pb-workspace-meta {
+  flex: 1 1 0;
+  margin: 0;
 }
 
 .batch-grid-delivery-header.is-missing-route .batch-grid-delivery-kicker,

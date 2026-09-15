@@ -88,10 +88,14 @@ export const SummaryRow = ({
   return (
     <div style={{
       border: `1px solid ${C.border}`, borderRadius: 7, background: C.white,
-      overflow: "hidden", fontFamily: sans, ...sx,
+      overflow: "hidden", fontFamily: sans,
+      // An opened rail card fills the card's full height, so the rail's divider
+      // runs top to bottom even when a sibling card makes the row taller.
+      ...(expanded && verticalTitleWhenExpanded ? { display: "flex", flexDirection: "column" } : {}),
+      ...sx,
     }}>
       {expanded && verticalTitleWhenExpanded ? (
-        <div style={{ display: "flex", minHeight: 38, alignItems: "stretch" }}>
+        <div style={{ display: "flex", flex: 1, minHeight: 38, alignItems: "stretch" }}>
           <button
             type="button"
             aria-expanded={true}

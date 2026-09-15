@@ -374,8 +374,8 @@ export default function BatchPricingBasisWorkspace({
     : null;
 
   if (compact) {
-    // Compact card: icon-sized buttons so BATCH, DATE and these controls share
-    // one row. The full label stays as both tooltip and accessible name.
+    // Compact card: icon-sized buttons beside the BATCH reference on its own
+    // row. The full label stays as both tooltip and accessible name.
     const batchOpenControls = <div className="batch-pb-open-actions">
       <button type="button" onClick={open} disabled={status === "loading"}
         title={batch ? "Open another Batch by reference" : "Open Batch"}
@@ -405,8 +405,8 @@ export default function BatchPricingBasisWorkspace({
       priority: status === "loading" || status === "error" || status === "denied",
       fixtureLabel: fixtureOnly ? "FIXTURE ONLY" : null,
     };
-    const batchMeta = batch ? <div className="batch-pb-workspace-meta">
-      <span title={batch.batch_reference}><strong>Ref</strong> {batch.batch_reference}</span>
+    // Shown beside DATE; the reference itself is already on the BATCH row.
+    const batchMeta = batch ? <div className="batch-pb-workspace-meta" title={batch.batch_reference}>
       <span><strong>Batch</strong> #{batch.id}</span>
       <span><strong>Plant</strong> {batch.plant
         ? `${batch.plant.plant_code} · #${batch.plant.id}` : `#${batch.plant_id} · hidden`}</span>

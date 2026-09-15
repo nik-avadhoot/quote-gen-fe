@@ -52,6 +52,7 @@ import { BOX_TYPES } from "../data/defaults.js";
 import { constrAutoName } from "../lib/constructionName.js";
 import { findDuplicate, hasIdentity, sameConstruction } from "../lib/constructionIdentity.js";
 import { useAppState } from "../state/AppStateContext.js";
+import GsmSelect from "../ui/GsmSelect.jsx";
 import { C, mono } from "../theme.js";
 
 export default function ConstructionLibTab(){
@@ -555,9 +556,9 @@ export default function ConstructionLibTab(){
                           style={{padding:"3px 5px",border:`1px solid ${C.border}`,borderRadius:4,fontSize:10,fontFamily:mono}}>
                           <option value="">—</option>{rates.map(r=><option key={r.code} value={r.code}>{r.code}</option>)}
                         </select>
-                        <input type="number" placeholder="GSM" value={(c.layers||{})[lk]?.gsm||""}
-                          onChange={e=>setConstructionLib(prev=>prev.map((x,j)=>j===ci?{...x,layers:{...x.layers,[lk]:{...(x.layers?.[lk]||{}),gsm:e.target.value}}}:x))}
-                          style={{padding:"3px 5px",border:`1px solid ${C.border}`,borderRadius:4,fontSize:10,textAlign:"center"}}/>
+                        <GsmSelect value={(c.layers||{})[lk]?.gsm||""} ariaLabel={`${llbl} GSM`}
+                          onChange={v=>setConstructionLib(prev=>prev.map((x,j)=>j===ci?{...x,layers:{...x.layers,[lk]:{...(x.layers?.[lk]||{}),gsm:v}}}:x))}
+                          style={{padding:"3px 5px",border:`1px solid ${C.border}`,borderRadius:4,fontSize:10,fontFamily:mono,minWidth:0}}/>
                       </div>))}
                   </div>
                 </div>

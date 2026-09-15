@@ -131,7 +131,7 @@ export default function CustomerFamiliesScreen({ showToast }) {
 
   return (
     <div style={{ display: "flex", height: "100%", fontFamily: sans }}>
-      <div style={{ width: 320, borderRight: `1px solid ${C.border}`, padding: 16, overflowY: "auto" }}>
+      <div style={{ width: 280, flexShrink: 0, borderRight: `1px solid ${C.border}`, padding: 14, overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <div style={{ fontSize: T.heading, fontWeight: 700, color: C.slate, whiteSpace: "nowrap" }}>Customer Families</div>
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
@@ -697,11 +697,15 @@ function LocationsList({ party, locations, locationVersions, profile, currentFam
 // Code nor a Batch linkage, and borrowing its styling would assert exactly
 // that. The caption says so in words rather than relying on the reader to
 // infer it.
-function ExternalReferencesList({ refs }) {
+//
+// These belong to the Customer/Prospect (party_external_references.party_id),
+// not to any Location: the table's References column opens them on their own.
+function ExternalReferencesList({ refs, defaultExpanded = false }) {
   return (
     <SummaryRow title="External references"
       facts={[`${refs.length} ${refs.length === 1 ? "reference" : "references"}`, "Recognition only"]}
       status="Read-only"
+      defaultExpanded={defaultExpanded}
     >
       {refs.map(r => (
         <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: T.body, color: C.slateM, padding: "2px 0" }}>
@@ -733,7 +737,8 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
   const [partyBusy, setPartyBusy] = useState(false);
   const [newSectorId, setNewSectorId] = useState("");
   const [sectorBusy, setSectorBusy] = useState(false);
-  const [expandedPartyId, setExpandedPartyId] = useState(null);
+  const [expandedParty, setExpandedParty] = useState(null); // { id, section: "locations" | "references" }
+  const [headerSection, setHeaderSection] = useState(null); // "sectors" | "aliases" | null
 
   const partyById = useMemo(() => Object.fromEntries(parties.map(p => [p.id, p])), [parties]);
   // Grouped once per payload, not per Party row: the deterministic ordering
@@ -856,8 +861,10 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
             Merged into <PermanentCode code={survivingInto.group_customer_code} /> ({survivingInto.name})
           </div>
         )}
-      </div>
 
+        {/* Sectors and Aliases are part of the Family profile: two tiles side by
+            side; an opened tile spans the full header width. Content unchanged. */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>
       <SummaryRow title="Sectors"
         facts={[
           `${attachedSectors.length} attached`,
@@ -866,7 +873,10 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
         ]}
         status={attachedSectors.length ? "Classified" : "Required"}
         statusTone={attachedSectors.length ? "positive" : "danger"}
-        style={{ marginTop: 16, borderColor: attachedSectors.length ? C.border : C.red,
+        expanded={headerSection === "sectors"}
+        onExpandedChange={open => setHeaderSection(open ? "sectors" : null)}
+        style={{ gridColumn: headerSection === "sectors" ? "1 / -1" : "auto",
+          borderColor: attachedSectors.length ? C.border : C.red,
           background: attachedSectors.length ? C.white : "#fff5f3" }}
       >
         <div style={{ fontSize: 11, color: C.slateL, lineHeight: 1.45, marginBottom: 7 }}>
@@ -901,7 +911,9 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
           familyAliases[0]?.alias || "None recorded",
         ]}
         status={familyAliases.length ? "Recorded" : "None"}
-        style={{ marginTop: 12 }}
+        expanded={headerSection === "aliases"}
+        onExpandedChange={open => setHeaderSection(open ? "aliases" : null)}
+        style={{ gridColumn: headerSection === "aliases" ? "1 / -1" : "auto" }}
       >
         {familyAliases.map(a => (
           <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.slateM, padding: "3px 0" }}>
@@ -942,6 +954,8 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
           </CapabilityGate>
         )}
       </SummaryRow>
+        </div>
+      </div>
 
       <div style={{ marginTop: 16 }}>
         <div style={{ fontSize: T.label, fontWeight: 800, color: C.slateM, textTransform: "uppercase", marginBottom: 6 }}>
@@ -949,13 +963,14 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
         </div>
         {!current.length && <div style={{ fontSize: T.body, color: C.slateL }}>None currently.</div>}
         {!!current.length && <div style={{ overflowX: "auto", border: `1px solid ${C.border}`, borderRadius: 7 }}>
-          <table style={{ width: "100%", minWidth: 720, borderCollapse: "collapse", background: C.white }}>
+          <table style={{ width: "100%", minWidth: 820, borderCollapse: "collapse", background: C.white }}>
             <thead>
               <tr style={{ background: C.slate, color: C.white, textAlign: "left", fontSize: T.label }}>
                 <th style={{ padding: "8px 9px" }}>Code</th>
                 <th style={{ padding: "8px 9px" }}>Name</th>
                 <th style={{ padding: "8px 9px" }}>Status</th>
                 <th style={{ padding: "8px 9px" }}>Locations</th>
+                <th style={{ padding: "8px 9px" }}>References</th>
                 <th style={{ padding: "8px 9px" }}>Actions</th>
               </tr>
             </thead>
@@ -965,7 +980,10 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
           const isEditingParty = editingPartyId === party.id;
           const partyLocations = locations.filter(l => l.party_id === party.id);
           const partyRefs = refsByParty[party.id] || [];
-          const isExpanded = expandedPartyId === party.id;
+          // Locations and External References are separate Party-level lists, so
+          // each has its own toggle; opening one never reveals the other.
+          const locationsOpen = expandedParty?.id === party.id && expandedParty.section === "locations";
+          const referencesOpen = expandedParty?.id === party.id && expandedParty.section === "references";
           return (
             <Fragment key={m.id}>
               <tr style={{ borderTop: `1px solid ${C.border}` }}>
@@ -977,12 +995,22 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
                 </td>
                 <td style={{ padding: "8px 9px" }}><LifecycleBadge status={party.lifecycle_state} /></td>
                 <td style={{ padding: "5px 9px" }}>
-                  <button type="button" aria-expanded={isExpanded}
-                    onClick={() => setExpandedPartyId(isExpanded ? null : party.id)}
-                    style={{ border: `1px solid ${C.border}`, background: C.white, borderRadius: 5,
+                  <button type="button" aria-expanded={locationsOpen}
+                    onClick={() => setExpandedParty(locationsOpen ? null : { id: party.id, section: "locations" })}
+                    style={{ border: `1px solid ${locationsOpen ? C.amber : C.border}`, background: C.white, borderRadius: 5,
                       padding: "5px 8px", color: C.slateM, fontSize: T.label, fontWeight: 750,
                       cursor: "pointer", whiteSpace: "nowrap" }}>
-                    {partyLocations.length} {partyLocations.length === 1 ? "location" : "locations"} {isExpanded ? "▴" : "▾"}
+                    {partyLocations.length} {partyLocations.length === 1 ? "location" : "locations"} {locationsOpen ? "▴" : "▾"}
+                  </button>
+                </td>
+                <td style={{ padding: "5px 9px" }}>
+                  <button type="button" aria-expanded={referencesOpen}
+                    title="Legacy codes and customer item references recorded against this Customer/Prospect — recognition only"
+                    onClick={() => setExpandedParty(referencesOpen ? null : { id: party.id, section: "references" })}
+                    style={{ border: `1px solid ${referencesOpen ? C.amber : C.border}`, background: C.white, borderRadius: 5,
+                      padding: "5px 8px", color: partyRefs.length ? C.slateM : C.slateL, fontSize: T.label, fontWeight: 750,
+                      cursor: "pointer", whiteSpace: "nowrap" }}>
+                    {partyRefs.length} {partyRefs.length === 1 ? "reference" : "references"} {referencesOpen ? "▴" : "▾"}
                   </button>
                 </td>
                 <td style={{ padding: "4px 9px" }}>
@@ -1007,13 +1035,12 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
                   </div>
                 </td>
               </tr>
-              {isExpanded && <tr style={{ background: C.cream }}>
-                <td colSpan={5} style={{ padding: 9, borderTop: `1px solid ${C.border}` }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                    <LocationsList party={party} locations={partyLocations} locationVersions={locationVersions}
-                      profile={profile} currentFamilyId={family.id} openModal={openModal} defaultExpanded />
-                    <ExternalReferencesList refs={partyRefs} />
-                  </div>
+              {(locationsOpen || referencesOpen) && <tr style={{ background: C.cream }}>
+                <td colSpan={6} style={{ padding: 9, borderTop: `1px solid ${C.border}` }}>
+                  {locationsOpen
+                    ? <LocationsList party={party} locations={partyLocations} locationVersions={locationVersions}
+                        profile={profile} currentFamilyId={family.id} openModal={openModal} defaultExpanded />
+                    : <ExternalReferencesList refs={partyRefs} defaultExpanded />}
                 </td>
               </tr>}
             </Fragment>
