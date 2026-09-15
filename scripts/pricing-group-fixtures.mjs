@@ -157,6 +157,7 @@ const pricingWorkspace = fs.readFileSync(new URL("../src/tabs/batch/BatchPricing
 const entryTab = fs.readFileSync(new URL("../src/tabs/batch/BatchEntryTab.jsx", import.meta.url), "utf8");
 const grid = fs.readFileSync(new URL("../src/tabs/batch/BatchGrid.jsx", import.meta.url), "utf8");
 const css = fs.readFileSync(new URL("../src/index.css", import.meta.url), "utf8");
+const profileBar = fs.readFileSync(new URL("../src/tabs/batch/BatchProfileBar.jsx", import.meta.url), "utf8");
 const server = fs.readFileSync(new URL("../../quote-gen-be/server.py", import.meta.url), "utf8");
 check(panel.includes("Edit commercial terms") && panel.includes("Structured Payment Terms")
   && panel.includes("Payment Terms wording · descriptive only")
@@ -190,23 +191,36 @@ check(grid.includes("DeliverySectionHeader")
   && grid.includes("Durable row #${durableRow.id} is relevant to this route")
   && grid.includes("batchDeliveryGridEntries(durableBatch,batchRows)"),
   "U4-PG-FE-18 the main Batch grid renders Delivery Group headers followed by every relevant item row");
-check(grid.includes("const BASE_GRID_COLUMN_COUNT=35;")
+// The invariant is "one shared span", not a historical column count: every
+// full-width row derives from the single base constant plus pinned add-ons,
+// and no full-width row carries its own literal span that could drift.
+check(grid.includes("const BASE_GRID_COLUMN_COUNT=37;")
   && (grid.match(/BASE_GRID_COLUMN_COUNT\+pinnedAddOns\.length/g) || []).length === 3
-  && !grid.includes("31+pinnedAddOns.length"),
-  "U4-PG-FE-18a Delivery headers, durable placeholders and expanded item details span the complete grid");
+  && !/colSpan=\{\d/.test(grid)
+  && !/\b3[15]\+pinnedAddOns\.length/.test(grid),
+  "U4-PG-FE-18a Delivery headers, durable placeholders and expanded item details span the complete 37-column grid plus pinned add-ons");
 check(grid.includes("durableRowToLocalPreview(durableRow")
   && grid.includes("onClick={()=>copyDurableToGrid(durableRow)}")
   && grid.includes("Load into grid")
   && grid.includes("No calculation was persisted."),
   "U4-PG-FE-18b a durable placeholder can create the existing local preview directly from the grid");
+// The Pricing summary is a flexible card in the profile band (UX Batch 4 and
+// the 3-row profile bars), not the superseded fixed 340px card. Parsed from the
+// rule body so the check is line-ending independent and tests bounds, not pixels.
+const pricingCardRule = css.match(/\.batch-profile-pricing-card\s*\{([^}]*)\}/)?.[1] || "";
 check(pricingCard.includes("BatchPricingBasisWorkspace compact")
-  && entryTab.includes("pricingCard={<BatchPricingCard")
-  && css.includes(".batch-profile-pricing-card {\n  width: 340px;")
-  && css.includes("flex: 0 0 340px;")
-  && css.includes(".batch-profile-pricing-card .batch-pricing-header-card")
+  && entryTab.includes("const pricingCard=<BatchPricingCard")
+  && entryTab.includes("<BatchProfileBar pricingCard={pricingCard}/>")
+  && profileBar.includes('className="batch-profile-pricing-card"')
+  && profileBar.includes("cloneElement(pricingCard,{expanded:openCards.pricing")
+  && /width:\s*auto;/.test(pricingCardRule)
+  && /min-width:\s*\d+px;/.test(pricingCardRule)
+  && /max-width:\s*\d+px;/.test(pricingCardRule)
+  && /flex:\s*1 1 \d+px;/.test(pricingCardRule)
+  && !/340px/.test(css)
   && !css.includes(".batch-workspace-pricing-slot")
   && !css.includes("right: 29.5%"),
-  "U4-PG-FE-19 the fixed-width Pricing card reflows inside the original header band without taking grid height");
+  "U4-PG-FE-19 the flexible Pricing summary card is a bounded, disclosure-controlled card in the profile band, never a fixed-width overlay taking grid height");
 check(grid.includes("+ Delivery Group") && grid.includes("Manage Delivery Groups")
   && grid.includes("setBatchWorkspaceRequest")
   && pricingWorkspace.includes("initialDeliveryAction={batchWorkspaceRequest}")
