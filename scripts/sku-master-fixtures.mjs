@@ -285,6 +285,25 @@ check(screen.includes('disabled={selectedId == null && focusPanel !== "detail"}'
 check(app.includes("<AppStateProvider>\n      <SkuMasterScreen fixtureOnly"),
   "U2-SKU-FE-62 the fixture preview mounts inside the app state provider like the other previews");
 
+// ───────────────────────────────────────────── expand icons and header density
+const icons = read("../src/ui/icons.jsx");
+check(icons.includes("export const ExpandIcon") && icons.includes("export const CollapseIcon")
+  && icons.includes('"aria-hidden": true') && icons.includes('stroke: "currentColor"'),
+  "U2-SKU-FE-63 expand and collapse are decorative stroke icons that take the button colour");
+check(screen.includes('aria-label={focusPanel === "list" ? "Collapse list" : "Expand list"}')
+  && screen.includes('aria-label={focusPanel === "detail" ? "Collapse detail" : "Expand detail"}')
+  && (screen.match(/<ExpandIcon size=\{14\} \/>/g) || []).length === 2
+  && (screen.match(/<CollapseIcon size=\{14\} \/>/g) || []).length === 2
+  && !/>\s*(Focus list|Focus detail|Exit focus)\s*</.test(screen),
+  "U2-SKU-FE-64 each panel's focus toggle is an expand / collapse icon with an accessible name, not a text button");
+check(!screen.includes("<h2") && (screen.match(/role="toolbar"/g) || []).length === 2
+  && screen.includes('boxSizing: "border-box", minHeight: 43') && !screen.includes("minHeight: 39"),
+  "U2-SKU-FE-65 no second page title under the TopBar; each panel has exactly one toolbar, both the same height");
+check((screen.match(/<details style=\{\{ position: "relative" \}\}>/g) || []).length === 2
+  && screen.includes("Filters{moreFilters ?") && screen.includes("Columns{hiddenGroups.length ?")
+  && screen.includes('aria-label="Refresh SKU list"') && screen.includes("read at ${readAt"),
+  "U2-SKU-FE-66 secondary filters and column groups sit in disclosures, and the read time rides on the refresh icon");
+
 console.log(`\n${passes} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);
 console.log("U2 SKU Master frontend fixture gate PASS");

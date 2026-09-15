@@ -7,18 +7,23 @@
 // and a dead control would promise one.
 //
 // ── LAYOUT ────────────────────────────────────────────────────────────────
-// Left: SKUs row by row with the CDM-43 fields in SPEC sheet groups and sheet
-// order, code and short name frozen. Right: one SKU in depth. The divider opens
-// at 50 : 50 and can be dragged, or moved with the arrow keys, between 25 % and
-// 75 %; double-click restores 50 : 50. Either panel can take focus and fill the
-// SKU Master area inside the app window: the other panel and the divider hide,
-// the app navigation collapses (the Batch Builder focus-mode precedent), and
-// Exit focus or Escape restores both panels, the split and the navigation. The
-// browser Fullscreen API is deliberately not used.
+// The TopBar already names the screen, so there is no second page header.
+// Left: one toolbar (search, lifecycle, plant, Filters ▾, Columns ▾, count,
+// refresh, expand — the Batch Builder toolbar idiom) above SKUs row by row with
+// the CDM-43 fields in SPEC sheet groups and sheet order, code and short name
+// frozen. Right: a slim header (selected code, split presets, expand) above one
+// SKU in depth. The divider opens at 50 : 50 and can be dragged, or moved with
+// the arrow keys, between 25 % and 75 %; double-click restores 50 : 50.
+//
+// Each panel has an expand icon, like a browser pane: it fills the SKU Master
+// area inside the app window, hides the other panel and the divider, and
+// collapses the app navigation (the Batch Builder focus-mode precedent). The
+// collapse icon or Escape restores both panels, the split and the navigation.
+// The browser Fullscreen API is deliberately not used.
 //
 // ── HONEST STATES ─────────────────────────────────────────────────────────
 // loading, access denied (403 — never an empty list), error with retry,
-// genuinely empty, and a read timestamp with manual refresh. Every field goes
+// genuinely empty, and a read timestamp on the refresh control. Every field goes
 // through one model rule (specFieldCell): a blank reads "Not recorded", zero
 // reads 0, a section the caller may not read says so, a failed optional read
 // says "Details unavailable", and a field whose storage is not activated yet
@@ -26,7 +31,8 @@
 //
 // ── GOVERNED VERSUS LOCAL ─────────────────────────────────────────────────
 // Only governed SKUs appear. Item codes and printing metadata typed into
-// Costing or Batch Builder live in this browser and are not SKU Master records.
+// Costing or Batch Builder live in this browser and are not SKU Master records;
+// the list footer says so with both provenance tags.
 //
 // `fixtureOnly` renders labelled fixture responses without any request
 // (development preview from the sign-in screen).
@@ -49,6 +55,7 @@ import {
 } from "../lib/skuMasterModel.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag, SummaryRow } from "../ui/dataDisplay.jsx";
+import { CollapseIcon, ExpandIcon, RefreshIcon } from "../ui/icons.jsx";
 import { C, T, mono, sans } from "../theme.js";
 
 const EMPTY_FILTERS = { plant: "", status: "", q: "", familyId: "", partyId: "" };
@@ -62,15 +69,23 @@ const GROUP_TONE = {
 const STATE_INK = { value: C.slate, na: C.slateL, blank: C.slateL, hidden: C.slateL, unavailable: C.slateL, pending: C.amberD };
 const LIFECYCLE_INK = { proposed: C.amberD, active: C.green, discontinued: C.red };
 const LAYERS = [["Top", "AI", "AJ"], ["Flute-1", "AK", "AL"], ["Back-1", "AM", "AN"], ["Flute-2", "AO", "AP"], ["Back-2", "AQ", "AR"]];
-const control = { fontSize: T.body, padding: "4px 7px", borderRadius: 5, border: `1px solid ${C.border}`,
-  background: C.white, fontFamily: sans, color: C.slate };
-const chip = (on, onInk = C.white, onBg = C.slateM) => ({ height: 22, padding: "1px 8px", borderRadius: 999, cursor: "pointer",
-  fontSize: T.label, fontWeight: 700, whiteSpace: "nowrap", fontFamily: sans,
-  color: on ? onInk : C.slateM, background: on ? onBg : C.white, border: `1px solid ${on ? onBg : C.border}` });
-// Same treatment as Batch Builder's Focus mode toggle.
-const focusButton = (on, disabled) => ({ padding: "3px 9px", borderRadius: 5, border: `1px solid ${on ? C.green : C.border}`,
-  background: on ? C.greenL : C.white, color: disabled ? C.slateL : on ? C.green : C.slateM, fontSize: T.label,
-  cursor: disabled ? "default" : "pointer", fontWeight: 700, whiteSpace: "nowrap", fontFamily: sans, opacity: disabled ? 0.6 : 1 });
+// Toolbar controls share Batch Builder's toolbar height and weight.
+const control = { height: 26, boxSizing: "border-box", fontSize: T.body, padding: "3px 7px", borderRadius: 5,
+  border: `1px solid ${C.border}`, background: C.white, fontFamily: sans, color: C.slate };
+// Both panel headers share one height, so the list and detail bands line up.
+const toolbar = { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", rowGap: 5, padding: "6px 10px",
+  boxSizing: "border-box", minHeight: 43, borderBottom: `1px solid ${C.border}`, background: C.cream, flexShrink: 0 };
+const menuSummary = active => ({ ...control, display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer",
+  listStyle: "none", fontSize: T.label, fontWeight: 700, whiteSpace: "nowrap",
+  color: active ? C.amberD : C.slateM, borderColor: active ? C.amber : C.border, background: active ? C.amberL : C.white });
+const menuPanel = { position: "absolute", left: 0, top: "calc(100% + 6px)", zIndex: 30, minWidth: 230, padding: 9,
+  border: `1px solid ${C.border}`, borderRadius: 7, background: C.white, boxShadow: "0 8px 22px rgba(28,43,58,.18)",
+  display: "grid", gap: 7 };
+const iconButton = on => ({ width: 26, height: 26, display: "inline-grid", placeItems: "center", padding: 0, borderRadius: 5,
+  cursor: "pointer", flexShrink: 0, border: `1px solid ${on ? C.green : C.border}`,
+  background: on ? C.greenL : C.white, color: on ? C.green : C.slateM });
+const segment = on => ({ height: 22, padding: "0 7px", border: 0, borderRight: `1px solid ${C.border}`, cursor: "pointer",
+  fontFamily: mono, fontSize: T.label, fontWeight: 700, background: on ? C.slateM : C.white, color: on ? C.white : C.slateM });
 
 const isPlain = state => state === "value" || state === "na";
 const fieldTag = f => f.origin === "new" ? "NEW" : f.origin === "app" ? "APP" : f.authority ? "CON" : "";
@@ -227,14 +242,14 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   };
 
   const fixtureBanner = fixtureOnly && (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 16px", background: C.amberL,
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 12px", background: C.amberL,
       borderBottom: `1px dashed ${C.amber}`, fontFamily: sans }}>
       <strong style={{ fontSize: T.label, color: C.amberD, letterSpacing: "0.05em" }}>U2 · FIXTURE ONLY</strong>
       <span style={{ fontSize: T.label, color: C.amberD }}>
         Isolated SKU Master illustration. No authoritative read or write occurs.
       </span>
       {onExitFixture && <button type="button" onClick={onExitFixture}
-        style={{ ...control, marginLeft: "auto", fontSize: T.label }}>Return to sign in</button>}
+        style={{ ...control, height: 22, marginLeft: "auto", fontSize: T.label }}>Return to sign in</button>}
     </div>
   );
 
@@ -249,81 +264,91 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   const pendingNotice = schemaPendingNotice(catalogue.schemaPending);
   const layout = panelLayout(split, focusPanel);
   const fieldCols = focusPanel === "detail" ? 3 : split >= 62 ? 1 : 2;
+  const moreFilters = [filters.familyId, filters.partyId].filter(Boolean).length;
+  const anyFilter = Object.values(filters).some(Boolean);
+  const selectedCode = selectedId == null ? null
+    : plantItemCodeLabel(gridRows.find(r => r.id === selectedId)?.plant_item_code ?? detail.data?.sku?.plant_item_code);
+  const skuCount = catalogue.status === "ready"
+    ? `${gridRows.length} SKU${gridRows.length === 1 ? "" : "s"}${catalogue.truncated ? ` · first ${catalogue.limit}` : ""}` : "—";
 
   return (
     <div onKeyDown={exitFocusOnEscape} style={{ height: "100%", display: "flex", flexDirection: "column", fontFamily: sans, background: C.cream }}>
       {fixtureBanner}
-      <div style={{ padding: "10px 16px 8px", borderBottom: `1px solid ${C.border}`, background: C.white }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-          <h2 style={{ fontSize: T.heading, fontWeight: 800, color: C.slate, margin: 0 }}>SKU Master</h2>
-          <ProvenanceTag kind="governed" />
-          <span style={{ fontSize: T.label, color: C.slateL }}>
-            read-only · {SKU_SPEC_FIELD_COUNT} quote and costing fields · plants in scope: {scope.length ? scope.join(", ") : "none"}
-          </span>
-          <span style={{ marginLeft: "auto", fontSize: T.label, color: C.slateL }}>
-            Read at {readAt ? readAt.toLocaleTimeString() : "—"}
-          </span>
-          <button type="button" onClick={() => setReloadKey(k => k + 1)} style={{ ...control, fontSize: T.label }}>Refresh</button>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
-          <ProvenanceTag kind="local" />
-          <Notice>Item codes and printing details typed in Costing or Batch Builder stay in this browser and are not SKU Master records; they are not shown here.</Notice>
-        </div>
-        {pendingNotice && <div style={{ marginTop: 6, padding: "5px 8px", borderRadius: 5, background: C.amberL,
-          border: `1px solid ${C.amber}55` }}><Notice tone="warn">{pendingNotice}</Notice></div>}
-      </div>
+      {pendingNotice && <div style={{ padding: "4px 12px", background: C.amberL, borderBottom: `1px solid ${C.amber}55` }}>
+        <Notice tone="warn">{pendingNotice}</Notice></div>}
 
       <div ref={bodyRef} style={{ flex: 1, display: "flex", minHeight: 0 }}>
         {layout.showList && <div aria-label="SKU list" style={{ width: layout.listWidth, flex: layout.showDetail ? "0 0 auto" : "1 1 auto",
           minWidth: 0, display: "flex", flexDirection: "column", background: C.white }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px 7px",
-            borderBottom: `1px solid ${C.border}`, background: "#FBF8F3" }}>
-            <form onSubmit={applySearch} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-              <input aria-label="Search Plant Item Code" placeholder="Plant Item Code contains…" value={searchDraft}
-                onChange={e => setSearchDraft(e.target.value)} style={{ ...control, width: 190, fontFamily: mono }} />
-              <button type="submit" disabled={!!searchError} style={control}>Search</button>
-              <select aria-label="Plant" value={filters.plant} onChange={e => setFilter("plant", e.target.value)} style={control}>
-                <option value="">All plants in scope</option>
-                {scope.map(code => <option key={code} value={code}>{code}</option>)}
-              </select>
-              <select aria-label="Lifecycle" value={filters.status} onChange={e => setFilter("status", e.target.value)} style={control}>
-                <option value="">All lifecycle states</option>
-                {SKU_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <select aria-label="Customer Family" value={filters.familyId} disabled={!partyFiltersVisible}
-                title={partyFiltersVisible ? "Families seen in results so far" : visibilityText(customerVisibility) || ""}
-                onChange={e => setFilter("familyId", e.target.value)} style={control}>
-                <option value="">{partyFiltersVisible ? "All Families" : "Family filter unavailable"}</option>
-                {familyOptions.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-              </select>
-              <select aria-label="Customer" value={filters.partyId} disabled={!partyFiltersVisible}
-                title={partyFiltersVisible ? "Customers seen in results so far" : visibilityText(customerVisibility) || ""}
-                onChange={e => setFilter("partyId", e.target.value)} style={control}>
-                <option value="">{partyFiltersVisible ? "All Customers / Prospects" : "Customer filter unavailable"}</option>
-                {customerOptions.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
-              </select>
-              <button type="button" onClick={clearFilters} style={control}>Clear</button>
-              {searchError && <Notice tone="warn">{searchError}</Notice>}
+          <div role="toolbar" aria-label="SKU list controls" style={toolbar}>
+            <form onSubmit={applySearch} style={{ display: "contents" }}>
+              <input type="search" aria-label="Search Plant Item Code" placeholder="Plant Item Code… ↵" value={searchDraft}
+                title={searchError || "Press Enter to search Plant Item Codes"}
+                onChange={e => setSearchDraft(e.target.value)}
+                style={{ ...control, width: 170, fontFamily: mono, borderColor: searchError ? C.red : C.border }} />
             </form>
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ fontSize: T.micro, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: C.slateL }}>Column groups</span>
-              {SKU_SPEC_GROUPS.filter(g => g.id !== "identity").map(g => {
-                const off = hiddenGroups.includes(g.id);
-                const tone = GROUP_TONE[g.source];
-                return <button key={g.id} type="button" onClick={() => toggleGroup(g.id)} aria-pressed={!off}
-                  title={`${g.label} · ${g.fields.length} fields · SPEC ${g.sheetRange}`}
-                  style={{ height: 20, padding: "1px 6px", borderRadius: 4, cursor: "pointer", fontSize: T.label, fontWeight: 700,
-                    color: off ? C.slateL : tone.ink, background: off ? C.white : tone.band,
-                    border: `1px solid ${off ? C.border : "rgba(0,0,0,0.08)"}`, textDecoration: off ? "line-through" : "none" }}>
-                  {g.short}</button>;
-              })}
-              <span style={{ flex: "1 1 auto" }} />
-              <button type="button" onClick={() => setGroupBySet(v => !v)} aria-pressed={groupBySet}
-                style={chip(groupBySet, C.white, C.green)}>Group rows by SKU Set</button>
-              <button type="button" aria-pressed={focusPanel === "list"} onClick={() => toggleFocus("list")}
-                title={focusPanel === "list" ? "Show both panels again (Esc)" : "Fill the SKU Master area with the list"}
-                style={focusButton(focusPanel === "list")}>{focusPanel === "list" ? "Exit focus" : "Focus list"}</button>
-            </div>
+            <select aria-label="Lifecycle" value={filters.status} onChange={e => setFilter("status", e.target.value)} style={control}>
+              <option value="">All lifecycles</option>
+              {SKU_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select aria-label="Plant" value={filters.plant} onChange={e => setFilter("plant", e.target.value)} style={control}>
+              <option value="">All plants</option>
+              {scope.map(code => <option key={code} value={code}>{code}</option>)}
+            </select>
+            <details style={{ position: "relative" }}>
+              <summary style={menuSummary(moreFilters > 0)}>Filters{moreFilters ? ` · ${moreFilters}` : ""} ▾</summary>
+              <div style={menuPanel}>
+                <label style={{ display: "grid", gap: 3, fontSize: T.label, color: C.slateL }}>Customer Family
+                  <select aria-label="Customer Family" value={filters.familyId} disabled={!partyFiltersVisible}
+                    title={partyFiltersVisible ? "Families seen in results so far" : visibilityText(customerVisibility) || ""}
+                    onChange={e => setFilter("familyId", e.target.value)} style={control}>
+                    <option value="">{partyFiltersVisible ? "All Families" : "Family filter unavailable"}</option>
+                    {familyOptions.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                </label>
+                <label style={{ display: "grid", gap: 3, fontSize: T.label, color: C.slateL }}>Customer / Prospect
+                  <select aria-label="Customer" value={filters.partyId} disabled={!partyFiltersVisible}
+                    title={partyFiltersVisible ? "Customers seen in results so far" : visibilityText(customerVisibility) || ""}
+                    onChange={e => setFilter("partyId", e.target.value)} style={control}>
+                    <option value="">{partyFiltersVisible ? "All Customers / Prospects" : "Customer filter unavailable"}</option>
+                    {customerOptions.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
+                  </select>
+                </label>
+                <button type="button" onClick={clearFilters} disabled={!anyFilter && !searchDraft}
+                  style={{ ...control, fontSize: T.label, cursor: "pointer" }}>Clear all filters</button>
+              </div>
+            </details>
+            <details style={{ position: "relative" }}>
+              <summary style={menuSummary(hiddenGroups.length > 0 || groupBySet)}>
+                Columns{hiddenGroups.length ? ` · ${hiddenGroups.length} hidden` : ""} ▾</summary>
+              <div style={menuPanel}>
+                <div style={{ fontSize: T.micro, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: C.slateL }}>
+                  SPEC groups · identity always shown</div>
+                {SKU_SPEC_GROUPS.filter(g => g.id !== "identity").map(g => (
+                  <label key={g.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: T.body, color: C.slateM, cursor: "pointer" }}>
+                    <input type="checkbox" checked={!hiddenGroups.includes(g.id)} onChange={() => toggleGroup(g.id)}
+                      style={{ accentColor: C.amber }} />
+                    <span style={{ flex: 1 }}>{g.label}</span>
+                    <span style={{ fontSize: T.label, color: C.slateL }}>{g.fields.length}</span>
+                  </label>
+                ))}
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: T.body, color: C.slateM, cursor: "pointer",
+                  borderTop: `1px solid ${C.border}`, paddingTop: 7 }}>
+                  <input type="checkbox" checked={groupBySet} onChange={() => setGroupBySet(v => !v)} style={{ accentColor: C.green }} />
+                  Group rows by SKU Set
+                </label>
+              </div>
+            </details>
+            <span style={{ flex: "1 1 auto" }} />
+            <span style={{ fontSize: T.label, color: C.slateL, whiteSpace: "nowrap" }}>{skuCount}</span>
+            <button type="button" onClick={() => setReloadKey(k => k + 1)} aria-label="Refresh SKU list"
+              title={`Refresh · read at ${readAt ? readAt.toLocaleTimeString() : "—"}`} style={iconButton(false)}>
+              <RefreshIcon size={14} /></button>
+            <button type="button" aria-pressed={focusPanel === "list"} onClick={() => toggleFocus("list")}
+              aria-label={focusPanel === "list" ? "Collapse list" : "Expand list"}
+              title={focusPanel === "list" ? "Collapse list · show both panels (Esc)" : "Expand list to fill the SKU Master area"}
+              style={iconButton(focusPanel === "list")}>
+              {focusPanel === "list" ? <CollapseIcon size={14} /> : <ExpandIcon size={14} />}</button>
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflow: "auto", background: C.white }}>
@@ -341,14 +366,14 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
               : <SpecGrid rows={gridRows} ctx={gridCtx} groups={visibleGroups} selectedId={selectedId}
                   onSelect={setSelectedId} groupBySet={groupBySet} />)}
           </div>
-          <div style={{ height: 26, flex: "0 0 26px", display: "flex", alignItems: "center", gap: 10, padding: "0 10px",
+          <div style={{ height: 24, flex: "0 0 24px", display: "flex", alignItems: "center", gap: 6, padding: "0 10px",
             borderTop: `1px solid ${C.border}`, background: "#FBF8F3", fontSize: T.label, color: C.slateL, overflow: "hidden", whiteSpace: "nowrap" }}>
-            <span>
-              {catalogue.status === "ready" ? `${gridRows.length} SKU${gridRows.length === 1 ? "" : "s"}` : "—"}
-              {catalogue.truncated ? ` · first ${catalogue.limit} shown — refine the search` : ""}
-            </span>
-            {focusPanel === "list" && <span>List in focus · Esc to exit</span>}
-            <span style={{ marginLeft: "auto" }}>Blank = not recorded · CON = Construction authority · NEW = added field · APP = set in the app</span>
+            <ProvenanceTag kind="governed" />
+            <span>SKUs only ·</span>
+            <ProvenanceTag kind="local" />
+            <span title="Item codes and printing details typed in Costing or Batch Builder stay in this browser and are not SKU Master records.">
+              Costing / Batch Builder codes not shown</span>
+            <span style={{ marginLeft: "auto" }}>{SKU_SPEC_FIELD_COUNT} fields · Blank = not recorded · CON · NEW · APP</span>
           </div>
         </div>}
 
@@ -363,22 +388,29 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
         </div>}
 
         {layout.showDetail && <div aria-label="SKU detail" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: C.cream }}>
-          <div style={{ height: 32, flex: "0 0 32px", display: "flex", alignItems: "center", gap: 5, padding: "0 12px",
-            borderBottom: `1px solid ${C.border}`, background: "#FBF8F3" }}>
-            <span style={{ fontSize: T.micro, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: C.slateL }}>SKU deep-dive</span>
-            <span style={{ marginLeft: "auto", fontSize: T.label, color: C.slateL }}>
-              {focusPanel === "detail" ? "Detail in focus · Esc to exit" : `Panels ${split} : ${100 - split}`}
-            </span>
-            {!focusPanel && [[50, "50:50"], [35, "35:65"], [65, "65:35"]].map(([v, label]) => (
-              <button key={label} type="button" onClick={() => setSplit(v)} aria-pressed={split === v}
-                style={{ ...chip(split === v), borderRadius: 4, fontFamily: mono }}>{label}</button>
-            ))}
+          <div role="toolbar" aria-label="SKU detail controls" style={{ ...toolbar, flexWrap: "nowrap" }}>
+            <span style={{ fontSize: T.micro, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: C.slateL }}>Detail</span>
+            <span style={{ fontFamily: mono, fontSize: T.body, fontWeight: 700, color: selectedCode ? C.slate : C.slateL,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+              {selectedCode || "No SKU selected"}</span>
+            <span style={{ flex: "1 1 auto" }} />
+            {!focusPanel && (
+              <div role="group" aria-label="Split" title="Split between list and detail · or drag the divider"
+                style={{ display: "inline-flex", border: `1px solid ${C.border}`, borderRadius: 5, overflow: "hidden", flexShrink: 0 }}>
+                {[[35, "35:65"], [50, "50:50"], [65, "65:35"]].map(([v, label]) => (
+                  <button key={label} type="button" onClick={() => setSplit(v)} aria-pressed={split === v} style={segment(split === v)}>{label}</button>
+                ))}
+              </div>
+            )}
+            {focusPanel === "detail" && <span style={{ fontSize: T.label, color: C.slateL, whiteSpace: "nowrap" }}>Esc to restore</span>}
             <button type="button" aria-pressed={focusPanel === "detail"} onClick={() => toggleFocus("detail")}
               disabled={selectedId == null && focusPanel !== "detail"}
-              title={focusPanel === "detail" ? "Show both panels again (Esc)"
-                : selectedId == null ? "Select a SKU first" : "Fill the SKU Master area with this SKU"}
-              style={focusButton(focusPanel === "detail", selectedId == null && focusPanel !== "detail")}>
-              {focusPanel === "detail" ? "Exit focus" : "Focus detail"}</button>
+              aria-label={focusPanel === "detail" ? "Collapse detail" : "Expand detail"}
+              title={focusPanel === "detail" ? "Collapse detail · show both panels (Esc)"
+                : selectedId == null ? "Select a SKU first" : "Expand detail to fill the SKU Master area"}
+              style={{ ...iconButton(focusPanel === "detail"), opacity: selectedId == null && focusPanel !== "detail" ? 0.45 : 1,
+                cursor: selectedId == null && focusPanel !== "detail" ? "default" : "pointer" }}>
+              {focusPanel === "detail" ? <CollapseIcon size={14} /> : <ExpandIcon size={14} />}</button>
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 14px 56px" }}>
             {selectedId == null && <EmptyState title="Select a SKU" hint="Its identity, quote and costing fields, SKU Set, versions, references and Location applicability open here." />}
@@ -501,10 +533,12 @@ function SkuDeepDive({ data, fieldCols, onSelectSku }) {
   const sets = skuSetView(data.sets, sku.id);
   const shortName = specFieldCell("C", row, ctx);
   const itemName = specFieldCell("B", row, ctx);
-  const pendingNotice = schemaPendingNotice(ctx.schemaPending);
   const shownGroups = focus === "all" ? SKU_SPEC_GROUPS : SKU_SPEC_GROUPS.filter(g => g.id === focus);
   const showLayers = ["all", "std_carton", "std_board"].includes(focus);
   const card = { background: C.white, border: `1px solid ${C.border}`, borderRadius: 7, overflow: "hidden" };
+  const chip = on => ({ height: 22, padding: "1px 8px", borderRadius: 999, cursor: "pointer", fontSize: T.label, fontWeight: 700,
+    whiteSpace: "nowrap", fontFamily: sans, color: on ? C.white : C.slateM, background: on ? C.slateM : C.white,
+    border: `1px solid ${on ? C.slateM : C.border}` });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 1100 }}>
@@ -531,9 +565,6 @@ function SkuDeepDive({ data, fieldCols, onSelectSku }) {
           </div>
         )}
       </div>
-
-      {pendingNotice && <div style={{ padding: "6px 9px", borderRadius: 5, background: C.amberL, border: `1px solid ${C.amber}55` }}>
-        <Notice tone="warn">{pendingNotice}</Notice></div>}
 
       <div style={card}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderBottom: `1px solid ${C.border}`, background: "#EEF3F0" }}>
