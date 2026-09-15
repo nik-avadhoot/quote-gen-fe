@@ -26,10 +26,12 @@ export default function LoginScreen({ onU3Illustration, onU4CatalogueIllustratio
     <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: C.paper, fontFamily: sans }}>
       <form onSubmit={submit} style={{ width: 320, background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: 28, boxShadow: "0 4px 24px rgba(0,0,0,.06)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
-          <div style={{ width: 32, height: 32, background: C.amber, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📦</div>
+          <div aria-hidden="true" style={{ width: 32, height: 32, background: C.amber, borderRadius: 6, display: "flex",
+            alignItems: "center", justifyContent: "center", color: C.white, fontSize: 11, fontWeight: 800,
+            letterSpacing: "0.04em" }}>CA</div>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.slate }}>
-            CFB Quotation Master
-            <div style={{ fontSize: 9, color: C.slateL, fontWeight: 400 }}>AVADHOOT PACKS</div>
+            Canvas App
+            <div style={{ fontSize: 9, color: C.slateL, fontWeight: 400 }}>Quotation module · Avadhoot Packs</div>
           </div>
         </div>
 

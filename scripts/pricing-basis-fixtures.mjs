@@ -526,8 +526,12 @@ const canonicalNavigation = [
   "SKUs", "Commercial Policies", "Rate Masters", "Freight Masters", "Pricing Basis Releases",
   "Plant Configuration", "Users & Access", "Producing Plants", "Audit History",
 ];
-check(["Workspace", "Customer Masters", "Product Masters", "Commercial Masters", "Plant Capabilities",
+check(["Workspace", "Customer Masters", "Product Masters", "Commercial Masters", "Technical Masters",
   "Administration"].every(section => sidebar.includes(`["${section}"`))
+  && !sidebar.includes('["Plant Capabilities"')
+  && sidebar.indexOf('item("gsm"') > sidebar.indexOf('["Technical Masters"')
+  && sidebar.indexOf('item("gsm"') > sidebar.indexOf('pending("PC","Plant Configuration"')
+  && sidebar.indexOf('item("gsm"') < sidebar.indexOf('["Administration"')
   && canonicalNavigation.every(label => sidebar.includes(`"${label}"`))
   && sidebar.includes('"Governed evidence, working items and Quote History"')
   && sidebar.includes("if (entry.pending)")

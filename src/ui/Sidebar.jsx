@@ -47,8 +47,6 @@ export default function Sidebar(){
         ?[item("conlib","CL","Construction Library",constructionLib.length)]
         :[pending("CL","Construction Library",
           isFeatureEnabled("u2_construction_library") ? "Capability required" : "U2 destination not enabled")]),
-      ...(isFeatureEnabled("u2_gsm_master")
-        ?[item("gsm","GS","GSM Master",undefined,"Paper GSM values offered by construction layer pickers")]:[]),
       pending("PA","Plant Construction Adoption","In Construction Library"),
       pending("SK","SKUs","Versions, specifications and Location applicability included"),
     ]],
@@ -59,8 +57,13 @@ export default function Sidebar(){
       item("freight","FM","Freight Masters"),
       ...(isFeatureEnabled("u3_pricing_basis") ?[item("pricingbasis","PB","Pricing Basis Releases")]:[]),
     ]],
-    ["Plant Capabilities", [
+    // Technical Masters hold raw-material and plant input parameters, not the
+    // products sold. Product Masters stays limited to SKUs and their live
+    // Constructions (Product Owner, 2026-09-15); Constructions may move here later.
+    ["Technical Masters", [
       pending("PC","Plant Configuration","Flute Profiles, Machines, Stations and Process Routes included"),
+      ...(isFeatureEnabled("u2_gsm_master")
+        ?[item("gsm","GS","GSM Master",undefined,"Paper GSM values offered by construction layer pickers")]:[]),
     ]],
     ["Administration", [
     // UA-1: gated on the CAPABILITY, not the derived label. A role string is a
@@ -91,10 +94,12 @@ export default function Sidebar(){
   return(
   <aside className={`sidebar-shell${sidebarCollapsed ? " is-collapsed" : ""}`} aria-label="Main navigation">
     <div className="sidebar-brand">
-      <div className="sidebar-brand-mark">CFB</div>
+      {/* Platform brand first, current module and organisation second: Canvas
+          App is the base for further modules; Quotation is the module in use. */}
+      <div className="sidebar-brand-mark" title="Canvas App · Quotation">CA</div>
       {!sidebarCollapsed&&<div className="sidebar-brand-copy">
-        <strong>Quotation Master</strong>
-        <small>AVADHOOT PACKS</small>
+        <strong>Canvas App</strong>
+        <small>QUOTATION · AVADHOOT PACKS</small>
       </div>}
     </div>
     <nav className="sidebar-nav">
