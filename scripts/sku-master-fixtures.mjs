@@ -1,19 +1,26 @@
-// U2 SKU Master frontend fixture gate.
+// U2 SKU Master frontend fixture gate (Canonical Amendment 02).
 //
 // Run: npm run test:sku-master
 //
-// Proves the presentation model never invents a value (blank vs zero, hidden
-// vs unavailable, declared-unrecorded printing fields), that the catalogue
-// scope mirrors plant_access, that the destination is flag- and capability-
-// gated at BOTH the nav entry and the mount, and that the screen is read-only.
+// Proves the field registry keeps CDM-43 exactly (the quote and costing fields
+// in SPEC sheet groups and order, the production backlog listed apart, Partition
+// and Plate retired), that every field renders through one honest rule (blank
+// vs zero, hidden vs unavailable vs migration pending), that SKU Sets come from
+// governed membership with a quantity per member (CDM-44), that the split view
+// is clamped, that the destination is flag- and capability-gated at both the nav
+// entry and the mount, and that the screen is read-only.
 import fs from "node:fs";
 import {
-  NOT_VISIBLE, UNAVAILABLE, adoptionLabel, applicabilityLocationLabel, canOpenSkuMaster, constructionLabel,
-  customerLabel, dimensionSummary, familyLabel, formatMeasure, latestVersionFacts, normaliseSkuCatalogue,
-  plantItemCodeLabel, replacementLabel, skuCatalogueQuery, skuPlantScope, skuSearchValidation,
-  specificationRows, unrecordedFieldsNotice, visibilityText,
+  NOT_VISIBLE, PENDING, SPEC_FIELD_KEYS, SPLIT_DEFAULT, UNAVAILABLE, adoptionLabel, applicabilityLocationLabel,
+  canOpenSkuMaster, clampSplit, constructionLabel, customerLabel, dimensionSummary, familyLabel, formatMeasure,
+  gridCellText, latestVersionFacts, normaliseSkuCatalogue, plantItemCodeLabel, qtyPerSetText, replacementLabel,
+  schemaPendingNotice, skuCatalogueQuery, skuPlantScope, skuSearchValidation, skuSetGroups, skuSetView,
+  specFieldCell, specRowFromCatalogue, specRowFromDetail, specificationRows, unrecordedFieldsNotice, visibilityText,
 } from "../src/lib/skuMasterModel.js";
 import { SKU_FIXTURE_DETAILS, fixtureSkuCatalogue } from "../src/lib/skuMasterFixture.js";
+import {
+  PRINT_TECHNOLOGIES, PRODUCTION_BACKLOG, PRODUCTION_BACKLOG_COUNT, SKU_SPEC_FIELD_COUNT, SKU_SPEC_GROUPS,
+} from "../src/lib/skuSpecRegistry.js";
 
 let passes = 0;
 const failures = [];
@@ -58,8 +65,9 @@ check(spec.Height === "0 mm" && spec.BS === "Not recorded" && spec.BCT === "0" &
 
 // ─────────────────────────────────────────────────── visibility, never guesses
 check(visibilityText("visible") === null && visibilityText("not_visible_to_caller") === NOT_VISIBLE
-  && visibilityText("unavailable") === UNAVAILABLE && visibilityText(undefined) === UNAVAILABLE,
-  "U2-SKU-FE-8 hidden and failed reads have distinct honest wording; an unknown state is unavailable");
+  && visibilityText("unavailable") === UNAVAILABLE && visibilityText(undefined) === UNAVAILABLE
+  && visibilityText("schema_pending") === PENDING,
+  "U2-SKU-FE-8 hidden, failed and pending reads have distinct honest wording; an unknown state is unavailable");
 const customer = { customer_code: null, display_name: "Prospect Ltd" };
 check(customerLabel(customer, "visible") === "No Customer Code · Prospect Ltd"
   && customerLabel(null, "visible") === UNAVAILABLE
@@ -94,9 +102,10 @@ check(plantItemCodeLabel(null) === "Plant Item Code not assigned" && plantItemCo
 check(unrecordedFieldsNotice(["printing_technology", "number_of_colours"])
   === "Printing Technology and Number of colours are not yet recorded on governed SKU versions."
   && unrecordedFieldsNotice([]) === null,
-  "U2-SKU-FE-16 Printing Technology and colour count are declared unrecorded, not rendered as values");
+  "U2-SKU-FE-16 the unrecorded-fields wording stays available for responses that declare it");
 const normal = normaliseSkuCatalogue({});
-check(normal.skus.length === 0 && normal.truncated === false && normal.customerVisibility === "unavailable",
+check(normal.skus.length === 0 && normal.truncated === false && normal.customerVisibility === "unavailable"
+  && JSON.stringify(normal.schemaPending) === "{}",
   "U2-SKU-FE-17 a response without visibility is treated as unavailable, not visible");
 check(latestVersionFacts({ latest_version: null }).join() === "No versions"
   && latestVersionFacts({ version_count: 2, latest_version: { version_no: 2, approved: false,
@@ -105,22 +114,111 @@ check(latestVersionFacts({ latest_version: null }).join() === "No versions"
   "U2-SKU-FE-18 catalogue rows summarise the latest immutable version honestly");
 
 // ───────────────────────────────────────────────────────────────── fixtures
+const fixtureRows = fixtureSkuCatalogue().skus;
 const allFixtureCodes = [
-  ...fixtureSkuCatalogue().skus.map(row => row.plant_item_code).filter(Boolean),
+  ...fixtureRows.map(row => row.plant_item_code).filter(Boolean),
   ...Object.values(SKU_FIXTURE_DETAILS).flatMap(d => [d.sku.plant_item_code,
-    ...d.lineage.replaces.map(r => r.plant_item_code)]).filter(Boolean),
+    ...d.lineage.replaces.map(r => r.plant_item_code), ...(d.sets || []).map(s => s.label)]).filter(Boolean),
 ];
 check(allFixtureCodes.length > 0 && allFixtureCodes.every(code => code.includes("__U2_FIXTURE_ONLY__")),
-  "U2-SKU-FE-19 every fixture SKU code is marked __U2_FIXTURE_ONLY__");
+  "U2-SKU-FE-19 every fixture SKU and SKU Set code is marked __U2_FIXTURE_ONLY__");
 check(fixtureSkuCatalogue({ plant: "NAG", status: "active" }).skus.map(r => r.id).join() === "9101"
   && fixtureSkuCatalogue({ q: "pun/" }).skus.map(r => r.id).join() === "9201"
   && fixtureSkuCatalogue({ familyId: "202" }).skus.every(r => r.family?.id === 202),
   "U2-SKU-FE-20 the fixture catalogue applies the documented filters");
 check(Object.values(SKU_FIXTURE_DETAILS).every(d => d.mutations === "none")
   && SKU_FIXTURE_DETAILS[9101].versions[0].specification.height_mm === 0
-  && SKU_FIXTURE_DETAILS[9101].versions[1].specification.height_mm === null
+  && SKU_FIXTURE_DETAILS[9104].versions[0].specification.height_mm === null
   && SKU_FIXTURE_DETAILS[9103].detail_visibility.construction === "not_visible_to_caller",
   "U2-SKU-FE-21 fixture details exercise zero, blank and not-visible paths");
+
+// ────────────────────────────────────────── CDM-43 field registry (Amendment 02)
+const fields = SKU_SPEC_GROUPS.flatMap(g => g.fields);
+const sheetFields = fields.filter(f => f.origin === "sheet");
+check(SKU_SPEC_FIELD_COUNT === 39 && fields.length === 39 && sheetFields.length === 36
+  && fields.filter(f => f.origin === "new").map(f => f.key).join() === "PT,NC"
+  && fields.filter(f => f.origin === "app").map(f => f.key).join() === "LC",
+  "U2-SKU-FE-22 SKU Master holds 39 fields: 36 SPEC columns, Print Technology, Number of Colours and the app lifecycle");
+check(SKU_SPEC_GROUPS.map(g => g.label).join(" | ")
+  === "Identity & Linking | STD Carton Specification | STD Internal Dimensions | STD Board & Paper Composition | Conversion · Deckle · Sheet Sizing | Status & Governance",
+  "U2-SKU-FE-23 fields keep the SPEC sheet groups in sheet order");
+check(SKU_SPEC_GROUPS.every(g => g.fields.every((f, i) => i === 0 || f.order > g.fields[i - 1].order)),
+  "U2-SKU-FE-24 fields keep sheet order inside each group");
+check(fields.map(f => f.key).join() === "A,B,C,D,E,F,G,H,I,J,K,L,N,PT,NC,O,AA,AE,AF,AG,AI,AJ,AK,AL,AM,AN,AO,AP,AQ,AR,AS,AT,AU,AV,AW,BH,LC,DX,DZ",
+  "U2-SKU-FE-25 the stored field list is exactly the ruled quote and costing set, Cobb included");
+const backlogSheets = PRODUCTION_BACKLOG.flatMap(g => g.columns.map(c => c.sheet));
+check(PRODUCTION_BACKLOG_COUNT === 94 && backlogSheets.length === 94
+  && !backlogSheets.some(s => sheetFields.some(f => f.sheet === s)),
+  "U2-SKU-FE-26 the other 94 SPEC columns are a separate production backlog with no overlap");
+const retired = /^(C[P-Z]|D[A-U])$/;
+check(!backlogSheets.some(s => retired.test(s)) && !sheetFields.some(f => retired.test(f.sheet)),
+  "U2-SKU-FE-27 Partition (CP–DF) and Plate (DG–DU) columns appear in neither list");
+check(["IZ", "DY", "EA"].every(s => PRODUCTION_BACKLOG.flatMap(g => g.columns).find(c => c.sheet === s)?.note),
+  "U2-SKU-FE-28 superseded columns (Pc per set, Item Status, Discontinued Date) say what replaced them");
+check(JSON.stringify(PRINT_TECHNOLOGIES) === JSON.stringify(["Flexo", "CMYK", "Offset", "Unprinted"]),
+  "U2-SKU-FE-29 the Print Technology vocabulary is exactly Flexo / CMYK / Offset / Unprinted");
+check([...SPEC_FIELD_KEYS].sort().join() === fields.map(f => f.key).sort().join(),
+  "U2-SKU-FE-30 every registry field has exactly one renderer, and no renderer lacks a field");
+check(fields.filter(f => f.authority === "construction").map(f => f.key).join() === "I,J,K,L,AI,AJ,AK,AL,AM,AN,AO,AP,AQ,AR",
+  "U2-SKU-FE-31 ply, flutes and board layers are marked as Construction authority (CDM-13)");
+
+// ─────────────────────────────────────────────────────────── field cells
+const box = specRowFromDetail(SKU_FIXTURE_DETAILS[9101]);
+const boxCtx = { visibility: SKU_FIXTURE_DETAILS[9101].detail_visibility, schemaPending: SKU_FIXTURE_DETAILS[9101].schema_pending };
+const cellOf = (key, row = box, ctx = boxCtx) => specFieldCell(key, row, ctx);
+check(cellOf("PT").text === "Flexo" && cellOf("NC").text === "1" && cellOf("AA").state === "na" && cellOf("AT").text === "0.3",
+  "U2-SKU-FE-32 stored printing, Cobb and weight fields render from the latest version");
+const plate = specRowFromDetail(SKU_FIXTURE_DETAILS[9104]);
+check(specFieldCell("NC", plate, boxCtx).text === "0" && specFieldCell("AT", plate, boxCtx).text === "0"
+  && specFieldCell("AG", plate, boxCtx).state === "blank" && specFieldCell("N", plate, boxCtx).text === "Not recorded",
+  "U2-SKU-FE-33 zero colours and zero weight render 0 while a missing height or print quality reads Not recorded");
+check(cellOf("J").text === "C" && cellOf("I").text === "3" && cellOf("AJ").text === "150" && cellOf("AO").state === "blank",
+  "U2-SKU-FE-34 Construction ply, flute type and layers render from the Construction version, blank layers stay blank");
+const hiddenCon = specRowFromDetail(SKU_FIXTURE_DETAILS[9103]);
+const hiddenCtx = { visibility: SKU_FIXTURE_DETAILS[9103].detail_visibility, schemaPending: {} };
+check(specFieldCell("I", hiddenCon, hiddenCtx).state === "hidden" && specFieldCell("AI", hiddenCon, hiddenCtx).text === NOT_VISIBLE
+  && specFieldCell("I", { ...box, construction: null }, boxCtx).text === `Construction version #41 · ${UNAVAILABLE}`,
+  "U2-SKU-FE-35 Construction fields say not visible or unavailable, never a guessed value");
+check(cellOf("B", box, { visibility: {}, schemaPending: { quote_fields: true } }).text === PENDING
+  && specFieldCell("PT", { ...box, version: { ...box.version, quote_fields: null } }, boxCtx).state === "pending"
+  && gridCellText(cellOf("B", box, { schemaPending: { quote_fields: true } })) === "pending",
+  "U2-SKU-FE-36 a field whose storage is not activated reads pending, never Not recorded");
+check(cellOf("F").text === "FIX-CIC-778" && cellOf("DZ").text === "FIX-011145"
+  && cellOf("A").text === `FIX-LOC-601, Location #602`
+  && specFieldCell("A", hiddenCon, hiddenCtx).text === `Location #603 · ${NOT_VISIBLE}`,
+  "U2-SKU-FE-37 active references and Location applicability render; withdrawn references and unreadable codes do not pretend");
+check(cellOf("LC").text === "active" && cellOf("D").text === "__U2_FIXTURE_ONLY__/NAG/0001"
+  && specFieldCell("D", specRowFromDetail(SKU_FIXTURE_DETAILS[9102]), boxCtx).text === "Plant Item Code not assigned"
+  && specFieldCell("AE", specRowFromDetail(SKU_FIXTURE_DETAILS[9102]), boxCtx).text === "No SKU version",
+  "U2-SKU-FE-38 lifecycle, Plant Item Code and a SKU without versions render honestly");
+const catRow = specRowFromCatalogue(fixtureRows.find(r => r.id === 9101));
+check(["B", "PT", "AE", "I", "AJ", "BH", "DX", "DZ", "A"].every(k =>
+  specFieldCell(k, catRow, { visibility: fixtureSkuCatalogue().detail_visibility }).text
+  === specFieldCell(k, box, boxCtx).text),
+  "U2-SKU-FE-39 a catalogue row and its detail render every shared field identically");
+check(schemaPendingNotice({ quote_fields: true, sku_sets: true }).includes("SKU Sets") && schemaPendingNotice({}) === null,
+  "U2-SKU-FE-40 the pending notice names what is not stored yet, and is absent when nothing is pending");
+
+// ──────────────────────────────────────────────────────── CDM-44 SKU Sets
+const view = skuSetView(SKU_FIXTURE_DETAILS[9104].sets, 9104);
+check(view.length === 1 && view[0].role === "Plate" && view[0].qty === "× 2"
+  && view[0].members.map(m => m.role).join() === "Box,Plate,Partition"
+  && view[0].members.find(m => m.isCurrent).skuId === 9104,
+  "U2-SKU-FE-41 a SKU shows its set, its own role and quantity per set, and every member in role order");
+check(qtyPerSetText(1.5) === "× 1.5" && qtyPerSetText(null) === "quantity per set not recorded"
+  && skuSetView([{ id: 1, label: "S", members: [{ sku_id: 7, sku_visible: false, role: "plate", qty_per_set: 1 }] }], 1)[0]
+    .members[0].code === `SKU #7 · ${NOT_VISIBLE}`,
+  "U2-SKU-FE-42 quantity per set keeps blank apart, and a member the caller cannot read is not named");
+const groups = skuSetGroups(fixtureRows.map(specRowFromCatalogue).concat([{ id: 1, sets: null }]));
+check(groups.map(g => g.label).join(" | ").startsWith("SKU Set __U2_FIXTURE_ONLY__/NAG/0001 · confirmed")
+  && groups.find(g => g.key === "set-51").rows.map(r => r.id).join() === "9101,9104,9105"
+  && groups.some(g => g.label === "Not in a SKU Set") && groups.some(g => g.label === "SKU Set membership unavailable"),
+  "U2-SKU-FE-43 grid grouping uses governed membership, with honest headings for no set and unavailable sets");
+
+// ─────────────────────────────────────────────────────────────── split view
+check(SPLIT_DEFAULT === 50 && clampSplit(10) === 25 && clampSplit(90) === 75 && clampSplit(61.6) === 62
+  && clampSplit("x") === 50,
+  "U2-SKU-FE-44 the split opens at 50 : 50 and stays between 25 % and 75 %");
 
 // ──────────────────────────────────────────────────── gating and read-only
 const screen = read("../src/tabs/SkuMasterScreen.jsx");
@@ -130,28 +228,33 @@ const app = read("../src/App.jsx");
 const flags = read("../src/lib/featureFlags.js");
 check(sidebar.includes('isFeatureEnabled("u2_sku_master")&&canOpenSkuMaster(profile)')
   && shell.includes('tab==="skus"&&isFeatureEnabled("u2_sku_master")&&canOpenSkuMaster(profile)&&<SkuMasterScreen/>'),
-  "U2-SKU-FE-22 the same flag and capability gate the nav entry and the mount");
+  "U2-SKU-FE-45 the same flag and capability gate the nav entry and the mount");
 check(/"u2_sku_master"\]/.test(flags.replace(/\s+/g, "")) && flags.includes("import.meta.env.DEV ? DEV_DEFAULTS"),
-  "U2-SKU-FE-23 the destination is on only in the development floor; production stays default-off");
-check(app.includes('fixtureIllustration === "u2-skus"') && app.includes("import.meta.env.DEV && fixtureIllustration === \"u2-skus\"")
-  && app.includes("<SkuMasterScreen fixtureOnly"),
-  "U2-SKU-FE-24 the fixture preview exists only in a development build without a signed-in profile");
+  "U2-SKU-FE-46 the destination is on only in the development floor; production stays default-off");
+check(app.includes("import.meta.env.DEV && fixtureIllustration === \"u2-skus\"") && app.includes("<SkuMasterScreen fixtureOnly"),
+  "U2-SKU-FE-47 the fixture preview exists only in a development build without a signed-in profile");
 const apiCalls = screen.match(/apiFetch\(([^)]*)\)/g) || [];
 check(apiCalls.length === 2 && apiCalls.every(call => !call.includes("method"))
   && !/runMutation|method:\s*"(POST|PATCH|PUT|DELETE)"/.test(screen),
-  "U2-SKU-FE-25 the screen issues exactly two GET reads and no mutation");
-check(!/>\s*(Create|New SKU|Edit|Approve|Publish|Discontinue|Reactivate|Add reference|Withdraw)\s*</.test(screen),
-  "U2-SKU-FE-26 no dead create, edit, approve or discontinue control is rendered");
-check(screen.indexOf("if (fixtureOnly)") !== -1
-  && screen.indexOf("if (fixtureOnly)") < screen.indexOf("apiFetch(query)")
+  "U2-SKU-FE-48 the screen issues exactly two GET reads and no mutation");
+check(!/>\s*(Create|New SKU|Edit|Approve|Publish|Discontinue|Reactivate|Add reference|Add to set|Withdraw)\s*</.test(screen),
+  "U2-SKU-FE-49 no dead create, edit, approve, discontinue or set-membership control is rendered");
+check(screen.indexOf("if (fixtureOnly)") !== -1 && screen.indexOf("if (fixtureOnly)") < screen.indexOf("apiFetch(query)")
   && screen.includes("U2 · FIXTURE ONLY"),
-  "U2-SKU-FE-27 fixture mode is labelled and short-circuits before any request");
+  "U2-SKU-FE-50 fixture mode is labelled and short-circuits before any request");
 check(screen.includes('<ProvenanceTag kind="governed" />') && screen.includes('<ProvenanceTag kind="local" />')
   && !/printingTechnology|printing_technology|numberOfColours/.test(screen),
-  "U2-SKU-FE-28 governed data is distinguished from local data, and local printing metadata is never borrowed");
+  "U2-SKU-FE-51 governed data is distinguished from local data, and local printing metadata is never borrowed");
 check(screen.includes('verdict.kind === "access-denied"') && screen.includes("AccessDeniedState")
   && screen.includes("resp.status === 404"),
-  "U2-SKU-FE-29 a denial renders as access denied and an invisible SKU as not visible, never as an empty list");
+  "U2-SKU-FE-52 a denial renders as access denied and an invisible SKU as not visible, never as an empty list");
+check(screen.includes('role="separator"') && screen.includes("onPointerDown={startDrag}")
+  && screen.includes("onDoubleClick={() => setSplit(SPLIT_DEFAULT)}") && screen.includes("clampSplit(")
+  && screen.includes("onKeyDown={nudgeSplit}") && screen.includes("useState(SPLIT_DEFAULT)"),
+  "U2-SKU-FE-53 the divider opens at 50 : 50, drags and moves by keyboard within the clamp, and resets on double-click");
+check(screen.includes("SKU_SPEC_GROUPS") && screen.includes("PRODUCTION_BACKLOG") && screen.includes("specFieldCell(c.key, row, ctx)")
+  && screen.includes("specFieldCell(f.key, row, ctx)"),
+  "U2-SKU-FE-54 grid and deep-dive both render from the registry through the one field rule");
 
 console.log(`\n${passes} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);
