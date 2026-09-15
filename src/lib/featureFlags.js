@@ -56,7 +56,11 @@
 // u2_gsm_master joins the floor on the same basis as u3_pricing_basis: the
 // Product Owner approved the GSM Master destination on 2026-09-15; production
 // stays default-off until its migration is activated.
-const DEV_DEFAULTS = ["u1_producing_plants", "u1_customer_families", "u3_pricing_basis", "u2_gsm_master"];
+// u2_sku_master joins for the read-only SKU Master increment (2026-09-15). It is
+// a destination, it issues only caller-token reads, and production stays
+// default-off until its rollout is a separate decision.
+const DEV_DEFAULTS = ["u1_producing_plants", "u1_customer_families", "u3_pricing_basis", "u2_gsm_master",
+  "u2_sku_master"];
 
 const RAW = import.meta.env.VITE_FEATURE_FLAGS || "";
 const ENABLED = new Set([

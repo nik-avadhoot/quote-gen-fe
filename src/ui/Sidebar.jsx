@@ -16,6 +16,7 @@
 import { useState } from "react";
 import { hasCapability } from "../lib/capabilities.js";
 import { isFeatureEnabled } from "../lib/featureFlags.js";
+import { canOpenSkuMaster } from "../lib/skuMasterModel.js";
 import { useAppState } from "../state/AppStateContext.js";
 
 export default function Sidebar(){
@@ -48,7 +49,11 @@ export default function Sidebar(){
         :[pending("CL","Construction Library",
           isFeatureEnabled("u2_construction_library") ? "Capability required" : "U2 destination not enabled")]),
       pending("PA","Plant Construction Adoption","In Construction Library"),
-      pending("SK","SKUs","Versions, specifications and Location applicability included"),
+      // SKU read scope is plant_access at any plant — the skus SELECT policy.
+      ...(isFeatureEnabled("u2_sku_master")&&canOpenSkuMaster(profile)
+        ?[item("skus","SK","SKU Master",undefined,"Read-only governed SKUs, versions, specifications and Location applicability")]
+        :[pending("SK","SKU Master",
+          isFeatureEnabled("u2_sku_master") ? "Capability required" : "U2 destination not enabled")]),
     ]],
     ["Commercial Masters", [
       item("defaults","CP","Commercial Policies",undefined,

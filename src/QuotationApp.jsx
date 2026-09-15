@@ -17,6 +17,7 @@ import ConstructionLibraryScreen from "./tabs/ConstructionLibraryScreen.jsx";
 import CustomerFamiliesScreen from "./tabs/CustomerFamiliesScreen.jsx";
 import PricingBasisScreen from "./tabs/PricingBasisScreen.jsx";
 import GsmMasterScreen from "./tabs/GsmMasterScreen.jsx";
+import SkuMasterScreen from "./tabs/SkuMasterScreen.jsx";
 
 // ── Shell chrome (Phase 8 refactor) ──────────────────────────────────────
 import Sidebar from "./ui/Sidebar.jsx";
@@ -29,6 +30,7 @@ import { AppStateProvider } from "./state/AppStateProvider.jsx";
 import { useAppState } from "./state/AppStateContext.js";
 import { hasCapability } from "./lib/capabilities.js";
 import { isFeatureEnabled } from "./lib/featureFlags.js";
+import { canOpenSkuMaster } from "./lib/skuMasterModel.js";
 
 /* ═══ MAIN APP ═════════════════════════════════════════════════════════════ */
 
@@ -77,6 +79,7 @@ function QuotationApp(){
           {tab==="conlib"&&isFeatureEnabled("u2_construction_library")&&hasCapability(profile,"read_construction_library")&&<ConstructionLibraryScreen/>}
           {tab==="pricingbasis"&&isFeatureEnabled("u3_pricing_basis")&&<PricingBasisScreen/>}
           {tab==="gsm"&&isFeatureEnabled("u2_gsm_master")&&<GsmMasterScreen/>}
+          {tab==="skus"&&isFeatureEnabled("u2_sku_master")&&canOpenSkuMaster(profile)&&<SkuMasterScreen/>}
         </div>
       </div>
     </div>

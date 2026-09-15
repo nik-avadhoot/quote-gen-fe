@@ -4,6 +4,7 @@ import PricingBasisScreen from "./tabs/PricingBasisScreen.jsx";
 import QuotesWorkspace from "./tabs/QuotesWorkspace.jsx";
 import QuoteCatalogueScreen from "./tabs/QuoteCatalogueScreen.jsx";
 import MyBatchesScreen from "./tabs/MyBatchesScreen.jsx";
+import SkuMasterScreen from "./tabs/SkuMasterScreen.jsx";
 import { AuthProvider, useAuth } from "./AuthContext.jsx";
 import { C, sans } from "./theme.js";
 import { useState } from "react";
@@ -14,7 +15,7 @@ function Gate() {
   const [fixtureIllustration, setFixtureIllustration] = useState(() => {
     if (!import.meta.env.DEV) return null;
     const requested = new URLSearchParams(window.location.search).get("fixture");
-    return ["u5", "u5-inbox", "u5-history", "u3-u4", "u4-batches"].includes(requested) ? requested : null;
+    return ["u5", "u5-inbox", "u5-history", "u3-u4", "u4-batches", "u2-skus"].includes(requested) ? requested : null;
   });
 
   if (loading) {
@@ -49,7 +50,11 @@ function Gate() {
       <QuotesWorkspace fixtureOnly initialView="history" onExitFixture={() => setFixtureIllustration(null)} />
     </AppStateProvider>;
   }
+  if (!profile && import.meta.env.DEV && fixtureIllustration === "u2-skus") {
+    return <SkuMasterScreen fixtureOnly onExitFixture={() => setFixtureIllustration(null)} />;
+  }
   if (!profile) return <LoginScreen
+    onU2SkuIllustration={import.meta.env.DEV ? () => setFixtureIllustration("u2-skus") : undefined}
     onU3Illustration={import.meta.env.DEV ? () => setFixtureIllustration("u3-u4") : undefined}
     onU4CatalogueIllustration={import.meta.env.DEV ? () => setFixtureIllustration("u4-batches") : undefined}
     onU5Illustration={import.meta.env.DEV ? () => setFixtureIllustration("u5") : undefined} />;
