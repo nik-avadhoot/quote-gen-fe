@@ -118,6 +118,11 @@ rate mechanism explicitly consumes them, and no pricing formula may be inferred 
 Batches remain pinned to their selected non-price-driving SKU version until Maker adopts a newer
 version.
 
+*Amendment 02, B-05 and B-06 (Product Owner, 2026-09-16):* this rule governs over the SOP practice of
+treating every specification change as a new item. Printing Technology is one of **Flexo, CMYK,
+Offset or Unprinted**, held with Number of Colours (a whole number, zero or more), the descriptive
+colour detail and the print quality statement on the immutable SKU specification version.
+
 ## CDM-11 — Proposed and discontinued SKUs
 
 Maker may create a stable Proposed SKU in Batch Entry and quote it before Plant Item Code assignment.
@@ -125,6 +130,10 @@ Checker approval authorises Quote use, not master publication. NPD/Admin publica
 Discontinued SKUs cannot be newly selected but may finish an existing Batch with warning. Reactivation
 preserves identity if the commercial item is unchanged; replacement SKUs are linked but never
 silently substituted.
+
+*Amendment 02, B-04 (Product Owner, 2026-09-16):* the SKU lifecycle is Proposed → Active →
+Discontinued, where Active is the published state. The SPEC sheet's five Item Status values and its
+Discontinued Date are not carried, and SKUs loaded from the spreadsheet arrive Proposed.
 
 ## CDM-12 — Construction Library
 
@@ -224,6 +233,9 @@ A Box without components is standalone. Attaching the first Plate/Partition crea
 SET; removing the last component dissolves but does not delete it. SET Code is mandatory,
 case/trim-normalised unique across the entire Batch and remains reserved while dissolved. Dissolved
 SETs stay visible and relabellable. Membership uses internal identity; no string/order inference.
+
+*Amendment 02, B-01 (Product Owner, 2026-09-16):* a Batch SET may be seeded from a master SKU Set
+(CDM-44). It keeps its own SET Code, lifecycle and membership history inside the Batch.
 
 ## CDM-21 — Quote family and revision identity
 
@@ -402,6 +414,29 @@ normalisation of case and whitespace, and calculation and snapshot provenance. A
 reconciliation table and a named operational owner per value are required before authorisation.
 Machine, station, process-route, scheduling, capacity, shop-floor, QC and procurement scope remain
 outside this and every current slice.
+
+## CDM-43 — SKU Master field scope and production-data backlog
+
+**Added by Amendment 02, B-03 and B-07 (Product Owner, 2026-09-16).**
+
+SKU Master stores only quotation- and costing-relevant fields to start: identity and references,
+Construction-governed ply, flutes and board layers, dimensions, printing specification, Cobb value,
+stated item GSM, weight, CS, BS and ECT, ups, customer specification version and lifecycle. Every other
+SPEC-sheet column is a production-data backlog: listed in sheet order and group, not implemented and
+never required. The Partition and Plate sub-specification columns are retired; partitions and plates
+are their own SKUs. Cobb value is directly linked to coating cost; no coating formula is inferred from
+it until an approved rate mechanism consumes it. The full field list is in
+[`data-model-canonical-amendment-02.md`](data-model-canonical-amendment-02.md).
+
+## CDM-44 — SKU Sets and quantity per set
+
+**Added by Amendment 02, B-01 and B-02 (Product Owner, 2026-09-16).**
+
+Boxes, plates and partitions are independent SKUs for production and costing, linked into a
+plant-owned master SKU Set with at most one active box. The shared APSPL Item Code base proposes a
+set; membership is confirmed and stored by internal SKU identity, never inferred from code text. Each
+member carries a strictly positive quantity per set. Roles for codes outside A / P / Q are not yet
+ruled, and such SKUs take no set role until they are.
 
 ---
 

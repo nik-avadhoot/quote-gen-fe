@@ -484,6 +484,9 @@ Expose the quotation-relevant subset selected through the field-classification e
 customer-facing values distinct from internal/production values. Do not make the frontend a second
 260-column spreadsheet.
 
+The classification is settled by Canonical Amendment 02 (CDM-43): SKU Master stores the quotation-
+and costing-relevant SPEC fields, and the remaining columns are a listed production-data backlog.
+
 ### U3 — commercial masters and Pricing Basis
 
 Canonical foundation: S5 after the interest amendment is resolved.
