@@ -44,6 +44,9 @@ export default function BatchPricingBasisSelector({
   saving = false,
   compact = false,
   batchOpenControls = null,
+  batchReferenceField = null,
+  batchMeta = null,
+  batchStatusNote = null,
 }) {
   const durable = persistedBatch != null;
   const [internalDraft, setInternalDraft] = useState(() => pricingBasisDraftFromBatch(persistedBatch) || ({
@@ -162,18 +165,26 @@ export default function BatchPricingBasisSelector({
                         : "Session selection only · open a governed Batch to Calculate or Send.";
     const warning = read.status === "error" || read.status === "denied"
       || !!durableState?.warning || (read.status === "ready" && eligible.length === 0);
+    // Presentation only: one inline note beside the Release row. A pending or
+    // failed Batch open is shown first; the full text of both stays in title.
+    const batchNoteFirst = batchStatusNote?.priority && batchStatusNote.text;
+    const noteText = batchNoteFirst ? batchStatusNote.text : notice;
+    const noteWarning = warning || !!batchStatusNote?.warning;
+    const noteTitle = [batchStatusNote?.text, notice].filter(Boolean).join(" · ");
     return (
       <div className="batch-pb-selector-compact" aria-label="Working Batch Pricing Basis">
         <div className="batch-pb-compact-controls">
           <div className="batch-pb-compact-row batch-pb-date-row">
+            {batchReferenceField}
             <strong className="batch-pb-compact-label">DATE</strong>
-            <label title="Pricing date">
+            <label className="batch-pb-date-field" title="Pricing date">
               <span className="batch-pb-sr-label">Pricing date</span>
               <input type="date" aria-label="Pricing date" value={draft.pricingDate || ""}
                 onChange={event => setDraft(current => ({ ...current, pricingDate: event.target.value }))} />
             </label>
             {batchOpenControls}
           </div>
+          {batchMeta}
           <div className="batch-pb-compact-row batch-pb-release-row">
             <strong className="batch-pb-compact-label">RELEASE</strong>
             <label className="batch-pb-release-field" title="Governed Pricing Basis Release">
@@ -196,13 +207,15 @@ export default function BatchPricingBasisSelector({
               title={selected ? `${selected.release_name || "Unnamed Release"} · ${selected.effective_from || "—"} to ${selected.effective_until || "open-ended"}` : "No persisted Release"}>
               {selected ? `#${selected.id} · ${draft.selectionMode === "deliberate" ? "deliberate" : "default"}` : "unresolved"}
             </span>
-          </div>
-        </div>
-        <div role="status" className={`batch-pb-compact-notice ${warning ? "is-warning" : ""}`}>
-          <span>{notice}</span>
-          {read.status === "error" && <button type="button" onClick={() => setReloadKey(key => key + 1)}>Retry</button>}
-          {fixtureOnly && <strong> · FIXTURE ONLY</strong>}
-          {durable && <div className="batch-pb-governed-actions">
+            <span role="status" className={`batch-pb-compact-notice ${noteWarning ? "is-warning" : ""}`}
+              title={noteTitle}>
+              {(fixtureOnly || batchStatusNote?.fixtureLabel) && <strong>
+                {fixtureOnly ? "FIXTURE ONLY" : batchStatusNote.fixtureLabel} ·
+              </strong>}
+              <span>{noteText}</span>
+              {read.status === "error" && <button type="button" onClick={() => setReloadKey(key => key + 1)}>Retry</button>}
+            </span>
+            {durable && <div className="batch-pb-governed-actions">
               <button type="button" className="batch-pb-icon-action"
                 onClick={() => setDraft(current => ({ ...current,
                   releaseId: automatic?.id ?? null, selectionMode: "automatic_default" }))}
@@ -215,6 +228,7 @@ export default function BatchPricingBasisSelector({
                 {saving ? "Saving…" : "Save"}
               </button>
             </div>}
+          </div>
         </div>
       </div>
     );

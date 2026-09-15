@@ -132,16 +132,16 @@ export default function CustomerFamiliesScreen({ showToast }) {
   return (
     <div style={{ display: "flex", height: "100%", fontFamily: sans }}>
       <div style={{ width: 320, borderRight: `1px solid ${C.border}`, padding: 16, overflowY: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: C.slate }}>Customer Families</div>
-        </div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-          <CapabilityGate profile={profile} capability={CREATE_CAPS}>
-            <Btn ch="+ Family" sm v="secondary" onClick={() => setModal({ kind: "propose" })} />
-          </CapabilityGate>
-          <CapabilityGate profile={profile} capability={CREATE_CAPS}>
-            <Btn ch="+ Prospect" sm v="secondary" onClick={() => setModal({ kind: "prospect" })} />
-          </CapabilityGate>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: T.heading, fontWeight: 700, color: C.slate, whiteSpace: "nowrap" }}>Customer Families</div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <CapabilityGate profile={profile} capability={CREATE_CAPS}>
+              <Btn ch="+ Family" sm v="secondary" onClick={() => setModal({ kind: "propose" })} />
+            </CapabilityGate>
+            <CapabilityGate profile={profile} capability={CREATE_CAPS}>
+              <Btn ch="+ Prospect" sm v="secondary" onClick={() => setModal({ kind: "prospect" })} />
+            </CapabilityGate>
+          </div>
         </div>
         <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or code…"
           style={{ ...inputSt, marginBottom: 8 }} />
@@ -151,17 +151,23 @@ export default function CustomerFamiliesScreen({ showToast }) {
         </select>
         {!state.families.length && <EmptyState title="No Customer Families" hint="None are recorded yet." />}
         {state.families.length > 0 && !filtered.length && <EmptyState title="No matches" hint="Try a different search or filter." />}
-        {filtered.map(f => (
-          <div key={f.id} onClick={() => setSelectedId(f.id)}
-            style={{
-              padding: "8px 10px", borderRadius: 6, marginBottom: 4, cursor: "pointer",
-              background: selected?.id === f.id ? C.amberL : "transparent",
-            }}>
-            <PermanentCode code={f.group_customer_code} />
-            <div style={{ fontSize: 12, color: C.slateM, marginTop: 2 }}>{f.name}</div>
-            <LifecycleBadge status={f.status} />
-          </div>
-        ))}
+        {filtered.map(f => {
+          const isSelected = selected?.id === f.id;
+          return (
+            <div key={f.id} onClick={() => setSelectedId(f.id)}
+              style={{
+                padding: "7px 10px", borderRadius: 7, marginBottom: 6, cursor: "pointer",
+                border: `1px solid ${isSelected ? C.amber : C.border}`,
+                background: isSelected ? C.amberL : C.white,
+              }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <PermanentCode code={f.group_customer_code} />
+                <LifecycleBadge status={f.status} />
+              </div>
+              <div style={{ fontSize: T.value, color: C.slateM, marginTop: 3 }}>{f.name}</div>
+            </div>
+          );
+        })}
       </div>
       <div className="screen-end-padded" style={{ flex: 1, padding: 20, overflowY: "auto" }}>
         {!selected ? (
@@ -804,42 +810,51 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-        {editingName ? (
-          <>
-            <Inp value={nameDraft} onChange={setNameDraft} st={{ width: 220 }} />
-            <Btn ch="Save" sm disabled={nameBusy} onClick={saveName} />
-            <Btn ch="Cancel" sm v="secondary" disabled={nameBusy}
-              onClick={() => { setNameDraft(family.name); setEditingName(false); }} />
-          </>
-        ) : (
-          <>
-            <span style={{ fontSize: 18, fontWeight: 700, color: C.slate }}>{family.name}</span>
-            <LifecycleBadge status={family.status} />
-            <CapabilityGate profile={profile} capability={MANAGE}>
-              {!isRetired && <Btn ch="Edit" sm v="ghost" onClick={() => { setNameDraft(family.name); setEditingName(true); }} />}
-            </CapabilityGate>
-          </>
-        )}
-      </div>
-      <PermanentCode code={family.group_customer_code} style={{ fontSize: 13 }} />
-      {survivingInto && (
-        <div style={{ marginTop: 8, fontSize: 11, color: C.red }}>
-          Merged into <PermanentCode code={survivingInto.group_customer_code} /> ({survivingInto.name})
+      {/* Identity header — the same bordered card language as the SummaryRow
+          sections below it. Presentation only: every action keeps its gate. */}
+      <div style={{ border: `1px solid ${C.border}`, borderRadius: 7, background: C.white, padding: "10px 12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              {editingName ? (
+                <>
+                  <Inp value={nameDraft} onChange={setNameDraft} st={{ width: 220 }} />
+                  <Btn ch="Save" sm disabled={nameBusy} onClick={saveName} />
+                  <Btn ch="Cancel" sm v="secondary" disabled={nameBusy}
+                    onClick={() => { setNameDraft(family.name); setEditingName(false); }} />
+                </>
+              ) : (
+                <>
+                  <span style={{ fontSize: T.heading, fontWeight: 700, color: C.slate }}>{family.name}</span>
+                  <LifecycleBadge status={family.status} />
+                </>
+              )}
+            </div>
+            <PermanentCode code={family.group_customer_code} style={{ display: "inline-block", marginTop: 3, fontSize: T.title }} />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            {!editingName && (
+              <CapabilityGate profile={profile} capability={MANAGE}>
+                {!isRetired && <Btn ch="Edit" sm v="ghost" onClick={() => { setNameDraft(family.name); setEditingName(true); }} />}
+              </CapabilityGate>
+            )}
+            {family.status === "proposed" && (
+              <CapabilityGate profile={profile} capability={MANAGE}>
+                <Btn ch="Approve" sm disabled={!attachedSectors.length}
+                  onClick={() => openModal({ kind: "approve", family })} />
+              </CapabilityGate>
+            )}
+            {!isRetired && (
+              <CapabilityGate profile={profile} capability={MANAGE}>
+                <Btn ch="Merge into…" sm v="secondary" onClick={() => openModal({ kind: "merge", family })} />
+              </CapabilityGate>
+            )}
+          </div>
         </div>
-      )}
-
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-        {family.status === "proposed" && (
-          <CapabilityGate profile={profile} capability={MANAGE}>
-            <Btn ch="Approve" sm disabled={!attachedSectors.length}
-              onClick={() => openModal({ kind: "approve", family })} />
-          </CapabilityGate>
-        )}
-        {!isRetired && (
-          <CapabilityGate profile={profile} capability={MANAGE}>
-            <Btn ch="Merge into…" sm v="secondary" onClick={() => openModal({ kind: "merge", family })} />
-          </CapabilityGate>
+        {survivingInto && (
+          <div style={{ marginTop: 8, fontSize: T.body, color: C.red }}>
+            Merged into <PermanentCode code={survivingInto.group_customer_code} /> ({survivingInto.name})
+          </div>
         )}
       </div>
 

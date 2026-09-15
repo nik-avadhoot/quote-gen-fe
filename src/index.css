@@ -136,36 +136,24 @@ code {
   overflow: visible;
 }
 
+/* Sized like the Customer/Commercials cards beside it. Its two compact rows
+   stay unwrapped; the previous scoped flex-wrap/width:100% pushed the Open
+   Batch controls onto their own line. */
 .batch-profile-pricing-card {
   width: auto;
-  min-width: 220px;
-  max-width: 240px;
-  flex: 0 1 240px;
+  min-width: 280px;
+  max-width: 420px;
+  flex: 1 1 360px;
 }
 
 .batch-profile-pricing-card .batch-pb-compact {
   padding: 7px;
 }
 
-.batch-profile-pricing-card .batch-pb-workspace-line,
-.batch-profile-pricing-card .batch-pb-compact-row {
-  align-items: stretch;
-  flex-wrap: wrap;
+.batch-profile-pricing-card .batch-pb-release-field {
+  min-width: 64px;
+  flex: 1 1 90px;
 }
-
-.batch-profile-pricing-card .batch-pb-workspace-line > input {
-  min-width: 0;
-  flex-basis: 150px;
-}
-
-.batch-profile-pricing-card .batch-pb-open-actions,
-.batch-profile-pricing-card .batch-pb-governed-actions {
-  width: 100%;
-  margin-left: 0;
-  flex-wrap: wrap;
-}
-
-.batch-profile-pricing-card .batch-pb-workspace-line > input { min-width: 0; }
 
 .batch-grid-delivery-header.is-missing-route .batch-grid-delivery-kicker,
 .batch-grid-delivery-header.is-unassigned .batch-grid-delivery-kicker { color: #9a5b22; }
@@ -178,7 +166,6 @@ code {
   font: 10px/1.25 system-ui, 'Segoe UI', sans-serif;
 }
 
-.batch-pb-workspace-line,
 .batch-pb-compact-row {
   display: flex;
   align-items: center;
@@ -206,9 +193,18 @@ code {
   margin-left: auto;
 }
 
-.batch-pb-workspace-line > input {
-  min-width: 175px;
-  flex: 1 1 240px;
+.batch-pb-batch-field {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.batch-pb-compact-controls .batch-pb-batch-field input {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 40px;
   font-family: ui-monospace, Consolas, monospace;
 }
 
@@ -236,6 +232,16 @@ code {
   opacity: .55;
 }
 
+.batch-pb-open-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+}
+
 .batch-pb-compact-label {
   flex: 0 0 auto;
   color: #bf691e;
@@ -243,17 +249,6 @@ code {
   letter-spacing: .08em;
 }
 
-.batch-pb-workspace-state {
-  min-width: 80px;
-  max-width: 145px;
-  overflow: hidden;
-  color: #718096;
-  font-size: 8px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.batch-pb-workspace-state.is-warning,
 .batch-pb-workspace-meta .is-warning,
 .batch-pb-compact-notice.is-warning {
   color: #b65f13;
@@ -281,7 +276,7 @@ code {
   min-width: 0;
 }
 
-.batch-pb-date-row > label {
+.batch-pb-date-field {
   flex: 0 0 116px;
 }
 
@@ -335,16 +330,17 @@ code {
   color: #fff;
 }
 
+/* Inline note beside the Release control, not a separate full-width row. */
 .batch-pb-compact-notice {
   display: flex;
+  flex: 1 1 60px;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   min-width: 0;
-  height: 15px;
   overflow: hidden;
   color: #718096;
   font-size: 8px;
-  text-overflow: ellipsis;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
@@ -352,6 +348,11 @@ code {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.batch-pb-compact-notice strong {
+  flex: 0 0 auto;
+  color: #b65f13;
 }
 
 .batch-pb-compact-notice button {
@@ -1747,15 +1748,13 @@ code {
     font-size: 9px;
   }
 
-  .batch-profile-pricing-card .batch-pb-workspace-line,
   .batch-profile-pricing-card .batch-pb-compact-row {
     min-height: 20px;
     gap: 4px;
   }
 
-  .batch-profile-pricing-card .batch-pb-workspace-line > input {
-    min-width: 0;
-    flex-basis: 110px;
+  .batch-profile-pricing-card .batch-pb-batch-field {
+    gap: 4px;
   }
 
   .batch-profile-pricing-card .batch-pb-compact input,
@@ -1765,13 +1764,12 @@ code {
     padding: 1px 4px;
   }
 
-  .batch-profile-pricing-card .batch-pb-compact-label {
-    font-size: 7px;
+  .batch-profile-pricing-card .batch-pb-open-actions button {
+    width: 20px;
+    padding: 0;
   }
 
-  .batch-profile-pricing-card .batch-pb-workspace-state {
-    min-width: 0;
-    max-width: 54px;
+  .batch-profile-pricing-card .batch-pb-compact-label {
     font-size: 7px;
   }
 
@@ -1781,13 +1779,8 @@ code {
     font-size: 7px;
   }
 
-  .batch-profile-pricing-card .batch-pb-date-row > label {
+  .batch-profile-pricing-card .batch-pb-date-field {
     flex-basis: 78px;
-  }
-
-  .batch-profile-pricing-card .batch-pb-release-field {
-    min-width: 82px;
-    flex-basis: 100px;
   }
 
   .batch-profile-pricing-card .batch-pb-mode {
@@ -1801,16 +1794,8 @@ code {
     font-size: 7px !important;
   }
 
-  .batch-profile-pricing-card .batch-pb-compact-notice {
-    min-height: 14px;
-    height: auto;
-    margin-top: 3px;
-    font-size: 7px;
-  }
-
   .batch-profile-pricing-card .batch-pb-compact-controls {
-    gap: 5px;
-    margin-top: 4px;
+    gap: 4px;
   }
 
   .batch-profile-pricing-card .batch-pb-governed-actions button {
@@ -1821,13 +1806,8 @@ code {
 }
 
 @media (max-width: 900px) {
-  .batch-pb-workspace-line,
   .batch-pb-compact-row {
     flex-wrap: wrap;
-  }
-
-  .batch-pb-workspace-state {
-    max-width: none;
   }
 
   .batch-workspace-panel {

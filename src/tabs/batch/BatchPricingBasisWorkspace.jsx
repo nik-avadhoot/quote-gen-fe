@@ -374,43 +374,54 @@ export default function BatchPricingBasisWorkspace({
     : null;
 
   if (compact) {
+    // Compact card: icon-sized buttons so BATCH, DATE and these controls share
+    // one row. The full label stays as both tooltip and accessible name.
     const batchOpenControls = <div className="batch-pb-open-actions">
-      <button type="button" onClick={open} disabled={status === "loading"}>
-        {batch ? "Open" : "Open Batch"}
-      </button>
+      <button type="button" onClick={open} disabled={status === "loading"}
+        title={batch ? "Open another Batch by reference" : "Open Batch"}
+        aria-label={batch ? "Open another Batch by reference" : "Open Batch"}>↗</button>
       {batch && <button type="button" onClick={reopen} disabled={status === "loading"}
-        title="Reopen persisted selection">↻</button>}
+        title="Reopen persisted selection" aria-label="Reopen persisted selection">↻</button>}
       {batch && <button type="button" onClick={() => setWorkspaceOpen(true)}
-        title="View durable Batch identity, profile, people and groups">Workspace</button>}
+        title="View durable Batch identity, profile, people and groups"
+        aria-label="View Batch workspace">▤</button>}
       {batch && !fixtureOnly && <button type="button" onClick={closeDurableBatch}
-        title="Close this governed Batch and release its edit lock">Close</button>}
-      {fixtureOnly && <button type="button" onClick={() => setNewBatchDialogOpen(true)}>
-        + New fixture Batch
-      </button>}
+        title="Close this governed Batch and release its edit lock"
+        aria-label="Close Batch">✕</button>}
+      {fixtureOnly && <button type="button" onClick={() => setNewBatchDialogOpen(true)}
+        title="New fixture Batch" aria-label="New fixture Batch">+</button>}
     </div>;
+    const batchReferenceField = <label className="batch-pb-batch-field" title="Permanent Batch reference">
+      <strong className="batch-pb-compact-label">BATCH</strong>
+      <input aria-label="Permanent Batch reference" value={reference}
+        onChange={event => setReference(event.target.value)} disabled={fixtureOnly}
+        placeholder="NAG/BAT/2026-27/00001" />
+    </label>;
+    // Loading/error/denied Batch outcomes take the visible inline note first;
+    // routine confirmations stay in the note's tooltip beside the Release note.
+    const batchStatusNote = {
+      text: message,
+      warning: status === "error" || status === "denied",
+      priority: status === "loading" || status === "error" || status === "denied",
+      fixtureLabel: fixtureOnly ? "FIXTURE ONLY" : null,
+    };
+    const batchMeta = batch ? <div className="batch-pb-workspace-meta">
+      <span title={batch.batch_reference}><strong>Ref</strong> {batch.batch_reference}</span>
+      <span><strong>Batch</strong> #{batch.id}</span>
+      <span><strong>Plant</strong> {batch.plant
+        ? `${batch.plant.plant_code} · #${batch.plant.id}` : `#${batch.plant_id} · hidden`}</span>
+      <span><strong>v</strong>{batch.content_version}</span>
+      {batch.details_partial && <span className="is-warning">Partial caller-visible identity</span>}
+    </div> : null;
     return <>
       <section className="batch-pb-compact" aria-label="Durable Batch Pricing Basis workspace">
-        <div className="batch-pb-workspace-line">
-          <strong className="batch-pb-compact-label">BATCH</strong>
-          <input aria-label="Permanent Batch reference" value={reference}
-            onChange={event => setReference(event.target.value)} disabled={fixtureOnly}
-            placeholder="NAG/BAT/2026-27/00001" />
-          <span className={`batch-pb-workspace-state ${status === "error" || status === "denied" ? "is-warning" : ""}`}
-            title={message}>{status === "loading" ? "Loading…" : fixtureOnly ? "FIXTURE ONLY" : message}</span>
-        </div>
-        {batch && <div className="batch-pb-workspace-meta">
-          <span title={batch.batch_reference}><strong>Ref</strong> {batch.batch_reference}</span>
-          <span><strong>Batch</strong> #{batch.id}</span>
-          <span><strong>Plant</strong> {batch.plant
-            ? `${batch.plant.plant_code} · #${batch.plant.id}` : `#${batch.plant_id} · hidden`}</span>
-          <span><strong>v</strong>{batch.content_version}</span>
-          {batch.details_partial && <span className="is-warning">Partial caller-visible identity</span>}
-        </div>}
         {batch ? <BatchPricingBasisSelector compact fixtureOnly={fixtureOnly}
             plantCode={batch.plant?.plant_code} persistedBatch={batch}
-            onPersist={persist} saving={saving} batchOpenControls={batchOpenControls} />
+            onPersist={persist} saving={saving} batchOpenControls={batchOpenControls}
+            batchReferenceField={batchReferenceField} batchMeta={batchMeta} batchStatusNote={batchStatusNote} />
           : <BatchPricingBasisSelector compact plantCode={fallbackPlantCode}
-              draft={draft} setDraft={setDraft} batchOpenControls={batchOpenControls} />}
+              draft={draft} setDraft={setDraft} batchOpenControls={batchOpenControls}
+              batchReferenceField={batchReferenceField} batchStatusNote={batchStatusNote} />}
       </section>
       {workspaceVisible && batch && <BatchWorkspacePanel
         key={`${batch.id}-${batchWorkspaceRequest?.requestId || "manual"}`} batchId={batch.id}
