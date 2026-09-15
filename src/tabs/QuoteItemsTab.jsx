@@ -70,7 +70,7 @@ export default function QuoteItemsTab(){
         <div style={{fontSize:11,color:templateLoaded?"#2A7550":"#B5641F",lineHeight:1.4}}>
           {templateLoaded
             ?"Exports will use your master format — all formulas, formatting and sheet structure preserved. Click to replace."
-            :"Upload CFB_Quotation_Master_v6_1.xlsx once. All exports will retain exact formulas, formatting and cross-sheet references."}
+            :"Upload AvadhootPacks_Quotation_Master_v6_1.xlsx once. All exports will retain exact formulas, formatting and cross-sheet references."}
         </div>
       </div>
 
