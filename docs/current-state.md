@@ -1,6 +1,6 @@
 # Current state handoff
 
-Updated: 2026-09-14. This is a concise working snapshot, not a closure award. Verify the source,
+Updated: 2026-09-15. This is a concise working snapshot, not a closure award. Verify the source,
 repository status, and deployed state before relying on any time-sensitive claim.
 
 ## Product and repository shape
@@ -55,14 +55,25 @@ record—not another documentation reorganisation.
 - S7 and S8 have scoped closure records. Those records do not close S9.
 - U1 has several scoped closure records. Read each record’s final status section; do not infer that
   every U1 concern is closed from one slice.
-- The local worktree contains later U3/U4/U5-facing screens and routes. Presence in a dirty
-  worktree is implementation evidence, not deployment or Product Owner closure.
-- The U4 My Batches read-only increment is locally and fixture verified; authenticated-live browser
-  verification and Product Owner validation remain deferred in its record.
+- U3 Pricing Basis is implemented and automated-test verified locally. Its caller-scoped release,
+  component-history, eligibility, and blank-versus-zero presentation has not received a genuine
+  authenticated-live browser walkthrough or Product Owner validation.
+- U4 has broad local durable Batch implementation. The My Batches read-only catalogue and reopen
+  journey are locally technically closed and fixture verified; authenticated-live browser evidence
+  and Product Owner validation remain deferred. The two local Customer Family/Sector migrations
+  dated 2026-09-12 have static contract evidence but no recorded activation evidence.
+- U5 read-only Quote workflow presentation is implemented and automated-test verified locally:
+  Approval Inbox, Quote History, immutable revisions/items/snapshots, workflow chronology, customer
+  outcomes, exact persisted identities, and guarded Batch-to-Quote navigation are present. Submit,
+  Approve, Return, Withdraw, Issue, Create Revision, Amend, and Reprice remain visibly disabled as
+  `Backend activation pending`. Authenticated-live browser evidence and Product Owner validation are
+  still deferred.
 - The local Costing/Batch Builder bridge carries Printing Technology and number of colours as
   row-owned descriptive metadata. They remain outside shared Construction confirmation and every
   calculation path; governed persistence, Send snapshots, exports, and SKU Master search remain
   follow-up work.
+- Presence in either dirty worktree remains implementation evidence, not deployment or Product Owner
+  closure.
 - S10 and later S-tranche work are not made current merely by appearing in an older roadmap.
 
 ## Durable guardrails

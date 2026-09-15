@@ -7,7 +7,10 @@ import {
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode } from "../ui/dataDisplay.jsx";
 
-const ACTION_LABELS = ["Calculate", "Send", "Approve", "Return", "Withdraw", "Issue", "Create revision"];
+const ACTION_LABELS = [
+  "Calculate", "Send", "Submit", "Approve", "Return", "Withdraw", "Issue",
+  "Create revision", "Amend", "Reprice",
+];
 
 function dateTime(value) {
   if (!value) return "Not recorded";
@@ -57,10 +60,12 @@ function SnapshotCard({ item, index }) {
   </article>;
   return <article className="quote-snapshot-card">
     <header>
-      <div><strong>Quote Item {index + 1}</strong><small>Item {identity(item.id)} · row lineage {identity(item.batch_row_lineage_id)}</small></div>
+      <div><strong>Quote Item {index + 1}</strong><small>Item {identity(item.id)} · row lineage {identity(item.batch_row_lineage_id)} · pricing group {identity(item.pricing_group_id)}</small></div>
       <span>Frozen snapshot {identity(snapshot.id)}</span>
     </header>
     <div className="quote-evidence-grid">
+      <EvidencePair label="Snapshot link" mono>{identity(item.calculation_snapshot_id)}</EvidencePair>
+      <EvidencePair label="Snapshot schema">{snapshot.schema_version}</EvidencePair>
       <EvidencePair label="Calculated by">{quoteActor(snapshot.calculated_by_actor, snapshot.calculated_by)}</EvidencePair>
       <EvidencePair label="Computed at">{dateTime(snapshot.calculated_at)}</EvidencePair>
       <EvidencePair label="Engine" mono>{snapshot.engine_version}</EvidencePair>
@@ -77,6 +82,8 @@ function SnapshotCard({ item, index }) {
       <EvidencePair label="Rate / kg">{snapshot.rate_per_kg}</EvidencePair>
       <EvidencePair label="Calculation MOQ">{snapshot.calc_moq}</EvidencePair>
       <EvidencePair label="Freight">{snapshot.effective_freight} · {snapshot.freight_source} / {snapshot.freight_authority}</EvidencePair>
+      <EvidencePair label="Freight Set Version" mono>{identity(snapshot.freight_set_version_id)}</EvidencePair>
+      <EvidencePair label="Freight Entry" mono>{identity(snapshot.freight_entry_id)}</EvidencePair>
       <EvidencePair label="Delivery Groups">{item.delivery_groups?.length
         ? item.delivery_groups.map(link => identity(link.delivery_group_id)).join(", ") : "None visible"}</EvidencePair>
     </div>

@@ -16,7 +16,7 @@ export const U5_QUOTE_ILLUSTRATION = {
     customer_family: { id: "fixture-family", group_customer_code: "__U5_FIXTURE_ONLY__", name: "Fixture Customer Family" },
   },
   actions: Object.fromEntries([
-    "calculate", "send", "approve", "return", "withdraw", "issue",
+    "calculate", "send", "submit", "approve", "return", "withdraw", "issue",
     "create_revision", "amend", "reprice",
   ].map(name => [name, { enabled: false, reason: "backend_activation_pending" }])),
   revisions: [
@@ -35,6 +35,7 @@ export const U5_QUOTE_ILLUSTRATION = {
       customer_outcomes: [{ id: "f-o1", outcome: "awaiting_response", occurred_at: "2026-09-10T11:05:00Z", recorded_by_actor: { display_name: "Fixture Maker" } }],
       items: [{
         id: "fixture-item-1", batch_row_lineage_id: "fixture-lineage-1", pricing_group_id: "fixture-pricing-group-1",
+        calculation_snapshot_id: "fixture-snapshot-1",
         delivery_groups: [{ id: "fixture-link-1", delivery_group_id: "fixture-delivery-1" }],
         calculation_snapshot: {
           id: "fixture-snapshot-1", schema_version: 1,
@@ -77,6 +78,7 @@ export const U5_QUOTE_ILLUSTRATION = {
       ],
       items: [{
         id: "fixture-item-2", batch_row_lineage_id: "fixture-lineage-1", pricing_group_id: "fixture-pricing-group-1",
+        calculation_snapshot_id: "fixture-snapshot-2",
         delivery_groups: [{ id: "fixture-link-2", delivery_group_id: "fixture-delivery-1" }],
         calculation_snapshot: {
           id: "fixture-snapshot-2", schema_version: 1,

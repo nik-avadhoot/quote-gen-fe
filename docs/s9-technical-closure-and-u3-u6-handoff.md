@@ -1,6 +1,7 @@
 # S9 technical closure and U3–U6 handoff
 
 Date: 2026-09-11  
+Updated: 2026-09-15
 Scope: S9 deferral position and UX-first U3–U6 handoff
 
 ## Closure classification
@@ -14,6 +15,22 @@ personas are implemented and passing. The six migrations were activated on 2026-
 Edge activation is deliberately deferred while the UX-first U-phase proceeds. No attestation key is
 provisioned, no Edge Function is deployed or called, and no service-role workaround or weakened
 attestation path is introduced. The undeployed Edge artifacts remain preserved for later activation.
+
+## U3–U5 delivery status
+
+| Increment | Local implementation | Focused automated evidence | Authenticated-live browser | Technical status | Product Owner validation |
+|---|---:|---:|---:|---|---:|
+| U3 Pricing Basis | Yes | Yes | No | Local implementation verified; formal live qualification deferred | No |
+| U4 My Batches read-only increment | Yes | Yes | No | Locally technically closed | No |
+| U4 Customer Family/Sector migrations dated 2026-09-12 | Yes | Static contract only | No | Activation not evidenced; do not claim activated | No |
+| U5 read-only Quote workflow presentation | Yes | Yes | No | Locally technically closed for the accepted read-only scope | No |
+
+U5 now presents Approval Inbox, Quote History, immutable revision/item/calculation evidence, workflow
+chronology, customer outcomes, exact Item/Snapshot/Pricing Group/Freight version identities, and
+guarded bidirectional Batch navigation. The complete accepted workflow remains visible but disabled:
+Submit, Approve, Return, Withdraw, Issue, Create Revision, Amend and Reprice all remain
+`Backend activation pending`. No mutation, privileged browser path, current-master substitution, or
+fixture fallback was added.
 
 ## Delivered behavior
 
@@ -46,6 +63,20 @@ attestation path is introduced. The undeployed Edge artifacts remain preserved f
 - Backend standalone `tests/test_*.py` scripts: **16 files passed**. `pytest` is not installed; these
   tests are executable gate scripts and were run individually.
 - Frontend build: passed.
+- Current focused frontend rerun: Construction **15/15**, Pricing Basis **98/98**, and U5 Quote
+  evidence plus governed Calculate/Send **47/47**, all with 0 failed. The U4 catalogue/lock/
+  row-lifecycle/pricing-group aggregate is **54/56**: catalogue **14/14**, lock **5/5**, row lifecycle
+  **6/6**, and Pricing Group **29/31**. Its two failures are stale structural assertions left behind
+  by separately landed changes: `U4-PG-FE-18a` still expects the pre-printing 35-column grid instead
+  of the current shared 37-column span, and `U4-PG-FE-19` still expects the pre-UX fixed 340px
+  Pricing card instead of the current flexible summary card. Neither failure is reported as passed.
+- Current governed backend route rerun: Construction, Pricing Basis, Batch Pricing Basis, My Batches,
+  Calculate/Atomic Send, and Quote workspace **221/221**, 0 failed. The U4 Customer Family/Sector
+  static migration contract separately passed **10/10**; this is not activation evidence.
+- Local fixture-browser evidence shows all ten accepted workflow actions disabled under `Backend
+  activation pending`, including Submit, Amend and Reprice. It also renders the persisted Item,
+  Snapshot, Pricing Group, Freight Set Version and Freight Entry identities returned by the governed
+  Quote workspace contract. This was not an authenticated-live or production-runtime walkthrough.
 - Targeted lint for the directly changed S7-R modules: passed.
 - Whole-frontend lint is not a clean baseline: 68 existing/mixed findings remain outside this
   increment. No closure claim depends on that unrelated historical gate.
@@ -91,15 +122,16 @@ manifest/import closure and deleted under narrow Product Owner authority. No oth
 
 ## UX-first U3–U6 sequence
 
-1. **U3 release visibility:** a read-only, caller-scoped Pricing Basis screen showing plant/date
-   eligibility and the exact Rate, Freight, Sector and Calculation Default versions in a Release.
-2. **U3 governed-master drill-down:** version history and entries for those four components, including
-   missing-versus-zero Freight and inherited-versus-explicit commercial values.
-3. **U4 Batch workspace:** incrementally connect the existing Batch Entry journey to durable read paths,
-   effective sources, freshness and readiness while preserving the local preview distinction.
-4. **U5 workflow presentation:** show genuine immutable evidence and workflow state read paths; all
-   secret-dependent mutations remain disabled as `Backend activation pending`.
-5. **U6:** do not implement until its S10 and approved audit/Family H foundations exist.
+1. **Qualify the completed read-only surfaces:** run U3 Pricing Basis, U4 My Batches, and U5 Quote
+   workflow presentation against genuine caller-visible records in an authenticated browser session,
+   then record Product Owner acceptance separately from technical evidence.
+2. **Resolve U4 migration truth before reliance:** establish whether the two 2026-09-12 Customer
+   Family/Sector migrations are activated; if activation is separately authorised, follow the normal
+   migration and security evidence path rather than inferring it from local files.
+3. **Resume S9 activation only under separate authority:** provision approved attestation material,
+   deploy/activate the retained Edge Function, and verify real Calculate/Atomic Send/workflow and
+   Maker/Checker/Admin boundaries before enabling any mutation.
+4. **U6:** do not implement until its S10 and approved audit/Family H foundations exist.
 
-The U3 window is open now. Product Owner validation remains separate from technical checks. Do not
-begin S10 or any later S-tranche.
+Product Owner validation remains separate from technical checks. Do not begin S10 or any later
+S-tranche.

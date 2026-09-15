@@ -49,6 +49,11 @@ check(snapshot.effective_inputs.material_rate_source === "governed_effective_mat
 check(Object.values(U5_QUOTE_ILLUSTRATION.actions).every(action =>
   action.enabled === false && action.reason === "backend_activation_pending"),
   "U5-FE-7 every mutation remains disabled for deferred backend activation");
+check(Object.keys(U5_QUOTE_ILLUSTRATION.actions).join(",")
+  === "calculate,send,submit,approve,return,withdraw,issue,create_revision,amend,reprice"
+  && screen.includes('"Calculate", "Send", "Submit"')
+  && screen.includes('"Create revision", "Amend", "Reprice"'),
+  "U5-FE-7a the complete accepted workflow stays visible and activation-blocked");
 check(screen.includes("/quotes/workspace?reference=") && screen.includes("encodeURIComponent"),
   "U5-FE-8 authenticated mode uses the read-only backend route by encoded permanent reference");
 check(!screen.includes(".rpc(") && !screen.includes("supabase") && !screen.includes("service_role"),
@@ -138,6 +143,16 @@ check(current.addressee_details.city === "Nagpur"
   && screen.includes("Acceptance date") && screen.includes("acceptance_reference")
   && screen.includes("rounding_rule_version") && screen.includes("effective_interest_pct"),
   "U5-FE-33 immutable snapshot and customer-outcome evidence retain their stored supporting fields");
+check(current.items[0].calculation_snapshot_id === current.items[0].calculation_snapshot.id
+  && screen.includes("pricing group {identity(item.pricing_group_id)}")
+  && screen.includes('label="Snapshot link"')
+  && screen.includes('label="Snapshot schema"')
+  && screen.includes('label="Freight Set Version"')
+  && screen.includes('identity(snapshot.freight_set_version_id)')
+  && screen.includes('label="Freight Entry"')
+  && screen.includes('identity(snapshot.freight_entry_id)')
+  && screen.includes('children ?? "—"'),
+  "U5-FE-33a frozen Items expose exact persisted and governed version identities");
 check(screen.includes("Open current Batch")
   && screen.includes("Current mutable Batch state · separate from this frozen Quote evidence")
   && screen.includes("Source Batch could not be opened"),
