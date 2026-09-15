@@ -17,9 +17,10 @@ working-quote state. Newer governed reads and mutations travel through the authe
 and Supabase RLS/RPC boundaries. Do not describe the system as either “localStorage only” or “fully
 database-backed”; both models currently exist in deliberately different areas.
 
-Both worktrees are on `data-model/s0-provenance` and contain substantial modified and untracked
-project work. Treat every pre-existing change as user/project-owned. Do not stage, discard, reflow,
-or fold it into an unrelated increment.
+Both repositories are on `data-model/s0-provenance`; this evidence/docs thread is committed in each
+repository. Inspect status afresh before every increment because concurrent tool-managed linked
+worktrees can appear under `.claude/worktrees`. Treat those and every new pre-existing change as
+user/project-owned; do not stage, discard, reflow, or fold them into an unrelated increment.
 
 ## Current S9 truth
 
