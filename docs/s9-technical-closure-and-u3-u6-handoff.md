@@ -22,8 +22,9 @@ attestation path is introduced. The undeployed Edge artifacts remain preserved f
 |---|---:|---:|---:|---|---:|
 | U3 Pricing Basis | Yes | Yes | No | Local implementation verified; formal live qualification deferred | No |
 | U4 My Batches read-only increment | Yes | Yes | No | Locally technically closed | No |
-| U4 Customer Family/Sector migrations dated 2026-09-12 | Yes | Static contract only | No | Activation not evidenced; do not claim activated | No |
+| U4 Customer Family/Sector migrations | Yes | Static contract 10/10; catalogue gate 7/7 | No | Activated 2026-09-15 as `20260915100440_u4_customer_family_sectors` and `20260915100521_u4_customer_family_sector_catalogue_gates`; operationally blocked because the governed Sector master has zero rows | No |
 | U5 read-only Quote workflow presentation | Yes | Yes | No | Locally technically closed for the accepted read-only scope | No |
+| U2 SKU Master read-only catalogue/detail | Yes | Yes | No | Local implementation fixture-browser verified; live qualification deferred | No |
 
 U5 now presents Approval Inbox, Quote History, immutable revision/item/calculation evidence, workflow
 chronology, customer outcomes, exact Item/Snapshot/Pricing Group/Freight version identities, and
@@ -125,9 +126,9 @@ manifest/import closure and deleted under narrow Product Owner authority. No oth
 1. **Qualify the completed read-only surfaces:** run U3 Pricing Basis, U4 My Batches, and U5 Quote
    workflow presentation against genuine caller-visible records in an authenticated browser session,
    then record Product Owner acceptance separately from technical evidence.
-2. **Resolve U4 migration truth before reliance:** establish whether the two 2026-09-12 Customer
-   Family/Sector migrations are activated; if activation is separately authorised, follow the normal
-   migration and security evidence path rather than inferring it from local files.
+2. **U4 migration truth is resolved:** both Customer Family/Sector migrations were activated on
+   2026-09-15 (see the table above). The remaining operational blocker is the empty governed Sector
+   master; do not invent Sector rows or connect legacy Sector Defaults without a settled rule.
 3. **Resume S9 activation only under separate authority:** provision approved attestation material,
    deploy/activate the retained Edge Function, and verify real Calculate/Atomic Send/workflow and
    Maker/Checker/Admin boundaries before enabling any mutation.
@@ -135,3 +136,47 @@ manifest/import closure and deleted under narrow Product Owner authority. No oth
 
 Product Owner validation remains separate from technical checks. Do not begin S10 or any later
 S-tranche.
+
+## 2026-09-15 addendum — U-series continuation under a narrow S9 deferral
+
+S9 remains active and **not closed**. The Speedbreaker is narrowed to enabling or relying on
+production Quote mutations; independent U-series implementation, local verification, fixture-browser
+work and deployment-ready preparation continue. Product Owner walkthroughs are **unavailable and
+deferred, not failed**. No secret was provisioned, no Edge Function deployed, no production data
+seeded, no migration applied and no mutation enabled in this increment.
+
+| Thread | Repository | Commit | Evidence |
+|---|---|---|---|
+| U4 Pricing Group fixture correction | `quote-gen-fe` | `970ee95` | U4 aggregate 54/56 → **56/56**; no UI source changed |
+| Family G authenticated-read correction (prepared, **unapplied**) | `quote-gen-be` | `ac67e39` | Static contract **20/0** |
+| U2 SKU Master backend | `quote-gen-be` | `4588e80` | `test_sku_master_route.py` **66/0** |
+| U2 SKU Master frontend | `quote-gen-fe` | `da3958b` | `test:sku-master` **29/0**; lint exit 0; module-contract build exit 0 |
+
+Reruns on 2026-09-15: `test:pricing-basis` 98/0, `test:batch-catalogue` 14/0, `test:batch-lock` 5/0,
+`test:batch-row-lifecycle` 6/0, `test:pricing-group` 31/0, `test:quote-evidence` 38/0,
+`test:governed-calculate-send` 9/0. Backend routes: Quote workspace 27, Batch catalogue 13, Pricing
+Basis 31, Batch Pricing Basis 101, Calculate/Send 11, Constructions 38, Customer Families 38, GSM
+Master 39, caller context 24 — all 0 failed; Customer Family/Sector static contract 10/0.
+
+**Local fixture-browser evidence only** (Vite dev server on the main `quote-gen-fe` checkout,
+developer previews, no signed-in profile, no API call). Not authenticated-live, not
+production-runtime, not Product Owner validation:
+
+- `?fixture=u3-u4` — release eligibility, lifecycle chronology, plant-enforced composition, Rate
+  version history, and Sector-vs-Default inheritance showing `0.000% · explicit zero`.
+- `?fixture=u4-batches` — bounded catalogue, partial detail naming the denied field, Governed and
+  Immutable tags, workflow actions disabled.
+- `?fixture=u5`, `u5-inbox`, `u5-history` — revision chronology, frozen Item/Snapshot/Pricing
+  Group/Freight Set Version/Freight Entry identities, customer outcomes; disabled Submit, Approve,
+  Return, Withdraw, Issue, Create revision, Amend and Reprice (plus Calculate, Send, Open Quote, Open
+  current Batch). `quoteEvidenceModel`/`batchCatalogueModel` carry `reason: "backend_activation_pending"`.
+- `?fixture=u2-skus` — catalogue with an unassigned Plant Item Code, `H —` versus `H 0`; detail with
+  exact Construction identity and own-plant adoption, "Construction version #42 · Details
+  unavailable", "Construction version #41 · Not visible to this caller", "Plant adoption
+  unavailable", "No current Family", replacement lineage both ways, and the declared-unrecorded
+  printing fields. No console errors.
+
+Deployment-dependent: applying the Family G correction; S9 secret, Edge deployment and authenticated
+runtime journeys; authenticated-live qualification of U2–U5. Decision-dependent: governed Sector
+rows and their relation to legacy Sector Defaults; U1 Party merge, deactivation/reactivation and
+post-proposal eligibility change. S10-dependent: U1 lifecycle/audit history and U6.

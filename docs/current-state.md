@@ -61,8 +61,14 @@ record—not another documentation reorganisation.
   authenticated-live browser walkthrough or Product Owner validation.
 - U4 has broad local durable Batch implementation. The My Batches read-only catalogue and reopen
   journey are locally technically closed and fixture verified; authenticated-live browser evidence
-  and Product Owner validation remain deferred. The two local Customer Family/Sector migrations
-  dated 2026-09-12 have static contract evidence but no recorded activation evidence.
+  and Product Owner validation remain deferred. The Customer Family/Sector migrations are activated
+  as `20260915100440` and `20260915100521` (catalogue gate 7/7); the governed Sector master still
+  has zero rows, which blocks Family/Prospect/Batch creation until governed Sectors exist.
+- U2 has a read-only, caller-scoped SKU Master (catalogue, immutable versions, specifications,
+  Construction identity, references, Location applicability) behind `u2_sku_master`, fixture-browser
+  verified only.
+- A Family G authenticated-read correction is committed but not applied; until it is, caller-token
+  Quote History and Approval Inbox reads that reach a Family G row are refused.
 - U5 read-only Quote workflow presentation is implemented and automated-test verified locally:
   Approval Inbox, Quote History, immutable revisions/items/snapshots, workflow chronology, customer
   outcomes, exact persisted identities, and guarded Batch-to-Quote navigation are present. Submit,
