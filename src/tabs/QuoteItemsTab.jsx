@@ -30,18 +30,90 @@
 //
 // Export wiring crosses two Phase 3 modules: exportFromTemplate from
 // export/excel.js and exportAllPDF from export/pdf.js.
+//
+// ── SCREEN SPACE ──────────────────────────────────────────────────────────
+// This is the "Working" view of the Quotes screen, on the shared standard:
+// the TopBar names the screen, so there is no page header; QuotesWorkspace
+// passes its view switch in as `toolbarLead`, so the view switch, Quote Ref and
+// export share ONE toolbar; the quote dates, Maker and template loader sit in a
+// Details disclosure; rows are 26px with the Material Code frozen, and the
+// per-set amount has its own column instead of a second line; each SET is ONE
+// group row carrying its item count, costed count and SET rate. These items are
+// LOCAL browser state, never a governed revision — the Local tag on the view
+// switch and in the footer is what says so, and it must survive any rework.
 // ═══════════════════════════════════════════════════════════════════════════
+import { Fragment } from "react";
 import { exportFromTemplate } from "../export/excel.js";
 import { exportAllPDF } from "../export/pdf.js";
-import { Btn } from "../ui/primitives.jsx";
 import { normSetCode, sameSetCode, isPPType } from "../engine/rowType.js";
 import { findDivergence } from "../lib/overrideDivergence.js";
 import { useAppState } from "../state/AppStateContext.js";
-import { C, mono } from "../theme.js";
+import { ProvenanceTag } from "../ui/dataDisplay.jsx";
+import { PanelFocusToggle, ScreenFooter, ToolbarLabel } from "../ui/screenChrome.jsx";
+import {
+  control, denseCell, denseHead, denseTable, frozenCell, menuPanel, menuSummary, toolbar, usePanelFocus,
+} from "../ui/screenStandards.js";
+import { C, T, mono, sans } from "../theme.js";
 
 const QI_READONLY_MSG="Quote Items are read-only. Review or revise the calculation in Batch Entry using Deep Dive.";
 
-export default function QuoteItemsTab(){
+// Fix 11: Capacity limits — v7 template supports max 44 CBB data rows and 30 OFFER rows
+const CBB_MAX=44;
+const OFFER_MAX=30;
+
+const COLUMNS = [
+  ["SKU"], ["Dims"], ["Construction"], ["Std BS", "right"], ["Calc BS", "right"], ["Sheet Wt", "right"],
+  ["Final Rate", "right"], ["Per set", "right"], ["MOQ", "right"],
+];
+
+const actionButton = (tone, disabled) => ({
+  ...control, fontWeight: 700, whiteSpace: "nowrap", cursor: disabled ? "not-allowed" : "pointer",
+  opacity: disabled ? 0.45 : 1,
+  ...(tone === "success" ? { background: C.green, borderColor: C.green, color: C.white }
+    : tone === "info" ? { background: "#2E6094", borderColor: "#2E6094", color: C.white }
+      : tone === "danger" ? { color: C.red, borderColor: `${C.red}66` } : {}),
+});
+
+const fieldLabel = { display: "grid", gap: 3, fontSize: T.label, color: C.slateL, fontWeight: 700 };
+
+function ItemRow({ item, background, onOpen, onRemove }) {
+  const { spec: is, result: ir } = item;
+  const perSet = +is.qtyPerSet || 1;
+  const bsOff = ir && is.spec_bs ? Math.abs(ir.calcBS - +is.spec_bs) / +is.spec_bs > 0.05 : null;
+  return (
+    <tr style={{ height: 26, background, cursor: "pointer" }} title={QI_READONLY_MSG} onClick={onOpen}>
+      <td style={{ ...frozenCell(false), background }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          {is.setCode && <span style={{ fontSize: T.micro, fontWeight: 700, lineHeight: 1.4, background: C.amber,
+            color: C.white, padding: "0 5px", borderRadius: 3 }}>{is.setCode}</span>}
+          {is.rowType !== "Box" && <span style={{ fontSize: T.label, color: C.slateL }}>({is.rowType})</span>}
+          <span style={{ fontFamily: mono }}>{is.material_code || "—"}</span>
+        </span>
+      </td>
+      <td style={{ ...denseCell, maxWidth: 220 }} title={is.product || ""}>{is.product || "—"}</td>
+      <td style={{ ...denseCell, fontFamily: mono }}>{is.L && is.W ? `${is.L}×${is.W}${is.H ? "×" + is.H : ""}` : ""}</td>
+      <td style={denseCell}>{is.ply}p {is.flute_F1 || "—"}{(+is.ply === 5 && is.flute_F2) ? "/" + is.flute_F2 : ""}</td>
+      <td style={{ ...denseCell, fontFamily: mono, textAlign: "right" }}>{is.spec_bs || "—"}</td>
+      <td style={{ ...denseCell, fontFamily: mono, textAlign: "right",
+        color: bsOff === null ? C.slateL : bsOff ? C.orange : C.green }}>{ir?.calcBS || "—"}</td>
+      <td style={{ ...denseCell, fontFamily: mono, textAlign: "right", color: C.slateL }}>
+        {ir ? (ir.wtSheet * 1000).toFixed(0) + "g" : "—"}</td>
+      <td style={{ ...denseCell, fontFamily: mono, textAlign: "right", fontWeight: 800, color: C.amber }}>
+        {ir ? `₹${ir.finalRate.toFixed(2)}` : "—"}</td>
+      <td style={{ ...denseCell, fontFamily: mono, textAlign: "right", color: C.slateL }}>
+        {ir && perSet > 1 ? `×${is.qtyPerSet} = ₹${(ir.finalRate * perSet).toFixed(2)}` : ""}</td>
+      <td style={{ ...denseCell, fontFamily: mono, textAlign: "right" }}>{ir ? ir.calcMOQ.toLocaleString() : "—"}</td>
+      <td style={{ ...denseCell, padding: "0 6px", textAlign: "center" }}
+        onClick={e => { e.stopPropagation(); onRemove(); }}>
+        <button type="button" aria-label={`Remove ${is.material_code || "item"} from working items`}
+          style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: T.title,
+            lineHeight: 1, padding: 0 }}>×</button>
+      </td>
+    </tr>
+  );
+}
+
+export default function QuoteItemsTab({ toolbarLead = null }){
   const {
     showToast, items, setItems, savedQuotes, setSavedQuotes,
     quoteRef, setQuoteRef, quoteDate, setQuoteDate,
@@ -49,87 +121,24 @@ export default function QuoteItemsTab(){
     makerName, templateLoaded, templateB64, templateRef, handleTemplateLoad,
     rates, freight, batchProfile, removeItem, setTab,
   } = useAppState();
+  const { focusPanel, toggleFocus, exitFocusOnEscape } = usePanelFocus();
 
-  return(
-    <div style={{padding:20,overflowY:"auto",height:"100%"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <div>
-          <div style={{fontSize:16,fontWeight:700,color:C.slate}}>Quote Items</div>
-          <div style={{fontSize:11,color:C.slateL}}>{items.length} item{items.length!==1?"s":""} in this session</div>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",
-        background:templateLoaded?"#EBF7F1":"#FFF8ED",borderRadius:7,marginBottom:12,
-        border:`1px solid ${templateLoaded?"#2A7550":"#D97B2E"}44`}}>
-        <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",
-          padding:"7px 14px",borderRadius:6,fontSize:12,fontWeight:700,flexShrink:0,
-          background:templateLoaded?"#2A7550":"#D97B2E",color:"white"}}>
-          {templateLoaded?"✅ Template Loaded":"📂 Load Master Template (.xlsx)"}
-          <input ref={templateRef} type="file" accept=".xlsx" style={{display:"none"}}
-            onChange={handleTemplateLoad}/>
-        </label>
-        <div style={{fontSize:11,color:templateLoaded?"#2A7550":"#B5641F",lineHeight:1.4}}>
-          {templateLoaded
-            ?"Exports will use your master format — all formulas, formatting and sheet structure preserved. Click to replace."
-            :"Upload AvadhootPacks_Quotation_Master_v6_1.xlsx once. All exports will retain exact formulas, formatting and cross-sheet references."}
-        </div>
-      </div>
+  const canExport=quoteRef.trim()&&makerName.trim();
+  const exportTip=!quoteRef.trim()?"Quote Ref is required before export":!makerName.trim()?"Your account has no display name set — contact an Admin":"";
+  // Fix ③: offerCount corrected — server.py writes ALL items (Box + Plate + Part) sequentially
+  // into CBB rows 7…7+len−1, regardless of type. The prior Box-only filter was wrong:
+  // 20 Box + 20 Plate = 40 total rows, cbbCount=40 ≤ 44 ✓, but OFFER only mirrors rows 7–36 (30 rows).
+  // The correct check is simply items.length for both sheets.
+  const cbbCount=items.length;
+  const offerCount=items.length; // same limit — server writes all types into the same row band
+  const capacityOk=cbbCount<=CBB_MAX&&offerCount<=OFFER_MAX;
+  const capacityMsg=cbbCount>CBB_MAX
+    ?`❌ Too many items: ${cbbCount} rows exceed the template capacity of ${CBB_MAX} CBB rows. Split the quote into multiple exports.`
+    :offerCount>OFFER_MAX
+    ?`❌ Too many Box items: ${offerCount} Box rows exceed the OFFER sheet capacity of ${OFFER_MAX}. Split the quote.`
+    :"";
 
-      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          {/* Quote Reference + Maker + Dates */}
-          <div style={{display:"flex",gap:6,alignItems:"center",padding:"5px 10px",
-            background:C.cream,border:`1px solid ${C.border}`,borderRadius:6,flexWrap:"wrap"}}>
-            <div style={{display:"flex",alignItems:"center",gap:4}}>
-              <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase"}}>Quote Ref</div>
-              <input value={quoteRef} onChange={e=>setQuoteRef(e.target.value)}
-                style={{border:"none",background:"transparent",fontWeight:700,fontFamily:mono,
-                  fontSize:12,color:C.slate,width:120}}/>
-            </div>
-            <div style={{width:1,height:16,background:C.border}}/>
-            <div style={{display:"flex",alignItems:"center",gap:4}}>
-              <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase"}}>Maker</div>
-              <span style={{fontSize:11,color:C.slateM,width:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{makerName}</span>
-            </div>
-            <div style={{width:1,height:16,background:C.border}}/>
-            <div style={{display:"flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:5,
-              background:C.cream,border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase"}}>Quoted</div>
-              <input type="date" value={quoteDate} onChange={e=>setQuoteDate(e.target.value)}
-                style={{border:"none",background:"transparent",fontSize:11,color:C.slate,fontFamily:mono,cursor:"pointer",width:110}}/>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:5,
-              background:(effectiveFrom||effectiveTo)?"#EBF7F1":C.cream,
-              border:`1px solid ${effectiveFrom||effectiveTo?C.green:C.border}`}}>
-              <div style={{fontSize:9,color:C.slateL,fontWeight:600,textTransform:"uppercase",whiteSpace:"nowrap"}}>
-                Price Valid</div>
-              <input type="date" value={effectiveFrom} onChange={e=>setEffectiveFrom(e.target.value)}
-                style={{border:"none",background:"transparent",fontSize:11,color:C.slate,fontFamily:mono,cursor:"pointer",width:110}}
-                title="Effective From"/>
-              <span style={{fontSize:10,color:C.slateL}}>—</span>
-              <input type="date" value={effectiveTo} onChange={e=>setEffectiveTo(e.target.value)}
-                style={{border:"none",background:"transparent",fontSize:11,color:C.slate,fontFamily:mono,cursor:"pointer",width:110}}
-                title="Effective To"/>
-            </div>
-          </div>
-          {items.length>0&&(()=>{
-            const canExport=quoteRef.trim()&&makerName.trim();
-            const exportTip=!quoteRef.trim()?"Quote Ref is required before export":!makerName.trim()?"Your account has no display name set — contact an Admin":"";
-            // Fix 11: Capacity limits — v7 template supports max 44 CBB data rows and 30 OFFER rows
-            const CBB_MAX=44;
-            const OFFER_MAX=30;
-            // Fix ③: offerCount corrected — server.py writes ALL items (Box + Plate + Part) sequentially
-            // into CBB rows 7…7+len−1, regardless of type. The prior Box-only filter was wrong:
-            // 20 Box + 20 Plate = 40 total rows, cbbCount=40 ≤ 44 ✓, but OFFER only mirrors rows 7–36 (30 rows).
-            // The correct check is simply items.length for both sheets.
-            const cbbCount=items.length;
-            const offerCount=items.length; // same limit — server writes all types into the same row band
-            const capacityOk=cbbCount<=CBB_MAX&&offerCount<=OFFER_MAX;
-            const capacityMsg=cbbCount>CBB_MAX
-              ?`❌ Too many items: ${cbbCount} rows exceed the template capacity of ${CBB_MAX} CBB rows. Split the quote into multiple exports.`
-              :offerCount>OFFER_MAX
-              ?`❌ Too many Box items: ${offerCount} Box rows exceed the OFFER sheet capacity of ${OFFER_MAX}. Split the quote.`
-              :"";
-            // B3: SET completeness check — warn if any SET has a Box but no Plate/Partition
-            // ── D-28: warn when rows that share ONE export slot disagree ────────────────
+  // ── D-28: warn when rows that share ONE export slot disagree ────────────────
   // The field warning in BatchGrid catches the Maker who typed the value. This
   // catches the one who did NOT — someone else's override, or their own from
   // yesterday. Different people, different moments, and the export is where the
@@ -163,51 +172,105 @@ export default function QuoteItemsTab(){
       `${label}${d.group?` (${d.group})`:""}: rows ${d.labels.join(", ")} disagree (${d.values.join(", ")})`
     ).join(" · ")).join(" · ");
     showToast(
-      `\u26A0 ${checks.length} value${checks.length===1?"":"s"} will not export as entered — ${parts}. `
+      `⚠ ${checks.length} value${checks.length===1?"":"s"} will not export as entered — ${parts}. `
       +`The workbook holds one value per slot; the others will not reach the quote.`,
       'error',12000);
   };
 
+  // B3: SET completeness check — warn if any SET has a Box but no Plate/Partition
   const checkSETCompleteness=()=>{
-              // D-7: normalise. Case-split SET codes made this gate see one SET as two —
-              // a Box under "Glass180" and its Part under "GLASS180" reported the Box's
-              // SET as incomplete when the Part existed all along. A FALSE WARNING on
-              // the export path, not a display quirk. :181 in this same file already
-              // grouped case-insensitively, so the file disagreed with itself.
-              const setCodes=[...new Set(items.filter(i=>i.spec?.setCode&&i.spec.setCode.trim()).map(i=>normSetCode(i.spec.setCode)))];
-              const incomplete=setCodes.filter(sc=>{
-                const inSet=items.filter(i=>sameSetCode(i.spec?.setCode,sc));
-                const hasBox=inSet.some(i=>(i.spec?.rowType||'Box')==='Box');
-                const hasPP=inSet.some(i=>['Plate','Part-L','Part-W'].includes(i.spec?.rowType||''));
-                return hasBox&&!hasPP;
-              });
-              if(incomplete.length>0){
-                return window.confirm(`⚠ SET completeness warning:\n\nThe following SET codes have a Box row but no Plate or Partition rows:\n${incomplete.join(', ')}\n\nExport anyway?`);
-              }
-              return true;
-            };
-            return(<>
-              {!capacityOk&&<div style={{padding:"6px 12px",background:C.redL,border:`1px solid ${C.red}44`,
-                borderRadius:5,fontSize:11,color:C.red,fontWeight:600,marginBottom:4}}>
-                {capacityMsg}
-              </div>}
-              <div title={capacityOk?exportTip:capacityMsg} style={{display:"inline-block"}}>
-                <Btn ch={templateLoaded?"↓ Export (Master Format)":"↓ Export All to Excel"}
-                  v="success"
-                  disabled={!canExport||!capacityOk}
-                  onClick={()=>{if(checkSETCompleteness()){warnDivergence();exportFromTemplate(items,rates,freight,templateB64,{quoteRef,makerName,quoteDate,effectiveFrom,effectiveTo,marginPP:batchProfile.marginPP??8},msg=>showToast(msg,'error',8000));}}}
-                  style={(!canExport||!capacityOk)?{opacity:0.45,cursor:"not-allowed"}:{}}/>
-              </div>
-              <div title={capacityOk?exportTip:capacityMsg} style={{display:"inline-block"}}>
-                <Btn ch="↓ PDF (All SKUs)" v="info"
-                  disabled={!canExport}
-                  onClick={()=>{if(checkSETCompleteness())exportAllPDF(items,{quoteRef,makerName,paymentDisc:batchProfile.paymentDisc||"30",effectiveTo});}}
-                  style={!canExport?{opacity:0.45,cursor:"not-allowed"}:{}}/>
-              </div>
-              {!canExport&&<span style={{fontSize:10,color:C.red,fontWeight:600}}>{exportTip}</span>}
-            </>);
-          })()}
+    // D-7: normalise. Case-split SET codes made this gate see one SET as two —
+    // a Box under "Glass180" and its Part under "GLASS180" reported the Box's
+    // SET as incomplete when the Part existed all along. A FALSE WARNING on
+    // the export path, not a display quirk. The grouping below is also
+    // case-insensitive, so the file agrees with itself.
+    const setCodes=[...new Set(items.filter(i=>i.spec?.setCode&&i.spec.setCode.trim()).map(i=>normSetCode(i.spec.setCode)))];
+    const incomplete=setCodes.filter(sc=>{
+      const inSet=items.filter(i=>sameSetCode(i.spec?.setCode,sc));
+      const hasBox=inSet.some(i=>(i.spec?.rowType||'Box')==='Box');
+      const hasPP=inSet.some(i=>['Plate','Part-L','Part-W'].includes(i.spec?.rowType||''));
+      return hasBox&&!hasPP;
+    });
+    if(incomplete.length>0){
+      return window.confirm(`⚠ SET completeness warning:\n\nThe following SET codes have a Box row but no Plate or Partition rows:\n${incomplete.join(', ')}\n\nExport anyway?`);
+    }
+    return true;
+  };
 
+  const exportExcel=()=>{if(checkSETCompleteness()){warnDivergence();exportFromTemplate(items,rates,freight,templateB64,{quoteRef,makerName,quoteDate,effectiveFrom,effectiveTo,marginPP:batchProfile.marginPP??8},msg=>showToast(msg,'error',8000));}};
+  const exportPdf=()=>{if(checkSETCompleteness())exportAllPDF(items,{quoteRef,makerName,paymentDisc:batchProfile.paymentDisc||"30",effectiveTo});};
+
+  const setMap={};const standalone=[];
+  items.forEach(item=>{
+    const sc=(item.spec.setCode||"").trim().toUpperCase();
+    if(sc){if(!setMap[sc])setMap[sc]=[];setMap[sc].push(item);}else standalone.push(item);
+  });
+  const openRow=()=>{showToast(QI_READONLY_MSG,'info',5000);setTab("batch");};
+  const datesSet=!!(effectiveFrom||effectiveTo);
+  const draftCount=Object.keys(savedQuotes).length;
+
+  return(
+    <div onKeyDown={exitFocusOnEscape} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column",
+      fontFamily: sans, background: C.cream }}>
+      <div role="toolbar" aria-label="Working Quote Items controls" style={toolbar}>
+        {toolbarLead}
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <ToolbarLabel>Quote Ref</ToolbarLabel>
+          <input value={quoteRef} onChange={e=>setQuoteRef(e.target.value)} aria-label="Quote Ref"
+            style={{ ...control, width: 124, fontFamily: mono, fontWeight: 700 }}/>
+        </label>
+        <details style={{ position: "relative" }}>
+          <summary style={menuSummary(datesSet)}
+            title="Quoted date, price validity, Maker and the master export template">
+            Details{datesSet ? " · validity set" : ""} ▾</summary>
+          <div style={{ ...menuPanel, minWidth: 300 }}>
+            <label style={fieldLabel}>Quoted
+              <input type="date" value={quoteDate} onChange={e=>setQuoteDate(e.target.value)}
+                style={{ ...control, fontFamily: mono }}/>
+            </label>
+            <div style={fieldLabel}>Price valid
+              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <input type="date" value={effectiveFrom} onChange={e=>setEffectiveFrom(e.target.value)}
+                  title="Effective From" aria-label="Price valid from" style={{ ...control, fontFamily: mono }}/>
+                <span style={{ fontSize: T.body, color: C.slateL }}>—</span>
+                <input type="date" value={effectiveTo} onChange={e=>setEffectiveTo(e.target.value)}
+                  title="Effective To" aria-label="Price valid to" style={{ ...control, fontFamily: mono }}/>
+              </span>
+            </div>
+            <div style={fieldLabel}>Maker
+              <span style={{ fontSize: T.body, fontWeight: 400, color: makerName ? C.slateM : C.red }}>
+                {makerName || "No display name on this account"}</span>
+            </div>
+            <div style={fieldLabel}>Export template
+              <label style={{ ...actionButton(templateLoaded ? null : "success"), display: "inline-flex",
+                alignItems: "center", justifySelf: "start" }}>
+                {templateLoaded ? "✅ Template loaded · replace" : "📂 Load Master Template (.xlsx)"}
+                <input ref={templateRef} type="file" accept=".xlsx" style={{ display: "none" }}
+                  onChange={handleTemplateLoad}/>
+              </label>
+              <span style={{ fontSize: T.label, fontWeight: 400, lineHeight: 1.4, color: templateLoaded ? C.green : C.amberD }}>
+                {templateLoaded
+                  ?"Exports will use your master format — all formulas, formatting and sheet structure preserved."
+                  :"Upload AvadhootPacks_Quotation_Master_v6_1.xlsx once. All exports will retain exact formulas, formatting and cross-sheet references."}
+              </span>
+            </div>
+          </div>
+        </details>
+        {items.length>0&&!capacityOk&&<span role="alert" title={capacityMsg}
+          style={{ fontSize: T.label, fontWeight: 700, color: C.red, background: C.redL,
+            border: `1px solid ${C.red}44`, borderRadius: 5, padding: "3px 7px", whiteSpace: "nowrap" }}>
+          ❌ {items.length} items exceed the template capacity</span>}
+        <span style={{ flex: "1 1 auto" }} />
+        <span style={{ fontSize: T.label, color: C.slateL, whiteSpace: "nowrap" }}>
+          {items.length} item{items.length!==1?"s":""}</span>
+        {items.length>0&&<>
+          {!canExport&&<span style={{ fontSize: T.label, color: C.red, fontWeight: 700, whiteSpace: "nowrap" }}>{exportTip}</span>}
+          <button type="button" disabled={!canExport||!capacityOk} onClick={exportExcel}
+            title={capacityOk?exportTip:capacityMsg} style={actionButton("success", !canExport||!capacityOk)}>
+            {templateLoaded?"↓ Export (Master Format)":"↓ Export All to Excel"}</button>
+          <button type="button" disabled={!canExport} onClick={exportPdf}
+            title={capacityOk?exportTip:capacityMsg} style={actionButton("info", !canExport)}>
+            ↓ PDF (All SKUs)</button>
           {/* Fix 12: Re-import Excel button removed — the parseImportedExcel function reads
               wrong columns throughout (margin from Total Cost column etc.) and produces
               confidently wrong items. Disabled pre-beta; re-enable after column mapping is fixed.
@@ -217,88 +280,62 @@ export default function QuoteItemsTab(){
             <input ref={importRef} type="file" accept=".xlsx,.xls" style={{display:"none"}}
               onChange={handleImport}/>
           </label> */}
-          {items.length>0&&<Btn ch="Clear All" v="danger" sm onClick={()=>{
-            if(window.confirm("Clear all items? They will be lost unless exported."))setItems([]);}}/>}
-          {Object.keys(savedQuotes).length>0&&<Btn ch={`📁 Drafts (${Object.keys(savedQuotes).length})`}
-            v="secondary" sm onClick={()=>{
-              const names=Object.keys(savedQuotes).join(", ");
-              const pick=window.prompt(`Saved drafts: ${names}\n\nType client name to restore:`);
-              if(pick&&savedQuotes[pick]){setItems(savedQuotes[pick].items);
-                setSavedQuotes(prev=>{const n={...prev};delete n[pick];return n;});}}}/>}
-        </div>
+          <button type="button" style={actionButton("danger")} onClick={()=>{
+            if(window.confirm("Clear all items? They will be lost unless exported."))setItems([]);}}>Clear All</button>
+        </>}
+        {draftCount>0&&<button type="button" style={actionButton()} onClick={()=>{
+          const names=Object.keys(savedQuotes).join(", ");
+          const pick=window.prompt(`Saved drafts: ${names}\n\nType client name to restore:`);
+          if(pick&&savedQuotes[pick]){setItems(savedQuotes[pick].items);
+            setSavedQuotes(prev=>{const n={...prev};delete n[pick];return n;});}}}>📁 Drafts ({draftCount})</button>}
+        <PanelFocusToggle panel="list" noun="working items" focused={focusPanel === "list"} onToggle={toggleFocus} />
       </div>
-      {items.length===0&&<div style={{textAlign:"center",color:C.slateL,marginTop:60,fontSize:13}}>
-        No items yet. Add rows in <button onClick={()=>setTab("batch")} style={{background:"none",border:"none",color:C.amber,fontWeight:700,cursor:"pointer",fontSize:13,textDecoration:"underline"}}>Batch Entry</button>, calculate, then click "Send All to Quote Items".
-      </div>}
-      {items.length>0&&<>
-      {(()=>{
-        const setMap={};const standalone=[];
-        items.forEach(item=>{
-          const sc=(item.spec.setCode||"").trim().toUpperCase();
-          if(sc){if(!setMap[sc])setMap[sc]=[];setMap[sc].push(item);}else standalone.push(item);
-        });
-        const IRw=({item,bg})=>{const{spec:is,result:ir}=item;return(
-          <tr key={item.id} style={{background:bg,cursor:"pointer"}}
-            title={QI_READONLY_MSG}
-            onClick={()=>{showToast(QI_READONLY_MSG,'info',5000);setTab("batch");}}>
-            <td style={{padding:"5px 10px"}}>
-              {is.setCode&&<span style={{fontSize:9,background:C.amber,color:C.white,padding:"1px 5px",borderRadius:3,marginRight:4}}>{is.setCode}</span>}
-              {is.rowType!=="Box"&&<span style={{fontSize:9,color:C.slateL,marginRight:3}}>({is.rowType})</span>}
-              <span style={{fontFamily:mono,fontSize:11}}>{is.material_code||"—"}</span>
-            </td>
-            <td style={{padding:"5px 10px",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{is.product||"—"}</td>
-            <td style={{padding:"5px 10px",fontFamily:mono,fontSize:11}}>{is.L&&is.W?`${is.L}×${is.W}${is.H?"×"+is.H:""}`:""}</td>
-            <td style={{padding:"5px 10px"}}>{is.ply}p {is.flute_F1||"—"}{(+is.ply===5&&is.flute_F2)?"/"+is.flute_F2:""}</td>
-            <td style={{padding:"5px 10px",fontFamily:mono}}>{is.spec_bs||"—"}</td>
-            <td style={{padding:"5px 10px",fontFamily:mono,color:ir&&is.spec_bs?Math.abs(ir.calcBS-+is.spec_bs)/+is.spec_bs>0.05?C.orange:C.green:C.slateL}}>{ir?.calcBS||"—"}</td>
-            <td style={{padding:"5px 10px",textAlign:"center",fontFamily:mono,color:C.slateL,fontSize:11}}>{ir?(ir.wtSheet*1000).toFixed(0)+"g":"—"}</td>
-            <td style={{padding:"5px 10px",textAlign:"center",fontWeight:800,color:C.amber,fontFamily:mono}}>
-              {ir?`₹${ir.finalRate.toFixed(2)}`:"—"}
-              {ir&&(+is.qtyPerSet||1)>1&&<div style={{fontSize:9,color:C.slateL,fontWeight:400,marginTop:1}}>
-                ×{is.qtyPerSet} = ₹{(ir.finalRate*(+is.qtyPerSet||1)).toFixed(2)}
-              </div>}
-            </td>
-            <td style={{padding:"5px 10px",textAlign:"center",fontFamily:mono,fontSize:11}}>{ir?ir.calcMOQ.toLocaleString():"—"}</td>
-            <td style={{padding:"4px 4px"}} onClick={e=>{e.stopPropagation();removeItem(item.id);}}>
-              <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:16}}>×</button>
-            </td>
-          </tr>);};
-        return<div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:860}}>
-            <thead><tr style={{background:C.slateM}}>
-              {["Mat Code / Type","SKU","Dims","Construction","Std BS","Calc BS","Sheet Wt","Final Rate","MOQ",""].map(h=>(
-                <th key={h} style={{padding:"7px 10px",color:C.white,fontSize:10,fontWeight:600,
-                  textAlign:["Final Rate","MOQ","Sheet Wt"].includes(h)?"center":"left"}}>{h}</th>))}
-            </tr></thead>
-            <tbody>
-              {standalone.map((item,i)=><IRw key={item.id} item={item} bg={i%2?C.cream:C.white}/>)}
-              {Object.entries(setMap).map(([sc,si])=>[
-                <tr key={sc+"-h"} style={{background:C.slateM}}>
-                  <td colSpan={10} style={{padding:"5px 10px",color:C.amber,fontWeight:700,fontSize:11}}>
-                    📦 SET: {sc} &nbsp;·&nbsp; {si.length} item{si.length>1?"s":""} &nbsp;·&nbsp;
-                    <span style={{fontFamily:mono}}>SET Rate: ₹{si.filter(i=>i.result).reduce((s,i)=>s+i.result.finalRate*(+i.spec.qtyPerSet||1),0).toFixed(2)}/set</span>
-                  </td>
-                </tr>,
-                ...si.map((item,i)=><IRw key={item.id} item={item} bg={i%2?"#F5F0EC":C.cream}/>),
-                <tr key={sc+"-f"} style={{background:"#EBE3D8"}}>
-                  <td colSpan={7} style={{padding:"4px 10px",fontSize:10,fontWeight:600,color:C.slateM}}>
-                    SET {sc} total ({si.filter(i=>i.result).length} items costed)</td>
-                  <td style={{padding:"4px 10px",textAlign:"center",fontWeight:800,color:C.amberD,fontFamily:mono}}>
-                    ₹{si.filter(i=>i.result).reduce((s,i)=>s+i.result.finalRate*(+i.spec.qtyPerSet||1),0).toFixed(2)}</td>
-                  <td colSpan={2}/>
+
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto", background: C.white }}>
+        {items.length===0
+          ? <div style={{ textAlign: "center", color: C.slateL, marginTop: 48, fontSize: T.title }}>
+              No items yet. Add rows in <button type="button" onClick={()=>setTab("batch")}
+                style={{ background: "none", border: "none", color: C.amber, fontWeight: 700, cursor: "pointer",
+                  fontSize: T.title, textDecoration: "underline", padding: 0 }}>Batch Entry</button>, calculate,
+              then click "Send All to Quote Items".
+            </div>
+          : <table style={denseTable}>
+              <thead>
+                <tr>
+                  <th scope="col" style={{ ...denseHead, ...frozenCell(false, true) }}>Mat Code / Type</th>
+                  {COLUMNS.map(([h, align]) => <th key={h} scope="col" style={{ ...denseHead, textAlign: align || "left" }}>{h}</th>)}
+                  <th scope="col" style={denseHead} aria-label="Remove item" />
                 </tr>
-              ])}
-            </tbody>
-          </table>
-        </div>;
-      })()}
-        <div style={{marginTop:10,fontSize:11,color:C.slateL,padding:"8px 12px",
-          background:C.cream,borderRadius:6}}>
-          Quote Items are read-only. Review or revise the calculation in Batch Entry using Deep Dive — clicking a row takes you there.
-          To revise a rate, go to Batch Entry → adjust → Calculate All → Send All to Quote Items again.
-          Re-import: export to Excel, make manual revisions, then use "Re-import Excel" to bring back revised items.
-        </div>
-      </>}
+              </thead>
+              <tbody>
+                {standalone.map((item,i)=><ItemRow key={item.id} item={item} background={i%2?C.cream:C.white}
+                  onOpen={openRow} onRemove={()=>removeItem(item.id)}/>)}
+                {Object.entries(setMap).map(([sc,si])=>{
+                  const costed=si.filter(i=>i.result);
+                  const setRate=costed.reduce((s,i)=>s+i.result.finalRate*(+i.spec.qtyPerSet||1),0);
+                  return <Fragment key={sc}>
+                    <tr style={{ height: 26, background: C.slateM }}>
+                      <td colSpan={COLUMNS.length + 2} style={{ ...denseCell, maxWidth: "none",
+                        color: C.amber, fontWeight: 700 }}>
+                        📦 SET {sc} · {si.length} item{si.length>1?"s":""} · {costed.length} costed ·{" "}
+                        <span style={{ fontFamily: mono }}>SET Rate ₹{setRate.toFixed(2)}/set</span>
+                      </td>
+                    </tr>
+                    {si.map((item,i)=><ItemRow key={item.id} item={item} background={i%2?"#F5F0EC":C.cream}
+                      onOpen={openRow} onRemove={()=>removeItem(item.id)}/>)}
+                  </Fragment>;
+                })}
+              </tbody>
+            </table>}
+      </div>
+
+      <ScreenFooter right="Read-only · revise in Batch Entry → Calculate All → Send All again">
+        <ProvenanceTag kind="local" />
+        <span title="Kept in this browser only — not a governed record. Send a Batch to create a governed revision.">
+          Working items · this browser only · not a governed Quote revision</span>
+        <span aria-hidden="true">·</span>
+        <span>Calc BS <span style={{ color: C.green }}>within 5%</span> / <span style={{ color: C.orange }}>over 5%</span> of Std BS</span>
+      </ScreenFooter>
     </div>
   );
 }

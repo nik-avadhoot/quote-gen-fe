@@ -10,6 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const screen = fs.readFileSync(path.join(root, "src/tabs/QuotesScreen.jsx"), "utf8");
 const workspace = fs.readFileSync(path.join(root, "src/tabs/QuotesWorkspace.jsx"), "utf8");
+const quoteItems = fs.readFileSync(path.join(root, "src/tabs/QuoteItemsTab.jsx"), "utf8");
 const catalogueScreen = fs.readFileSync(path.join(root, "src/tabs/QuoteCatalogueScreen.jsx"), "utf8");
 const myBatches = fs.readFileSync(path.join(root, "src/tabs/MyBatchesScreen.jsx"), "utf8");
 const batchWorkspace = fs.readFileSync(path.join(root, "src/tabs/batch/BatchWorkspacePanel.jsx"), "utf8");
@@ -180,13 +181,15 @@ check(!catalogueScreen.includes("<h1") && !screen.includes("<h1") && !workspace.
   "U5-FE-37 no page header under the TopBar on any Quotes view, and the dead rules left the stylesheet with it");
 check((catalogueScreen.match(/role="toolbar"/g) || []).length === 2
   && (screen.match(/role="toolbar"/g) || []).length === 1
-  && (workspace.match(/role="toolbar"/g) || []).length === 1
+  && (workspace.match(/role="toolbar"/g) || []).length === 0
+  && (quoteItems.match(/role="toolbar"/g) || []).length === 1
   && standards.includes("export const TOOLBAR_MIN_HEIGHT = 43")
   && !/const toolbar = {/.test(catalogueScreen) && !/const toolbar = {/.test(screen),
   "U5-FE-38 one toolbar per panel, every one at the single shared height from the shared module");
 check(workspace.includes("toolbarLead={viewSwitch}")
-  && (workspace.match(/toolbarLead={viewSwitch}/g) || []).length === 2
-  && catalogueScreen.includes("{toolbarLead}") && screen.includes("{toolbarLead}")
+  && (workspace.match(/toolbarLead={viewSwitch}/g) || []).length === 3
+  && workspace.includes("<QuoteItemsTab toolbarLead={viewSwitch} />")
+  && catalogueScreen.includes("{toolbarLead}") && screen.includes("{toolbarLead}") && quoteItems.includes("{toolbarLead}")
   && !workspace.includes('className="quotes-view-switch"'),
   "U5-FE-39 the Quotes view switch rides inside the active view's own toolbar, not in a band of its own");
 check(catalogueScreen.includes("<PendingActions actions={PENDING_WORKFLOW}")
@@ -211,17 +214,44 @@ check(catalogueScreen.includes("<RowDisclosure open={open}") && catalogueScreen.
   && catalogueScreen.includes('["Revision identity", `#${row.id}`]')
   && catalogueScreen.includes('["Standing", row.standing || "Not allocated"]'),
   "U5-FE-44 revision identity, standing and timestamps moved into the row disclosure rather than being dropped");
-check(catalogueScreen.includes("<ScreenFooter") && screen.includes("<ScreenFooter") && workspace.includes("<ScreenFooter")
+check(catalogueScreen.includes("<ScreenFooter") && screen.includes("<ScreenFooter") && quoteItems.includes("<ScreenFooter")
+  && !workspace.includes("<ScreenFooter")
   && catalogueScreen.includes("never edited in place"),
   "U5-FE-45 provenance is stated once per view in a footer, not repeated on every row");
 check(catalogueScreen.includes('import { C, T, mono, sans } from "../theme.js"')
   && screen.includes('import { C, T, mono, sans } from "../theme.js"')
-  && !/fontSize: (?!T.)[0-9]/.test(catalogueScreen) && !/fontSize: (?!T.)[0-9]/.test(workspace),
+  && !/fontSize: (?!T.)[0-9]/.test(catalogueScreen) && !/fontSize: (?!T.)[0-9]/.test(workspace)
+  && !/fontSize: ?(?!T.)[0-9]/.test(quoteItems.replace(/\{\/\* Fix 12:[\s\S]*?\*\/\}/, "")),
   "U5-FE-46 every type size on these views is a T token, never a hardcoded off-scale pixel value");
 check(catalogueScreen.indexOf("<PendingActions") > catalogueScreen.indexOf('aria-label="Quote evidence controls"')
   && catalogueScreen.includes('role="group" aria-label="Split"')
   && catalogueScreen.indexOf('role="group" aria-label="Split"') < catalogueScreen.indexOf('aria-label="Quote evidence controls"'),
   "U5-FE-47 workflow actions sit with the revision they act on, and the split presets in the list disclosure, so neither toolbar wraps at 50:50");
+
+// ───────────────────────────── Working Quote Items on the standard
+check(!quoteItems.includes(">Quote Items</div>") && !quoteItems.includes("items in this session")
+  && quoteItems.includes('export default function QuoteItemsTab({ toolbarLead = null })'),
+  "U5-FE-48 Working items carry no page header under the TopBar; the view switch leads their one toolbar");
+check(quoteItems.includes("<details") && quoteItems.includes("menuSummary(datesSet)")
+  && quoteItems.indexOf('aria-label="Price valid from"') > quoteItems.indexOf("<details")
+  && quoteItems.indexOf("onChange={handleTemplateLoad}") > quoteItems.indexOf("<details"),
+  "U5-FE-49 quote dates, Maker and the template loader sit in a Details disclosure, not a band");
+check(quoteItems.includes("height: 26") && quoteItems.includes("frozenCell(false, true)")
+  && quoteItems.includes("denseTable") && quoteItems.includes('["Per set", "right"]')
+  && !quoteItems.includes("marginTop:1}}"),
+  "U5-FE-50 items are 26px rows with the Material Code frozen, and the per-set amount is a column, not a second line");
+check(!quoteItems.includes('sc+"-f"') && quoteItems.includes("costed ·")
+  && quoteItems.includes("SET Rate ₹{setRate.toFixed(2)}/set"),
+  "U5-FE-51 each SET is one group row carrying item count, costed count and SET rate");
+check(quoteItems.includes('<ProvenanceTag kind="local" />') && quoteItems.includes("not a governed Quote revision")
+  && workspace.includes('{ id: "working-items", label: "Working", name: "Working Quote Items", provenance: "local" }'),
+  "U5-FE-52 the Local provenance signal survives on the view switch and in the footer");
+check(quoteItems.includes("checkSETCompleteness()") && quoteItems.includes("warnDivergence();exportFromTemplate(")
+  && quoteItems.includes("disabled={!canExport||!capacityOk}") && quoteItems.includes("const CBB_MAX=44;")
+  && quoteItems.includes('window.confirm("Clear all items? They will be lost unless exported.")')
+  && quoteItems.includes(`showToast(QI_READONLY_MSG,'info',5000);setTab("batch");`)
+  && !/Re-import: export to Excel/.test(quoteItems),
+  "U5-FE-53 export, capacity, SET completeness, divergence, Clear All and read-only guards are unchanged, and the false re-import advice is gone");
 
 console.log(`\n${passes} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);

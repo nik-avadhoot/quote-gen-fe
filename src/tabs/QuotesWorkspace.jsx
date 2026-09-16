@@ -6,7 +6,9 @@
 // its own above whichever view was mounted, so every Quotes view spent one
 // band on navigation and a second on its own controls. The switch is now
 // passed INTO the active view as its toolbar's leading control, which keeps
-// the standard's "one toolbar per panel" literally true.
+// the standard's "one toolbar per panel" literally true. The Working view
+// receives it the same way (`QuoteItemsTab toolbarLead`), so no view here
+// renders a toolbar or footer of its own.
 //
 // Each view carries the shared provenance tag, so local working items and
 // immutable governed evidence are told apart by a stable visual signal, not
@@ -20,9 +22,8 @@ import QuoteCatalogueScreen from "./QuoteCatalogueScreen.jsx";
 import QuoteItemsTab from "./QuoteItemsTab.jsx";
 import QuotesScreen from "./QuotesScreen.jsx";
 import { ProvenanceTag } from "../ui/dataDisplay.jsx";
-import { ScreenFooter } from "../ui/screenChrome.jsx";
-import { segment, toolbar } from "../ui/screenStandards.js";
-import { C, T, sans } from "../theme.js";
+import { segment } from "../ui/screenStandards.js";
+import { C, sans } from "../theme.js";
 
 const QUOTE_VIEWS = [
   { id: "working-items", label: "Working", name: "Working Quote Items", provenance: "local" },
@@ -111,22 +112,7 @@ export default function QuotesWorkspace({ fixtureOnly = false, initialView = "wo
     {view === "governed" && <QuotesScreen fixtureOnly={fixtureOnly} showFixtureBanner={false}
       toolbarLead={viewSwitch}
       onOpenSourceBatch={fixtureOnly ? null : openSourceBatch} sourceBatchState={sourceBatchState} />}
-    {view === "working-items" && <>
-      <div role="toolbar" aria-label="Working Quote Items controls" style={toolbar}>
-        {viewSwitch}
-        <span style={{ fontSize: T.label, color: C.amberD }}>
-          Local working items are not an immutable governed Quote revision.</span>
-        <span style={{ flex: "1 1 auto" }} />
-      </div>
-      <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "10px 12px 16px", background: C.paper }}>
-        <QuoteItemsTab />
-      </div>
-      <ScreenFooter right="Send a Batch to create a governed revision">
-        <ProvenanceTag kind="local" />
-        <span title="Kept in this browser only — not a governed record.">
-          Working items · this browser only</span>
-      </ScreenFooter>
-    </>}
+    {view === "working-items" && <QuoteItemsTab toolbarLead={viewSwitch} />}
     {view === "history" && <QuoteCatalogueScreen mode="history" fixtureOnly={fixtureOnly}
       toolbarLead={viewSwitch}
       initialRevisionId={fixtureOnly ? null : quoteWorkspaceRequest?.revisionId}
