@@ -66,6 +66,7 @@ import {
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag, SummaryRow } from "../ui/dataDisplay.jsx";
 import { CollapseIcon, ExpandIcon, RefreshIcon } from "../ui/icons.jsx";
+import { control, iconButton, menuPanel, menuSummary, segment, toolbar } from "../ui/screenStandards.js";
 import { C, T, mono, sans } from "../theme.js";
 
 const EMPTY_FILTERS = { plant: "", status: "", q: "", familyId: "", partyId: "" };
@@ -79,23 +80,8 @@ const GROUP_TONE = {
 const STATE_INK = { value: C.slate, na: C.slateL, blank: C.slateL, hidden: C.slateL, unavailable: C.slateL, pending: C.amberD };
 const LIFECYCLE_INK = { proposed: C.amberD, active: C.green, discontinued: C.red };
 const LAYERS = [["Top", "AI", "AJ"], ["Flute-1", "AK", "AL"], ["Back-1", "AM", "AN"], ["Flute-2", "AO", "AP"], ["Back-2", "AQ", "AR"]];
-// Toolbar controls share Batch Builder's toolbar height and weight.
-const control = { height: 26, boxSizing: "border-box", fontSize: T.body, padding: "3px 7px", borderRadius: 5,
-  border: `1px solid ${C.border}`, background: C.white, fontFamily: sans, color: C.slate };
-// Both panel headers share one height, so the list and detail bands line up.
-const toolbar = { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", rowGap: 5, padding: "6px 10px",
-  boxSizing: "border-box", minHeight: 43, borderBottom: `1px solid ${C.border}`, background: C.cream, flexShrink: 0 };
-const menuSummary = active => ({ ...control, display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer",
-  listStyle: "none", fontSize: T.label, fontWeight: 700, whiteSpace: "nowrap",
-  color: active ? C.amberD : C.slateM, borderColor: active ? C.amber : C.border, background: active ? C.amberL : C.white });
-const menuPanel = { position: "absolute", left: 0, top: "calc(100% + 6px)", zIndex: 30, minWidth: 230, padding: 9,
-  border: `1px solid ${C.border}`, borderRadius: 7, background: C.white, boxShadow: "0 8px 22px rgba(28,43,58,.18)",
-  display: "grid", gap: 7 };
-const iconButton = on => ({ width: 26, height: 26, display: "inline-grid", placeItems: "center", padding: 0, borderRadius: 5,
-  cursor: "pointer", flexShrink: 0, border: `1px solid ${on ? C.green : C.border}`,
-  background: on ? C.greenL : C.white, color: on ? C.green : C.slateM });
-const segment = on => ({ height: 22, padding: "0 7px", border: 0, borderRight: `1px solid ${C.border}`, cursor: "pointer",
-  fontFamily: mono, fontSize: T.label, fontWeight: 700, background: on ? C.slateM : C.white, color: on ? C.white : C.slateM });
+// Toolbar height, controls, disclosures and icon buttons are the shared
+// screen-space standard (src/ui/screenChrome.jsx), not this screen's own.
 
 const isPlain = state => state === "value" || state === "na";
 const fieldTag = f => f.origin === "new" ? "NEW" : f.origin === "app" ? "APP" : f.authority ? "CON" : "";

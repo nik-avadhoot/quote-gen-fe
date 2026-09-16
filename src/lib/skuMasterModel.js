@@ -16,6 +16,10 @@
 // That is a usability gate only; RLS remains the authority.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// The split and panel-focus arithmetic is shared with every other split
+// screen; re-exported here so this module stays the SKU Master's one model.
+export { PANEL_FOCUS, SPLIT_DEFAULT, SPLIT_MAX, SPLIT_MIN, clampSplit, panelLayout } from "./panelSplit.js";
+
 export const SKU_STATUSES = ["proposed", "active", "discontinued"];
 export const SKU_SEARCH_MAX = 60;
 export const SKU_SEARCH_MAX_TERMS = 5;
@@ -47,9 +51,6 @@ const SEARCH_STATE_REASON = {
 export const NOT_VISIBLE = "Not visible to this caller";
 export const UNAVAILABLE = "Details unavailable";
 export const PENDING = "Not stored yet · migration pending";
-export const SPLIT_MIN = 25;
-export const SPLIT_MAX = 75;
-export const SPLIT_DEFAULT = 50;
 
 export const REFERENCE_KIND_LABELS = {
   customer_item_code: "Customer Item Code",
@@ -491,18 +492,3 @@ export function skuSetGroups(rows) {
   return order.map(k => byKey[k]);
 }
 
-// Panel focus fills the SKU Master area with one panel, inside the app window
-// (never the browser Fullscreen API). The split is kept for when focus ends.
-export const PANEL_FOCUS = ["list", "detail"];
-
-export function panelLayout(split, focus) {
-  if (focus === "list") return { listWidth: "100%", showList: true, showDetail: false, showDivider: false };
-  if (focus === "detail") return { listWidth: "0px", showList: false, showDetail: true, showDivider: false };
-  return { listWidth: `calc(${clampSplit(split)}% - 3.5px)`, showList: true, showDetail: true, showDivider: true };
-}
-
-export function clampSplit(percent) {
-  const n = Number(percent);
-  if (!Number.isFinite(n)) return SPLIT_DEFAULT;
-  return Math.max(SPLIT_MIN, Math.min(SPLIT_MAX, Math.round(n)));
-}

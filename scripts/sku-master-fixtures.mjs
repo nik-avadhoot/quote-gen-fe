@@ -294,6 +294,7 @@ check(app.includes("<AppStateProvider>\n      <SkuMasterScreen fixtureOnly"),
 
 // ───────────────────────────────────────────── expand icons and header density
 const icons = read("../src/ui/icons.jsx");
+const standards = read("../src/ui/screenStandards.js");
 check(icons.includes("export const ExpandIcon") && icons.includes("export const CollapseIcon")
   && icons.includes('"aria-hidden": true') && icons.includes('stroke: "currentColor"'),
   "U2-SKU-FE-63 expand and collapse are decorative stroke icons that take the button colour");
@@ -303,9 +304,11 @@ check(screen.includes('aria-label={focusPanel === "list" ? "Collapse list" : "Ex
   && (screen.match(/<CollapseIcon size=\{14\} \/>/g) || []).length === 2
   && !/>\s*(Focus list|Focus detail|Exit focus)\s*</.test(screen),
   "U2-SKU-FE-64 each panel's focus toggle is an expand / collapse icon with an accessible name, not a text button");
-check(!screen.includes("<h2") && (screen.match(/role="toolbar"/g) || []).length === 2
-  && screen.includes('boxSizing: "border-box", minHeight: 43') && !screen.includes("minHeight: 39"),
-  "U2-SKU-FE-65 no second page title under the TopBar; each panel has exactly one toolbar, both the same height");
+check(!screen.includes("<h2") && !screen.includes("<h1") && (screen.match(/role="toolbar"/g) || []).length === 2
+  && screen.includes('from "../ui/screenStandards.js"') && !/const toolbar = {/.test(screen)
+  && standards.includes("export const TOOLBAR_MIN_HEIGHT = 43")
+  && standards.includes("minHeight: TOOLBAR_MIN_HEIGHT") && !standards.includes("minHeight: 39"),
+  "U2-SKU-FE-65 no page title under the TopBar; each panel has exactly one toolbar, at the ONE shared height");
 check((screen.match(/<details style=\{\{ position: "relative" \}\}>/g) || []).length === 2
   && screen.includes("Filters{moreFilters ?") && screen.includes("Columns{hiddenGroups.length ?")
   && screen.includes('aria-label="Refresh SKU list"') && screen.includes("read at ${readAt"),
