@@ -28,9 +28,10 @@ const SEARCH_CHARS = /^[A-Za-z0-9 ._/-]*$/;
 // ── One search box, identity only ──────────────────────────────────────────
 // The box matches identity factors and NOTHING else. Lifecycle, plant,
 // portfolio and every specification field keep their own controls, so a
-// lifecycle word never quietly filters the list from the search box.
+// lifecycle word never quietly filters the list from the search box. A retired
+// Plant Item Code finds its SKU too (Product Owner, 2026-09-16).
 export const SKU_SEARCH_FIELDS = ["plant_item_code", "item_name", "item_short_name",
-  "customer_item_code", "softcomp_code", "customer_name"];
+  "customer_item_code", "softcomp_code", "legacy_plant_item_code", "customer_name"];
 
 export const SEARCH_FIELD_LABELS = {
   plant_item_code: "Plant Item Code",
@@ -38,6 +39,7 @@ export const SEARCH_FIELD_LABELS = {
   item_short_name: "Item Short Name",
   customer_item_code: "Customer Item Code",
   softcomp_code: "SoftComp Code",
+  legacy_plant_item_code: "Legacy Plant Item Code",
   customer_name: "Customer name",
 };
 
@@ -126,7 +128,7 @@ export function searchScopeHint() {
 }
 
 // Names the identity fields that were NOT searched, and why. Returning null
-// means all six were searched - never that the question was not asked.
+// means all seven were searched - never that the question was not asked.
 export function searchCoverageNotice(search) {
   if (!search || search.executed !== true) return null;
   const states = search.fields || {};

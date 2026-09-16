@@ -13,7 +13,7 @@
 // Short Name, Customer Item Code, SoftComp Code and the owning Customer's name.
 // Every word must match somewhere, so words narrow. Lifecycle, plant and every
 // specification field keep their own controls. The server searches in the
-// database, caller-scoped, and reports which of the six it ACTUALLY reached;
+// database, caller-scoped, and reports which of the seven it ACTUALLY reached;
 // a field with no storage yet or one this caller may not read is named on the
 // screen rather than quietly missing rows.
 //
@@ -72,7 +72,9 @@ import { control, iconButton, menuPanel, menuSummary, segment, toolbar } from ".
 import { C, T, mono, sans } from "../theme.js";
 
 const EMPTY_FILTERS = { plant: "", status: "", q: "", portfolio: "", familyId: "", partyId: "" };
-const FROZEN = ["C", "D"];
+// Frozen identity, in this order and always leftmost: the Plant Item Code
+// (SPEC D) first, then Item Short Name (Product Owner, 2026-09-16).
+const FROZEN = ["D", "C"];
 const GROUP_TONE = {
   identity: { band: C.slateM, ink: C.white, soft: "#F3F1EC", softInk: C.slateM },
   customer: { band: C.greenL, ink: C.green, soft: "#F4FAF6", softInk: C.green },
@@ -459,7 +461,10 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
 }
 
 function SpecGrid({ rows, ctx, groups, selectedId, onSelect, groupBySet }) {
-  const cols = groups.flatMap(g => g.fields.map(f => ({ ...f, group: g })));
+  const registryCols = groups.flatMap(g => g.fields.map(f => ({ ...f, group: g })));
+  // Frozen columns lead, in FROZEN order, so "first frozen" is also "first".
+  const cols = [...FROZEN.map(key => registryCols.find(c => c.key === key)).filter(Boolean),
+    ...registryCols.filter(c => !FROZEN.includes(c.key))];
   const width = cols.reduce((t, c) => t + c.width, 0);
   const lefts = {};
   let offset = 0;
@@ -473,7 +478,7 @@ function SpecGrid({ rows, ctx, groups, selectedId, onSelect, groupBySet }) {
     const frozen = FROZEN.includes(c.key);
     const prev = segments[segments.length - 1];
     if (!frozen && prev && !prev.frozen && prev.groupId === c.group.id) { prev.width += c.width; continue; }
-    const first = !segments.some(s => s.groupId === c.group.id);
+    const first = !segments.some(s => s.groupId === c.group.id && !s.frozen);
     segments.push({ key: `${c.group.id}-${c.key}`, groupId: c.group.id, frozen, column: c, width: c.width,
       label: frozen ? (c.key === FROZEN[0] ? "Frozen · identity" : "") : first ? c.group.label : `${c.group.short} (cont.)`,
       tone: GROUP_TONE[c.group.source] });

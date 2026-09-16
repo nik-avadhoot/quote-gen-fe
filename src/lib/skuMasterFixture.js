@@ -83,7 +83,8 @@ const ROWS = [
   { id: 9103, plant_item_code: "__U2_FIXTURE_ONLY__/NAG/0003", status: "discontinued", replacement_sku_id: 9101,
     content_version: 4, pricing_portfolio: "Transactional", plant: NAG, party_id: 502, customer: PROSPECT, family: null, version_count: 1,
     latest_version: latest(91031, 1, 1, true, true, 43, SPEC_OLD, { ...QF_BOX_V1, item_short_name: "OLD RS 375" }),
-    construction: null, references: {}, locations: [{ location_id: 603, location_code: null, scope: "master", status: "withdrawn" }],
+    construction: null, references: { legacy_plant_item_code: ["FIX-RET-0003"] },
+    locations: [{ location_id: 603, location_code: null, scope: "master", status: "withdrawn" }],
     sets: [] },
   { id: 9104, plant_item_code: "__U2_FIXTURE_ONLY__/NAG/0001P1", status: "proposed", replacement_sku_id: null,
     content_version: 1, pricing_portfolio: "Strategic", plant: NAG, party_id: 501, customer: CUSTOMER, family: FAMILY, version_count: 1,
@@ -135,7 +136,9 @@ export const SKU_FIXTURE_DETAILS = {
     detail_visibility: { customer: "visible", construction: "not_visible_to_caller", plant_adoption: "unavailable",
       locations: "not_visible_to_caller", sets: "visible" },
     versions: [detailVersion(91031, 1, true, true, 43, SPEC_OLD, { ...QF_BOX_V1, item_short_name: "OLD RS 375" }, null, null)],
-    external_references: [],
+    external_references: [
+      { id: 4, reference_kind: "legacy_plant_item_code", reference_value: "FIX-RET-0003", status: "active" },
+    ],
     location_applicability: [{ id: 13, location_id: 603, scope: "master", status: "withdrawn", approved: true, location: null }],
     lineage: { replaced_by: { id: 9101, plant_item_code: "__U2_FIXTURE_ONLY__/NAG/0001", status: "active" },
       replacement_visible: true, replaces: [] },
@@ -155,7 +158,7 @@ export const SKU_FIXTURE_DETAILS = {
     lineage: { replaced_by: null, replacement_visible: true, replaces: [] }, sets: [] },
 };
 
-// The six identity factors the one search box covers, and nothing else -
+// The seven identity factors the one search box covers, and nothing else -
 // deliberately NOT lifecycle, plant, portfolio or any specification value.
 // The fixture reads the latest version only, where the governed route searches
 // every version's Item Name; that is a fixture simplification, not a rule.
@@ -165,6 +168,7 @@ const identityText = row => [
   row.latest_version?.quote_fields?.item_short_name,
   ...(row.references?.customer_item_code || []),
   ...(row.references?.softcomp_code || []),
+  ...(row.references?.legacy_plant_item_code || []),
   row.customer?.display_name,
 ].filter(Boolean).join(" ").toLowerCase();
 
@@ -182,10 +186,11 @@ export function fixtureSkuCatalogue({ plant, status, q, portfolio, familyId, par
   return { skus, truncated: false, limit: 200, plant_scope: ["NAG", "PUN"],
     filters: { plant: plant || null, status: status || null, q: (q || "").trim() || null,
       portfolio: portfolio || null, party_id: partyId || null, family_id: familyId || null },
-    // The fixture carries every identity factor, so all six are searched.
+    // The fixture carries every identity factor, so all seven are searched.
     search: terms.length ? { q: (q || "").trim(), terms, executed: true, scan_truncated: false, degraded: false,
       fields: { plant_item_code: "searched", item_name: "searched", item_short_name: "searched",
-        customer_item_code: "searched", softcomp_code: "searched", customer_name: "searched" } } : null,
+        customer_item_code: "searched", softcomp_code: "searched", legacy_plant_item_code: "searched",
+        customer_name: "searched" } } : null,
     detail_visibility: { customer: "visible", construction: "visible", references: "visible", locations: "visible", sets: "visible" },
     ...common };
 }

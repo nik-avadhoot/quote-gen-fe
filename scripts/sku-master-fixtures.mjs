@@ -15,7 +15,7 @@
 // pricing decision at all until an approved rate mechanism consumes it. It has
 // no edit affordance, because the SKU Master has no governed write path.
 //
-// U2-SKU-FE-67+ guard the ONE SEARCH BOX: it covers the six identity factors
+// U2-SKU-FE-67+ guard the ONE SEARCH BOX: it covers the seven identity factors
 // and nothing else, words narrow rather than widen, the screen says which
 // factors were actually reached, and an empty answer distinguishes "nothing
 // matched" from "nothing is visible to you".
@@ -323,10 +323,10 @@ check((screen.match(/<details style=\{\{ position: "relative" \}\}>/g) || []).le
 
 // ──────────────────────────────── one search box over identity factors only
 check(JSON.stringify(SKU_SEARCH_FIELDS) === JSON.stringify(["plant_item_code", "item_name", "item_short_name",
-  "customer_item_code", "softcomp_code", "customer_name"])
+  "customer_item_code", "softcomp_code", "legacy_plant_item_code", "customer_name"])
   && Object.keys(SEARCH_FIELD_LABELS).length === SKU_SEARCH_FIELDS.length
   && SKU_SEARCH_FIELDS.every(f => typeof SEARCH_FIELD_LABELS[f] === "string"),
-  "U2-SKU-FE-67 the box covers exactly the six identity factors, each with a name a reader would use");
+  "U2-SKU-FE-67 the box covers exactly the seven identity factors, each with a name a reader would use");
 const hint = searchScopeHint();
 check(SKU_SEARCH_FIELDS.every(f => hint.includes(SEARCH_FIELD_LABELS[f]))
   && /identity only/i.test(hint) && /every word must match/i.test(hint)
@@ -383,12 +383,20 @@ check(normaliseSkuCatalogue({ search: { executed: true, terms: ["a"] } }).search
   && normaliseSkuCatalogue({}).search === null,
   "U2-SKU-FE-80 the search report is carried through normalisation, and its absence is null");
 
-// The fixture preview searches the same six factors and nothing else.
+// The fixture preview searches the same seven factors and nothing else.
 const fixtureIds = q => fixtureSkuCatalogue({ q }).skus.map(r => r.id);
 check(fixtureIds("__U2_FIXTURE_ONLY__/NAG/0001Q1").length === 1 && fixtureIds("PARTITION").length === 1
   && fixtureIds("FIX-CIC-778").length === 1 && fixtureIds("FIX-011145").length === 1
   && fixtureIds("Distillers Unit 1").length > 0,
   "U2-SKU-FE-81 the preview finds a SKU by code, name, Customer Item Code, SoftComp Code and Customer name");
+check(JSON.stringify(fixtureIds("FIX-RET-0003")) === JSON.stringify([9103])
+  && SEARCH_FIELD_LABELS.legacy_plant_item_code === "Legacy Plant Item Code"
+  && searchScopeHint().includes("Legacy Plant Item Code"),
+  "U2-SKU-FE-81a a retired (legacy) Plant Item Code finds its SKU, and the box says it searches it");
+check(/const FROZEN = \["D", "C"\];/.test(screen)
+  && screen.includes("...FROZEN.map(key => registryCols.find(c => c.key === key))")
+  && screen.includes("boxShadow: c.key === FROZEN[0]"),
+  "U2-SKU-FE-81b the Plant Item Code is the FIRST frozen column and leads the grid, carrying the lifecycle rail");
 check(fixtureIds("RSC").length === 0 && fixtureIds("2L+2W+F").length === 0
   && fixtureIds("discontinued").length === 0 && fixtureIds("Pune").length === 0,
   "U2-SKU-FE-82 a specification, lifecycle or plant value is NOT an identity factor and matches nothing");
