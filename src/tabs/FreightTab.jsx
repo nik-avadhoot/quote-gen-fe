@@ -8,76 +8,110 @@
 // top of App() — thousands of lines from its only consumer — because Rules of
 // Hooks forbid useState inside the JSX const this tab used to be. Being a real
 // component is what makes it local, and that is the point of this phase.
+//
+// ── SCREEN SPACE ──────────────────────────────────────────────────────────
+// ONE toolbar (location count, Add location disclosure, edit state) above a
+// dense matrix with the delivery location frozen; the unit and the Local
+// provenance tag are in the footer. Deleting a location row now confirms first
+// (Product Owner, 2026-09-16) — it removes that location's rate for every plant.
+//
+// ⚠️ EDITING IS GATED ON THE DERIVED `role` LABEL, not on a capability — the
+// same recorded follow-up debt as Commercial Policies and Rate Masters.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState } from "react";
 import { PLANTS } from "../data/defaults.js";
-import { Btn } from "../ui/primitives.jsx";
 import { useAppState } from "../state/AppStateContext.js";
-import { C, mono } from "../theme.js";
+import { ProvenanceTag } from "../ui/dataDisplay.jsx";
+import { PanelFocusToggle, ScreenFooter } from "../ui/screenChrome.jsx";
+import {
+  cellInput, control, denseCell, denseHead, denseTable, frozenCell, inputCell, menuPanel, menuSummary,
+  toolbar, usePanelFocus,
+} from "../ui/screenStandards.js";
+import { C, T, mono, sans } from "../theme.js";
 
 export default function FreightTab(){
   const { role, locations, setLocations, freight, setFreight } = useAppState();
   const[newLocation,setNewLocation]=useState("");
+  const { focusPanel, toggleFocus, exitFocusOnEscape } = usePanelFocus();
+  const isAdmin=role==="admin";
+  const canAdd=!!newLocation&&!locations.includes(newLocation);
 
   return(
-    <div style={{padding:20,overflowY:"auto",height:"100%"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <div>
-          <div style={{fontSize:16,fontWeight:700,color:C.slate,marginBottom:2}}>Freight Rate Matrix</div>
-          <div style={{fontSize:11,color:C.slateL}}>Rs/kg from plant to delivery location. 3 plants: Nagpur · Pune · Kolkata</div>
-        </div>
-        {role==="admin"
-          ?<span style={{fontSize:11,color:C.green,fontWeight:600}}>⚙ Admin — add/edit/delete enabled</span>
-          :<span style={{fontSize:11,color:C.slateL}}>Switch to Admin to edit</span>}
+    <div onKeyDown={exitFocusOnEscape} style={{ height: "100%", display: "flex", flexDirection: "column",
+      minHeight: 0, background: C.cream, fontFamily: sans }}>
+      <div role="toolbar" aria-label="Freight Masters controls" style={toolbar}>
+        {isAdmin&&<details style={{ position: "relative" }}>
+          <summary style={menuSummary(!!newLocation)}>+ Add location ▾</summary>
+          <div style={menuPanel}>
+            <label style={{ display: "grid", gap: 3, fontSize: T.label, color: C.slateL, fontWeight: 700 }}>
+              Delivery location
+              <input value={newLocation} onChange={e=>setNewLocation(e.target.value)}
+                placeholder="e.g. Surat" style={control}/>
+            </label>
+            <button type="button" disabled={!canAdd}
+              onClick={()=>{
+                setLocations(prev=>[...prev,newLocation]);
+                setFreight(prev=>{const nf={...prev};
+                  PLANTS.forEach(p=>{nf[p]={...(nf[p]||{}),[newLocation]:0};});return nf;});
+                setNewLocation("");}}
+              style={{ ...control, border: "none", fontWeight: 700, color: C.white,
+                background: canAdd?C.green:"#CCC", cursor: canAdd?"pointer":"not-allowed" }}>+ Add Row</button>
+            {newLocation&&locations.includes(newLocation)&&
+              <span style={{ fontSize: T.label, color: C.red }}>That location already exists</span>}
+          </div>
+        </details>}
+        <span style={{ fontSize: T.label, color: C.slateL, whiteSpace: "nowrap" }}>
+          Rs/kg from plant to delivery location · {PLANTS.length} plants: {PLANTS.join(" · ")}</span>
+        <span style={{ flex: "1 1 auto" }} />
+        <span style={{ fontSize: T.label, color: C.slateL, whiteSpace: "nowrap" }}>
+          {locations.length} location{locations.length===1?"":"s"}</span>
+        {isAdmin
+          ?<span style={{ fontSize: T.label, color: C.green, fontWeight: 700, whiteSpace: "nowrap" }}>⚙ Admin — add/edit/delete enabled</span>
+          :<span style={{ fontSize: T.label, color: C.amberD, fontWeight: 700, whiteSpace: "nowrap" }}>
+             Read-only — editing needs an administrator account</span>}
+        <PanelFocusToggle panel="list" noun="Freight matrix" focused={focusPanel === "list"} onToggle={toggleFocus} />
       </div>
-      {role==="admin"&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,
-        padding:"10px 12px",background:C.cream,borderRadius:7,border:`1px solid ${C.border}`}}>
-        <span style={{fontSize:11,fontWeight:600,color:C.slateM}}>Add Location:</span>
-        <input value={newLocation} onChange={e=>setNewLocation(e.target.value)}
-          placeholder="e.g. Surat" style={{padding:"5px 9px",borderRadius:5,
-            border:`1px solid ${C.border}`,fontSize:12,width:140}}/>
-        <Btn ch="+ Add Row" v="success" sm disabled={!newLocation||locations.includes(newLocation)}
-          onClick={()=>{
-            setLocations(prev=>[...prev,newLocation]);
-            setFreight(prev=>{const nf={...prev};
-              PLANTS.forEach(p=>{nf[p]={...(nf[p]||{}),[newLocation]:0};});return nf;});
-            setNewLocation("");}}/>
-        <span style={{fontSize:10,color:C.slateL}}>Click cell to edit rates. × to delete a row.</span>
-      </div>}
-      <table style={{borderCollapse:"collapse",fontSize:12}}>
-        <thead><tr>
-          <th style={{padding:"7px 14px",background:C.slateM,color:C.white,textAlign:"left",
-            fontSize:10,fontWeight:600,minWidth:140}}>Delivery ↓ / Plant →</th>
-          {PLANTS.map(p=><th key={p} style={{padding:"7px 14px",background:C.amber,color:C.white,
-            fontSize:10,fontWeight:600,minWidth:96,textAlign:"center"}}>{p}</th>)}
-          {role==="admin"&&<th style={{padding:"7px 8px",background:C.slateM,color:"transparent",
-            fontSize:10,width:30}}> </th>}
-        </tr></thead>
-        <tbody>{locations.map((loc,li)=>(
-          <tr key={loc} style={{background:li%2?C.cream:C.white}}>
-            <td style={{padding:"5px 14px",fontWeight:600,color:C.slateM}}>{loc}</td>
-            {PLANTS.map(plant=>(
-              <td key={plant} style={{padding:"3px 8px",textAlign:"center"}}>
-                {role==="admin"
-                  ?<input type="number" step="0.5" value={freight[plant]?.[loc]??0}
-                     onChange={e=>setFreight(prev=>({...prev,[plant]:{...(prev[plant]||{}),[loc]:+e.target.value}}))}
-                     style={{width:68,padding:"3px 6px",border:`1px solid ${C.border}`,borderRadius:4,
-                       fontSize:12,textAlign:"center",fontFamily:mono}}/>
-                  :<span style={{fontFamily:mono,color:C.slateM,fontSize:12}}>{freight[plant]?.[loc]??0}</span>}
-              </td>))}
-            {role==="admin"&&<td style={{padding:"3px 4px",textAlign:"center"}}>
-              <button onClick={()=>{
-                  setLocations(prev=>prev.filter(l=>l!==loc));
-                  setFreight(prev=>{const nf={...prev};
-                    PLANTS.forEach(p=>{const pl={...(nf[p]||{})};delete pl[loc];nf[p]=pl;});return nf;});}}
-                style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>
-            </td>}
-          </tr>))}
-        </tbody>
-      </table>
-      {role!=="admin"&&<div style={{marginTop:10,fontSize:11,color:C.amberD,
-        padding:"7px 10px",background:"#FFF8ED",borderRadius:6}}>
-        Switch to Admin role to add, edit or delete locations.</div>}
+
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto", background: C.white }}>
+        <table style={denseTable}>
+          <thead><tr>
+            <th scope="col" style={{ ...denseHead, ...frozenCell(false, true), minWidth: 140 }}>Delivery ↓ / Plant →</th>
+            {PLANTS.map(p=><th key={p} scope="col" style={{ ...denseHead, background: C.amber, textAlign: "center",
+              minWidth: 96 }}>{p}</th>)}
+            {isAdmin&&<th scope="col" style={{ ...denseHead, width: 30 }} aria-label="Delete location"/>}
+            <th scope="col" style={{ ...denseHead, width: "100%" }} aria-hidden="true"/>
+          </tr></thead>
+          <tbody>{locations.map((loc,li)=>{
+            const background=li%2?C.cream:C.white;
+            return <tr key={loc} style={{ height: 26, background }}>
+              <td style={{ ...frozenCell(false), background, fontWeight: 600, color: C.slateM }}>{loc}</td>
+              {PLANTS.map(plant=>(
+                <td key={plant} style={{ ...denseCell, ...inputCell, textAlign: "center" }}>
+                  {isAdmin
+                    ?<input type="number" step="0.5" value={freight[plant]?.[loc]??0} aria-label={`${loc} from ${plant}`}
+                       onChange={e=>setFreight(prev=>({...prev,[plant]:{...(prev[plant]||{}),[loc]:+e.target.value}}))}
+                       style={{ ...cellInput, width: 68, textAlign: "center", fontFamily: mono }}/>
+                    :<span style={{fontFamily:mono,color:C.slateM}}>{freight[plant]?.[loc]??0}</span>}
+                </td>))}
+              {isAdmin&&<td style={{ ...denseCell, ...inputCell, textAlign: "center" }}>
+                <button type="button" aria-label={`Delete ${loc}`} onClick={()=>{
+                    if(!window.confirm(`Delete delivery location [${loc}]?\nIts freight rate from every plant is removed. This cannot be undone.`))return;
+                    setLocations(prev=>prev.filter(l=>l!==loc));
+                    setFreight(prev=>{const nf={...prev};
+                      PLANTS.forEach(p=>{const pl={...(nf[p]||{})};delete pl[loc];nf[p]=pl;});return nf;});}}
+                  style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: T.title,
+                    lineHeight: 1, padding: "0 4px" }}>×</button>
+              </td>}
+              <td style={denseCell} aria-hidden="true"/>
+            </tr>;})}
+          </tbody>
+        </table>
+      </div>
+
+      <ScreenFooter right="Changes apply immediately · saved in this browser">
+        <ProvenanceTag kind="local" />
+        <span>Freight Rate Matrix · Rs/kg · click a cell to edit</span>
+      </ScreenFooter>
     </div>
   );
 }

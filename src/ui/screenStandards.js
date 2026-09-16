@@ -141,6 +141,14 @@ export const denseCell = {
   overflow: "hidden", textOverflow: "ellipsis", maxWidth: 260, verticalAlign: "middle",
 };
 
+// An editable value inside a dense row. 20px tall inside 2px of cell padding,
+// so a row of inputs is still a 26px row rather than a 36px one.
+export const cellInput = {
+  height: 20, boxSizing: "border-box", padding: "0 5px", border: `1px solid ${C.border}`, borderRadius: 4,
+  fontSize: T.body, fontFamily: sans, color: C.slate, background: C.white, lineHeight: 1,
+};
+export const inputCell = { padding: "2px 8px" };
+
 // The identity column stays put while the rest scrolls sideways.
 export const frozenCell = (selected, header = false) => ({
   ...(header ? {} : denseCell),
