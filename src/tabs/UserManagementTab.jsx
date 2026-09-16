@@ -18,15 +18,29 @@
 // the last-active-administrator refusal instead of reporting "transition not
 // allowed". A 409 here means somebody else changed that user while this list
 // was open — it reloads and asks rather than retrying.
+//
+// ── SCREEN SPACE ──────────────────────────────────────────────────────────
+// ONE toolbar: search, the Add user form and the unattached-account recovery
+// list in disclosures, and the count. Rows are 26px with the name frozen; the
+// account actions, last sign-in, the inactive consequence and the permission
+// editor are one row disclosure away. No control was added and none gained
+// reach: the screen still mounts only for `administer_users` (QuotationApp),
+// every route still re-checks it, and every confirm, compare-and-set version
+// and last-administrator refusal above is unchanged. Only containers moved.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState, useEffect } from "react";
-import { C, mono, sans } from "../theme.js";
+import { C, T, mono, sans } from "../theme.js";
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
 import { useAuth } from "../AuthContext.jsx";
 import CapabilityMatrix from "../ui/CapabilityMatrix.jsx";
 import AuthOrphansPanel from "../ui/AuthOrphansPanel.jsx";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
+import { ProvenanceTag } from "../ui/dataDisplay.jsx";
+import { PanelFocusToggle, RowDisclosure, ScreenFooter, ToolbarLabel } from "../ui/screenChrome.jsx";
+import {
+  control, denseCell, denseHead, denseTable, frozenCell, menuPanel, menuSummary, toolbar, usePanelFocus,
+} from "../ui/screenStandards.js";
 import {
   INITIAL_ACCESS_PRESETS, confirmCapabilityChange, confirmDeactivation, confirmReactivation,
   deactivatesLastAdministrator, deactivationConsequence, deriveRoleLabel,
@@ -206,7 +220,7 @@ function NewUserForm({ plants, onCreated, showToast }) {
   const needsPlant = (role === "maker" || role === "checker") && selectedPlants.length === 0;
 
   return (
-    <form onSubmit={submit} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: 12, background: C.cream, border: `1px solid ${C.border}`, borderRadius: 7, marginBottom: 12 }}>
+    <form onSubmit={submit} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
       <input required type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{ ...inputStyle, width: 200 }} />
       <input required placeholder="Display name" value={displayName} onChange={e => setDisplayName(e.target.value)} style={{ ...inputStyle, width: 140 }} />
       {/* Labelled as a PRESET, never as a role. The capability matrix is the
@@ -220,7 +234,7 @@ function NewUserForm({ plants, onCreated, showToast }) {
       <PlantPicker plants={plants} selected={selectedPlants} onChange={setSelectedPlants} />
       <button type="submit" disabled={busy || needsPlant} style={btnStyle("primary")}>{busy ? "Creating…" : "+ Add User"}</button>
       {needsPlant && <span style={{ fontSize: 11, color: C.red }}>A {role} needs at least one plant</span>}
-      <div style={{ flexBasis: "100%", fontSize: 10.5, color: C.slateL, marginTop: 2 }}>
+      <div style={{ flexBasis: "100%", fontSize: T.label, color: C.slateL, marginTop: 2 }}>
         Grants {initialAccessSeeds(role)}. {initialAccessNote()}
       </div>
     </form>
@@ -376,64 +390,71 @@ function UserRow({ user, plants, isSelf, activeAdminIds, onChanged, onCredential
   const roleLabel = deriveRoleLabel(user.group_capabilities, user.plant_capabilities);
   const plantCodes = Object.keys(user.plant_capabilities || {}).sort();
 
+  const lastSignIn = user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : "never";
+  const background = open ? "#FEF3E8" : C.white;
+
+  // One 26px row. Last sign-in, the inactive consequence, the account actions
+  // and the permission editor are one row disclosure away, so a row is never
+  // made taller by a second line or a wrapped button group.
   return (
     <>
-      <tr style={{ borderBottom: open ? "none" : `1px solid ${C.border}`, opacity: busy ? 0.5 : 1 }}>
-        <td style={{ padding: "6px 8px", fontSize: 12, fontWeight: 600, color: C.slate }}>{user.display_name}{isSelf && <span style={{ color: C.slateL, fontWeight: 400 }}> (you)</span>}</td>
-        <td style={{ padding: "6px 8px", fontSize: 11, color: C.slateM, fontFamily: mono }}>{user.email}</td>
+      <tr style={{ height: 26, background, opacity: busy ? 0.5 : 1 }}>
+        <td style={{ ...frozenCell(open), fontWeight: 600, color: C.slate }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <RowDisclosure open={open} onToggle={() => setOpen(o => !o)}
+              label={`Permissions and account actions for ${user.display_name}`} />
+            {user.display_name}{isSelf && <span style={{ color: C.slateL, fontWeight: 400 }}> (you)</span>}
+          </span>
+        </td>
+        <td style={{ ...denseCell, color: C.slateM, fontFamily: mono }} title={user.email}>{user.email}</td>
         {/* Derived, read-only. The capability set below is the authority. */}
-        <td style={{ padding: "6px 8px", fontSize: 11, color: C.slateM }}
+        <td style={{ ...denseCell, color: C.slateM }}
             title="Derived from this user's capabilities. Not editable — permissions are the authority.">
           {roleLabel}
         </td>
-        <td style={{ padding: "6px 8px", fontSize: 11, color: C.slateM, fontFamily: mono }}>
+        <td style={{ ...denseCell, color: C.slateM, fontFamily: mono }}>
           {plantCodes.length ? plantCodes.join(", ") : <span style={{ color: C.slateL }}>none</span>}
         </td>
-        <td style={{ padding: "6px 8px", fontSize: 10, color: C.slateL, fontFamily: mono }}>{user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : "never"}</td>
-        <td style={{ padding: "6px 8px" }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: user.active ? C.green : C.red }}>{user.active ? "● Active" : "○ Inactive"}</span>
-          {!user.active && (
-            <div style={{ fontSize: 9.5, color: C.slateL, marginTop: 2, maxWidth: 130 }}
-                 title="Deactivation blocks access. It deletes nothing.">
-              Cannot sign in. Records kept.
-            </div>
-          )}
-        </td>
-        <td style={{ padding: "6px 8px", display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <button disabled={busy} onClick={() => setOpen(o => !o)} style={btnStyle("outline")}>
-            {open ? "▾ Permissions" : "▸ Permissions"}
-          </button>
-          <button disabled={busy} onClick={() => onChangeEmail(user)} style={btnStyle("outline")}>Change email</button>
-          <button disabled={busy} onClick={resetPassword} style={btnStyle("outline")}>Reset password</button>
-          <button disabled={busy || isSelf} onClick={changeStatus}
-            title={isSelf ? "You cannot deactivate your own account."
-                          : user.active ? deactivationConsequence()
-                                        : "They will be able to sign in again with the permissions they hold now."}
-            style={btnStyle(statusChangeSummary(user).danger ? "danger" : "outline")}>
-            {statusChangeSummary(user).verb}
-          </button>
+        <td style={{ ...denseCell, color: C.slateL, fontFamily: mono }}>{lastSignIn}</td>
+        <td style={denseCell} title={user.active ? undefined : "Cannot sign in. Records kept. Deactivation blocks access; it deletes nothing."}>
+          <span style={{ fontWeight: 700, color: user.active ? C.green : C.red }}>{user.active ? "● Active" : "○ Inactive"}</span>
         </td>
       </tr>
       {open && (
-        <tr style={{ borderBottom: `1px solid ${C.border}`, background: C.cream }}>
-          <td colSpan={7} style={{ padding: "10px 14px" }}>
+        <tr style={{ background: "#FBF8F3" }}>
+          <td colSpan={6} style={{ ...denseCell, whiteSpace: "normal", maxWidth: "none", padding: "8px 12px 10px 26px" }}>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+              <ToolbarLabel>Account</ToolbarLabel>
+              <button type="button" disabled={busy} onClick={() => onChangeEmail(user)} style={btnStyle("outline")}>Change email</button>
+              <button type="button" disabled={busy} onClick={resetPassword} style={btnStyle("outline")}>Reset password</button>
+              <button type="button" disabled={busy || isSelf} onClick={changeStatus}
+                title={isSelf ? "You cannot deactivate your own account."
+                              : user.active ? deactivationConsequence()
+                                            : "They will be able to sign in again with the permissions they hold now."}
+                style={btnStyle(statusChangeSummary(user).danger ? "danger" : "outline")}>
+                {statusChangeSummary(user).verb}
+              </button>
+              {isSelf && <span style={{ fontSize: T.label, color: C.slateL }}>You cannot deactivate your own account.</span>}
+              {!user.active && <span style={{ fontSize: T.label, color: C.slateL }}>Cannot sign in. Records kept.</span>}
+              <span style={{ fontSize: T.label, color: C.slateL }}>Last sign-in {lastSignIn}</span>
+            </div>
             <CapabilityMatrix groupKeys={edited.group} plantMap={edited.plant}
               plants={plants} editable onChange={setDraft} />
             {wouldStrandAdmins && (
-              <div style={{ marginTop: 8, fontSize: 11, color: C.red }}>
+              <div style={{ marginTop: 8, fontSize: T.body, color: C.red }}>
                 🚫 {lastAdministratorMessage()}
               </div>
             )}
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
-              <button disabled={busy || unchanged || wouldStrandAdmins} onClick={saveCapabilities}
+              <button type="button" disabled={busy || unchanged || wouldStrandAdmins} onClick={saveCapabilities}
                 style={{ ...btnStyle("primary"), opacity: (unchanged || wouldStrandAdmins) ? 0.45 : 1,
                   cursor: (unchanged || wouldStrandAdmins) ? "not-allowed" : "pointer" }}>
                 {busy ? "Saving…" : "Save permissions"}
               </button>
-              <button disabled={busy || unchanged} onClick={() => setDraft(null)} style={btnStyle("outline")}>
+              <button type="button" disabled={busy || unchanged} onClick={() => setDraft(null)} style={btnStyle("outline")}>
                 Discard changes
               </button>
-              <span style={{ fontSize: 10.5, color: C.slateL }}>
+              <span style={{ fontSize: T.label, color: C.slateL }}>
                 {unchanged
                   ? "No changes to apply."
                   : "Saving replaces this user's complete permission set in one governed operation."}
@@ -455,6 +476,8 @@ export default function UserManagementTab({ showToast }) {
   const [query, setQuery] = useState("");
   const [credential, setCredential] = useState(null); // {display_name, email, temp_password} | null
   const [emailTarget, setEmailTarget] = useState(null);
+  const [orphansOpen, setOrphansOpen] = useState(false);
+  const { focusPanel, toggleFocus, exitFocusOnEscape } = usePanelFocus();
 
   const load = async () => {
     let resp, data;
@@ -540,44 +563,72 @@ export default function UserManagementTab({ showToast }) {
     return <div style={{ padding: 16 }}><LoadingState label="Loading users and permissions…" /></div>;
   }
 
+  const activeCount = (users || []).filter(u => u.active).length;
+  const countLabel = `${q ? `${shown.length} of ` : ""}${(users || []).length} users · ${activeCount} active`;
+
   return (
-    <div style={{ overflowY: "auto", height: "100%", padding: 16 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: C.slate, marginBottom: 10 }}>User Management</div>
-      <AuthOrphansPanel plants={plants} onAdopted={load} showToast={showToast} />
-      <NewUserForm plants={plants} onCreated={handleCreated} showToast={showToast} />
-      <div style={{ marginBottom: 10 }}>
-        <input value={query} onChange={e => setQuery(e.target.value)}
-          placeholder="Search by name or email"
-          style={{ ...inputStyle, width: 260 }} />
+    <div onKeyDown={exitFocusOnEscape} style={{ height: "100%", display: "flex", flexDirection: "column",
+      minHeight: 0, background: C.cream, fontFamily: sans }}>
+      <div role="toolbar" aria-label="Users and Access controls" style={toolbar}>
+        <input type="search" value={query} onChange={e => setQuery(e.target.value)}
+          aria-label="Search users by name or email" placeholder="Search by name or email"
+          style={{ ...control, width: 240 }} />
+        <details style={{ position: "relative" }}>
+          <summary style={menuSummary(false)}>+ Add user ▾</summary>
+          <div style={{ ...menuPanel, minWidth: 420 }}>
+            <NewUserForm plants={plants} onCreated={handleCreated} showToast={showToast} />
+          </div>
+        </details>
+        <details style={{ position: "relative" }} onToggle={e => setOrphansOpen(e.currentTarget.open)}>
+          <summary style={menuSummary(orphansOpen)}
+            title="Sign-in accounts with no application user. Read afresh every time this opens.">
+            Unattached accounts ▾</summary>
+          <div style={{ ...menuPanel, minWidth: 720, maxHeight: "65vh", overflow: "auto" }}>
+            {/* Mounted only while open, so every open re-reads the listing. */}
+            {orphansOpen && <AuthOrphansPanel embedded plants={plants} onAdopted={load} showToast={showToast} />}
+          </div>
+        </details>
+        <span style={{ flex: "1 1 auto" }} />
+        <span style={{ fontSize: T.label, color: C.slateL, whiteSpace: "nowrap" }}>{countLabel}</span>
+        <PanelFocusToggle panel="list" noun="user list" focused={focusPanel === "list"} onToggle={toggleFocus} />
       </div>
       {status === "error" && (
-        <div style={{ color: C.red, fontSize: 12, marginBottom: 10 }}>
+        <div role="alert" style={{ flexShrink: 0, color: C.red, fontSize: T.body, padding: "5px 10px",
+          background: C.redL, borderBottom: `1px solid ${C.border}` }}>
           {error} Nothing has been changed.
         </div>
       )}
-      {status === "ok" && shown.length === 0 && (
-        <EmptyState title={q ? "No user matches that search" : "No users yet"}
-          hint={q ? "Clear the search to see everyone." : undefined} />
-      )}
-      {status === "ok" && shown.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse", background: C.white, border: `1px solid ${C.border}`, borderRadius: 7 }}>
-          <thead>
-            <tr style={{ background: C.slateM, color: C.white }}>
-              {["Name", "Email", "Role (derived)", "Plants", "Last sign-in", "Status", ""].map(h => (
-                <th key={h} style={{ padding: "7px 8px", textAlign: "left", fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>{h}</th>
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto", background: C.white }}>
+        {status === "ok" && shown.length === 0 && (
+          <EmptyState title={q ? "No user matches that search" : "No users yet"}
+            hint={q ? "Clear the search to see everyone." : undefined} />
+        )}
+        {status === "ok" && shown.length > 0 && (
+          <table style={denseTable}>
+            <thead>
+              <tr>
+                <th scope="col" style={{ ...denseHead, ...frozenCell(false, true) }}>Name</th>
+                {["Email", "Role (derived)", "Plants", "Last sign-in", "Status"].map(h => (
+                  <th key={h} scope="col" style={denseHead}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map(u => (
+                <UserRow key={u.id} user={u} plants={plants} isSelf={u.id === profile?.id}
+                  activeAdminIds={activeAdminIds}
+                  onChanged={load} onCredential={setCredential} onChangeEmail={setEmailTarget}
+                  showToast={showToast} />
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map(u => (
-              <UserRow key={u.id} user={u} plants={plants} isSelf={u.id === profile?.id}
-                activeAdminIds={activeAdminIds}
-                onChanged={load} onCredential={setCredential} onChangeEmail={setEmailTarget}
-                showToast={showToast} />
-            ))}
-          </tbody>
-        </table>
-      )}
+            </tbody>
+          </table>
+        )}
+      </div>
+      <ScreenFooter right="Every change is one versioned, governed operation">
+        <ProvenanceTag kind="governed" />
+        <span title="Screens and routes gate on capabilities. The role column is a derived presentation label and is never sent anywhere.">
+          Capabilities are the authority · Role is a derived label</span>
+      </ScreenFooter>
       {credential && (
         <CredentialModal
           displayName={credential.display_name}

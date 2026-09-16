@@ -29,6 +29,7 @@
     "test:pinned-addons": "node scripts/pinned-addons-fixtures.mjs",
     "test:gsm-master": "node scripts/gsm-master-fixtures.mjs",
     "test:sku-master": "node scripts/sku-master-fixtures.mjs",
+    "test:screen-standard": "node scripts/screen-standard-fixtures.mjs",
     "_comment:test:module-contract": "Bundles the real module graph, so a named import that does not exist on the target module FAILS. ESLint does not resolve named exports (proved: it exits 0 on that defect) and the focused fixtures import each lib module directly, so importing a helper from the WRONG module passed every other gate. It reached the browser instead. Run this whenever imports change.",
     "test:module-contract": "vite build --logLevel error",
     "preview": "vite preview",

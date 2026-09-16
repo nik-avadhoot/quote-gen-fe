@@ -15,7 +15,7 @@
 // to an account that already has its own password; no password, token or
 // session value is read, set, displayed or logged on this path.
 // ═══════════════════════════════════════════════════════════════════════════
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { C, mono, sans } from "../theme.js";
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
@@ -86,9 +86,13 @@ function AdoptForm({ view, plants, busy, onAdopt }) {
   );
 }
 
-export default function AuthOrphansPanel({ plants, onAdopted, showToast }) {
-  const [open, setOpen] = useState(false);
-  const [state, setState] = useState("idle");  // idle|loading|ok|denied|error
+// `embedded`: Users & Access hosts this inside its own toolbar disclosure and
+// mounts it only while that disclosure is open, so mounting IS the expand. The
+// panel then skips its own header button and reads on mount, which keeps the
+// "re-read on every expand" rule below without a second click.
+export default function AuthOrphansPanel({ plants, onAdopted, showToast, embedded = false }) {
+  const [open, setOpen] = useState(embedded);
+  const [state, setState] = useState(embedded ? "loading" : "idle");  // idle|loading|ok|denied|error
   const [error, setError] = useState("");
   const [views, setViews] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -126,6 +130,10 @@ export default function AuthOrphansPanel({ plants, onAdopted, showToast }) {
     setOpen(next);
     if (next) load();
   };
+  // Deferred a microtask so the read never sets state synchronously in the effect.
+  useEffect(() => {
+    if (embedded) Promise.resolve().then(load);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- mount-only by design: mounting is the expand
 
   const adopt = async (view, displayName, role, codes) => {
     if (!window.confirm(confirmAdoption(view, displayName, role, codes))) return;
@@ -165,16 +173,16 @@ export default function AuthOrphansPanel({ plants, onAdopted, showToast }) {
   };
 
   return (
-    <div style={{ marginBottom: 12, background: C.white, border: `1px solid ${C.border}`, borderRadius: 7 }}>
-      <button type="button" onClick={expand}
+    <div style={embedded ? {} : { marginBottom: 12, background: C.white, border: `1px solid ${C.border}`, borderRadius: 7 }}>
+      {!embedded && <button type="button" onClick={expand}
         style={{ ...btn("outline"), width: "100%", textAlign: "left", borderRadius: 7,
                  border: "none", background: "transparent", padding: "9px 12px" }}>
         {open ? "▾" : "▸"} Unattached sign-in accounts
         {state === "ok" && ` — ${views.length}`}
-      </button>
+      </button>}
 
       {open && (
-        <div style={{ padding: "0 12px 12px" }}>
+        <div style={{ padding: embedded ? 0 : "0 12px 12px" }}>
           <div style={{ fontSize: 11, color: C.slateM, marginBottom: 10, maxWidth: 780 }}>
             {orphanExplainer()}
           </div>

@@ -36,6 +36,13 @@
 // something unknown. No aggregate count and no privileged function is offered,
 // as either would mean reading around `pgrant_select`. This screen adds no
 // backend, RLS, policy, capability or migration change.
+//
+// ── SCREEN SPACE ──────────────────────────────────────────────────────────
+// ONE toolbar with the count and the read-only statement; 26px rows with the
+// plant code frozen. "Your access" and "Assigned" are separate one-line
+// columns instead of two lines in one cell, and the Assigned column exists
+// only for an administrator, exactly as the read does. Full lists stay on
+// hover when a cell is truncated.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
@@ -43,8 +50,10 @@ import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
 import { hasCapability, loadAssignedUserNames, ownPlantAccessLabels } from "../lib/capabilities.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
-import { LifecycleBadge, PermanentCode } from "../ui/dataDisplay.jsx";
-import { C, sans } from "../theme.js";
+import { LifecycleBadge, PermanentCode, ProvenanceTag } from "../ui/dataDisplay.jsx";
+import { ScreenFooter, ToolbarLabel } from "../ui/screenChrome.jsx";
+import { denseCell, denseHead, denseTable, frozenCell, toolbar } from "../ui/screenStandards.js";
+import { C, T, sans } from "../theme.js";
 
 export default function ProducingPlantsScreen() {
   const { isActive, profile } = useAuth();
@@ -106,49 +115,57 @@ export default function ProducingPlantsScreen() {
   if (state.status === "error") return <AccessDeniedState reason="The Plant Master could not be loaded." />;
   if (!state.plants.length) return <EmptyState title="No Producing Plants" hint="None are recorded yet." />;
 
+  const activeCount = state.plants.filter(p => p.status === "active").length;
+
   return (
-    <div style={{ padding: 20, fontFamily: sans }}>
-      <div style={{ fontSize: 16, fontWeight: 700, color: C.slate, marginBottom: 2 }}>Producing Plants</div>
-      <div style={{ fontSize: 11, color: C.slateL, marginBottom: 14 }}>
-        Read-only. Creating, editing or retiring a Producing Plant is not part of this phase.
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0, fontFamily: sans,
+      background: C.cream }}>
+      <div role="toolbar" aria-label="Producing Plants controls" style={toolbar}>
+        <ToolbarLabel title="Creating, editing or retiring a Producing Plant is not part of this phase.">Read-only</ToolbarLabel>
+        <span style={{ fontSize: T.label, color: C.slateL }}>
+          Creating, editing or retiring a Producing Plant is not part of this phase.</span>
+        <span style={{ flex: "1 1 auto" }} />
+        <span style={{ fontSize: T.label, color: C.slateL, whiteSpace: "nowrap" }}>
+          {state.plants.length} plant{state.plants.length === 1 ? "" : "s"} · {activeCount} active</span>
       </div>
-      <table style={{ borderCollapse: "collapse", width: "100%", maxWidth: 760 }}>
-        <thead>
-          <tr style={{ color: C.slateM }}>
-            {["Code", "Name", "Status", "Assignments"].map(h => (
-              <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, textTransform: "uppercase", borderBottom: `2px solid ${C.border}` }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {state.plants.map(p => {
-            const mine = ownPlantAccessLabels(profile, p.plant_code);
-            const others = assignedNames ? (assignedNames[p.plant_code] || []) : null;
-            return (
-              <tr key={p.plant_code} style={{ borderTop: `1px solid ${C.border}` }}>
-                <td style={{ padding: "7px 10px" }}><PermanentCode code={p.plant_code} /></td>
-                <td style={{ padding: "7px 10px", fontSize: 12, color: C.slateM }}>{p.name}</td>
-                <td style={{ padding: "7px 10px" }}><LifecycleBadge status={p.status} /></td>
-                <td style={{ padding: "7px 10px", fontSize: 11, color: C.slateM }}>
-                  <div>
-                    <span style={{ color: C.slateL }}>You: </span>
-                    {mine.length
-                      ? mine.join(", ")
-                      : <span style={{ color: C.slateL }}>No access</span>}
-                  </div>
-                  {others && (
-                    <div style={{ marginTop: 2, color: C.slateL }}>
-                      {others.length
-                        ? `Assigned: ${others.join(", ")}`
-                        : "Assigned: nobody"}
-                    </div>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto", background: C.white }}>
+        <table style={denseTable}>
+          <thead>
+            <tr>
+              <th scope="col" style={{ ...denseHead, ...frozenCell(false, true) }}>Code</th>
+              <th scope="col" style={denseHead}>Name</th>
+              <th scope="col" style={denseHead}>Status</th>
+              <th scope="col" style={denseHead}>Your access</th>
+              {assignedNames && <th scope="col" style={denseHead}>Assigned</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {state.plants.map(p => {
+              const mine = ownPlantAccessLabels(profile, p.plant_code);
+              const others = assignedNames ? (assignedNames[p.plant_code] || []) : null;
+              const mineText = mine.length ? mine.join(", ") : "No access";
+              const othersText = others && (others.length ? others.join(", ") : "nobody");
+              return (
+                <tr key={p.plant_code} style={{ height: 26 }}>
+                  <td style={frozenCell(false)}><PermanentCode code={p.plant_code} /></td>
+                  <td style={{ ...denseCell, color: C.slateM }}>{p.name}</td>
+                  <td style={denseCell}><LifecycleBadge status={p.status} /></td>
+                  <td style={{ ...denseCell, maxWidth: 360, color: mine.length ? C.slateM : C.slateL }} title={mineText}>
+                    {mineText}</td>
+                  {others && <td style={{ ...denseCell, maxWidth: 420, color: others.length ? C.slateM : C.slateL }}
+                    title={othersText}>{othersText}</td>}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <ScreenFooter right={isAdministrator
+        ? (assignedNames ? "Assigned shows active people only" : "Assigned people not shown — not loaded or not available")
+        : "Assigned people are visible to administrators only"}>
+        <ProvenanceTag kind="governed" />
+        <span>Producing Plants · your access comes from your own profile</span>
+      </ScreenFooter>
     </div>
   );
 }
