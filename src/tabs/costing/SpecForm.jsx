@@ -493,7 +493,7 @@ export default function SpecForm({onChooseConstruction}){
         })()}
       </div>
       <div style={card}>
-        <SH title="Commercial Intelligence"/>
+        <SH title="Demand Profile"/>
         {/* Volume + MOQ — compact 2-col layout */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 8px",marginBottom:5}}>
           <div>
