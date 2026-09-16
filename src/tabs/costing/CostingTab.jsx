@@ -40,7 +40,7 @@ import { useState } from "react";
 import { useAppState } from "../../state/AppStateContext.js";
 import { applyConstructionToSpec, isUsableConstruction } from "../../lib/constructionIdentity.js";
 import { constrAutoName } from "../../lib/constructionName.js";
-import { C, sans } from "../../theme.js";
+import { C, T, sans } from "../../theme.js";
 
 // One subtab. Same visual language as the panel-header tab label this strip
 // replaces: amber text over a 2px amber underline when active.
@@ -109,8 +109,8 @@ export default function CostingTab(){
         {inReview&&<Subtab label="REVIEW" active/>}
         <div title={[spec.client,spec.material_code,spec.product].filter(Boolean).join(" · ")||"New SKU"}
           style={{alignSelf:"center",minWidth:0,maxWidth:"min(460px,38vw)",marginLeft:8,
-            padding:"4px 10px",borderRadius:4,background:C.amberL,color:C.amberD,
-            border:`1px solid ${C.amber}66`,fontFamily:sans,fontSize:10,fontWeight:650,letterSpacing:"0.01em",
+            padding:"4px 10px",borderRadius:4,background:"#29465b",color:C.white,
+            border:"1px solid #3a6078",fontFamily:sans,fontSize:T.body,fontWeight:650,letterSpacing:"0.01em",
             overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
           {[spec.client,spec.material_code,spec.product].filter(Boolean).join(" · ")||"New SKU"}
         </div>
