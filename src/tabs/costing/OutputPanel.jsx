@@ -200,9 +200,11 @@ const CostBuildUp=({r,spec,card,freightTag})=>{
         letterSpacing:"0.07em",marginBottom:5}}>Cost Build-up</div>
       <table style={{width:"100%",fontSize:T.body,borderCollapse:"collapse",tableLayout:"fixed"}}>
         <thead><tr style={{borderBottom:`1px solid ${C.border}`}}>
-          {["Component","₹ / box","₹ / kg","Share"].map((heading,index)=><th key={heading}
-            style={{padding:"2px 3px",fontSize:T.micro,color:C.slateL,textTransform:"uppercase",
-              textAlign:index===0?"left":"right",fontWeight:600,width:index===0?"48%":index===3?"18%":undefined}}>
+          {["Component","Rs / Box","Rs / Kg","Share"].map((heading,index)=><th key={heading}
+            style={{padding:"3px",fontSize:index===1||index===2?T.label:T.micro,
+              color:index===1||index===2?C.slateM:C.slateL,textTransform:"uppercase",
+              textAlign:index===0?"left":"right",fontWeight:index===1||index===2?750:600,
+              width:index===0?"48%":index===3?"18%":undefined}}>
             {heading}</th>)}
         </tr></thead>
         <tbody>{rows.map(([label,value])=>{
@@ -210,7 +212,8 @@ const CostBuildUp=({r,spec,card,freightTag})=>{
           return <tr key={label} style={{borderBottom:`1px solid ${C.border}`}}>
             <td title={label} style={{padding:"4px 3px",color:C.slateM,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</td>
             <td style={{padding:"4px 3px",textAlign:"right",fontWeight:600,fontFamily:mono}}>₹{(+(value??0)).toFixed(2)}</td>
-            <td style={{padding:"4px 3px",textAlign:"right",fontFamily:mono,color:C.amberD}}>
+            <td style={{padding:"4px 3px",textAlign:"right",fontFamily:mono,color:C.amberD,
+              fontSize:T.value,fontWeight:700}}>
               {r.wtSheet>0?`₹${(value/r.wtSheet).toFixed(2)}`:"—"}</td>
             <td style={{padding:"4px 3px"}}>
               <div style={{display:"flex",alignItems:"center",gap:4,justifyContent:"flex-end"}}>
@@ -222,10 +225,14 @@ const CostBuildUp=({r,spec,card,freightTag})=>{
             </td>
           </tr>;})}
           <tr style={{borderTop:`2px solid ${C.amber}`}}>
-            <td style={{padding:"6px 3px 2px",fontWeight:800,color:C.amber,fontSize:T.title,fontFamily:mono}}>
-              ₹{r.finalRate.toFixed(2)}</td>
-            <td colSpan={3} style={{padding:"6px 3px 2px",textAlign:"right",fontSize:T.micro,color:C.slateL}}>
-              LANDED RATE · excl GST</td>
+            <td style={{padding:"7px 3px 3px",fontWeight:800,color:C.slateM,fontSize:T.body}}>
+              TOTAL</td>
+            <td style={{padding:"7px 3px 3px",textAlign:"right",fontWeight:850,
+              color:C.slate,fontSize:T.heading,fontFamily:mono}}>₹{r.finalRate.toFixed(2)}</td>
+            <td style={{padding:"7px 3px 3px",textAlign:"right",fontWeight:850,
+              color:C.amberD,fontSize:T.heading,fontFamily:mono}}>{r.wtSheet>0?`₹${r.ratePerKg.toFixed(2)}`:"—"}</td>
+            <td style={{padding:"7px 3px 3px",textAlign:"right",fontSize:T.micro,
+              color:C.slateL,fontWeight:650}}>EXCL GST</td>
           </tr>
         </tbody>
       </table>

@@ -107,6 +107,13 @@ export default function CostingTab(){
           onClick={inReview?requestExitReview:undefined}
           title={inReview?"Leave this review and return to your Costing draft":undefined}/>
         {inReview&&<Subtab label="REVIEW" active/>}
+        <div title={[spec.client,spec.material_code,spec.product].filter(Boolean).join(" · ")||"New SKU"}
+          style={{alignSelf:"center",minWidth:0,maxWidth:"min(460px,38vw)",marginLeft:8,
+            padding:"4px 10px",borderRadius:4,background:C.amberL,color:C.amberD,
+            border:`1px solid ${C.amber}66`,fontFamily:sans,fontSize:10,fontWeight:650,letterSpacing:"0.01em",
+            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+          {[spec.client,spec.material_code,spec.product].filter(Boolean).join(" · ")||"New SKU"}
+        </div>
         <div style={{marginLeft:"auto",padding:"3px 8px",display:"flex",gap:6,alignItems:"center"}}>
           {/* Unlink — shown only in REVIEW mode (activeBatchRowId set). Moved from left panel bottom. */}
           {activeBatchRowId&&<Btn ch="✕ Unlink" v="ghost" sm onClick={requestExitReview}/>}
