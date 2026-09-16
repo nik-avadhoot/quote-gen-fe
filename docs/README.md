@@ -75,6 +75,8 @@ validation are complete:
 - [`data-model-s9p-persistence-authorization-packet.md`](data-model-s9p-persistence-authorization-packet.md)
 - [`data-model-s9b-authorization-packet.md`](data-model-s9b-authorization-packet.md)
 - [`s9-technical-closure-and-u3-u6-handoff.md`](s9-technical-closure-and-u3-u6-handoff.md)
+- [`s9-qualification-seed-and-quote-read-fix-plan.md`](s9-qualification-seed-and-quote-read-fix-plan.md)
+  — prepared, unapplied Quote read fix and qualification test-data seeding plan
 - [`repository-worktree-inventory-2026-09-11.md`](repository-worktree-inventory-2026-09-11.md)
 
 The applied S9 migrations, database tests, backend routes, and undeployed Edge Function artifacts
