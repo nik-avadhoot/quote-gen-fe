@@ -112,6 +112,10 @@ These documents may contain status tables that were true at a particular checkpo
   superseded for current status by implemented state and later records.
 - [`data-model-canonical-amendment-01.md`](data-model-canonical-amendment-01.md) — amendment trail;
   canonical wording now lives in `data-model-decisions.md`.
+- [`data-model-canonical-amendment-02.md`](data-model-canonical-amendment-02.md) — SKU Master field
+  scope (CDM-43), SKU Sets (CDM-44), lifecycle and printing vocabulary.
+- [`data-model-canonical-amendment-03.md`](data-model-canonical-amendment-03.md) — the SKU pricing
+  portfolio (CDM-45), including why it is NOT NULL rather than a publication gate.
 - [`archive/data-model-design/data-model-design-for-approval.md`](archive/data-model-design/data-model-design-for-approval.md)
 - [`archive/data-model-design/data-model-sr-dev-proposal.md`](archive/data-model-design/data-model-sr-dev-proposal.md)
 - [`archive/data-model-design/data-model-sr-dev-review.md`](archive/data-model-design/data-model-sr-dev-review.md)
