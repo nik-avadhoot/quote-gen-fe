@@ -73,12 +73,12 @@ export function PanelFocusToggle({ panel, noun, focused, onToggle, disabled, dis
 }
 
 // ── The draggable divider ──────────────────────────────────────────────────
-export function PanelDivider({ label, split, dragging, onPointerDown, onReset, onKeyDown }) {
+export function PanelDivider({ label, split, dragging, onPointerDown, onReset, onKeyDown, resetLabel = "50 : 50" }) {
   return (
     <div role="separator" aria-orientation="vertical" aria-label={label}
       aria-valuemin={25} aria-valuemax={75} aria-valuenow={split} tabIndex={0}
       onPointerDown={onPointerDown} onDoubleClick={onReset} onKeyDown={onKeyDown}
-      title="Drag to resize · double-click for 50 : 50"
+      title={`Drag to resize · double-click for ${resetLabel}`}
       style={{
         width: 7, flex: "0 0 7px", cursor: "col-resize", background: dragging ? "#F3E3D2" : "#FBF8F3",
         borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, display: "flex",

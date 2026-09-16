@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // scripts/screen-standard-fixtures.mjs — the shared screen-space standard on
 // Commercial Policies, Rate Masters, Freight Masters, Users & Access and
-// Producing Plants (2026-09-16).
+// Producing Plants, then GSM Master, Customer Families and the Pricing Basis
+// drill-down tables (2026-09-16).
 //
 // Source-shape assertions, like the other UX gates: they prove the chrome is
 // the shared one and that every guard the rewrite moved is still present. The
@@ -24,6 +25,10 @@ const plants = read("src/tabs/ProducingPlantsScreen.jsx");
 const orphans = read("src/ui/AuthOrphansPanel.jsx");
 const shell = read("src/QuotationApp.jsx");
 const standards = read("src/ui/screenStandards.js");
+const gsm = read("src/tabs/GsmMasterScreen.jsx");
+const families = read("src/tabs/CustomerFamiliesScreen.jsx");
+const pricingBasis = read("src/tabs/PricingBasisScreen.jsx");
+const chrome = read("src/ui/screenChrome.jsx");
 
 let passes = 0;
 const failures = [];
@@ -132,6 +137,41 @@ check(plants.includes("{assignedNames && <th") && plants.includes('others.length
   && plants.includes("if (!isActive || !isAdministrator) return;")
   && plants.includes('mine.length ? mine.join(", ") : "No access"'),
   "SS-23 Plants: own access and assigned people are separate one-line columns; 'nobody' stays distinct from not available, admin-only");
+
+// ── GSM Master (Product Owner: every grid table follows this approach) ────
+check(count(gsm, /role="toolbar"/g) === 1 && gsm.includes("denseTable") && gsm.includes("frozenCell(false, true)")
+  && gsm.includes("height: 26") && !gsm.includes(">GSM Master</div>") && gsm.includes('<ProvenanceTag kind="governed" />')
+  && !/fontSize: ?(?!T\.)[0-9]/.test(gsm),
+  "SS-24 GSM Master: one toolbar, dense rows with the GSM frozen, no page header, provenance in the footer");
+check((gsm.match(/<CapabilityGate profile=\{profile\} capability=\{MANAGE\}>/g) || []).length === 2
+  && gsm.includes("window.confirm(gsmStatusConfirmMessage") && gsm.includes('runMutation("/masters/gsm-values"')
+  && gsm.indexOf("+ Add GSM ▾") > gsm.indexOf("<CapabilityGate profile={profile} capability={MANAGE}>"),
+  "SS-25 GSM Master: add, retire and restore keep their capability gates and confirm; Add is a gated disclosure");
+
+// ── Customer Families ────────────────────────────────────────────────────
+check(count(families, /role="toolbar"/g) === 2 && !families.includes(">Customer Families</div>")
+  && families.includes("useSplitPanels(30)") && families.includes('resetLabel="30 : 70"')
+  && families.includes('<PanelFocusToggle panel="list"') && families.includes('<PanelFocusToggle panel="detail"')
+  && chrome.includes('resetLabel = "50 : 50"') && !/requestFullscreen/.test(families),
+  "SS-26 Customer Families: list and detail panels, one toolbar each, a divider that tells the truth about its reset");
+check(count(families, /frozenCell\(false, true\)/g) === 2 && families.includes("height: 26")
+  && !families.includes('padding: "7px 10px", borderRadius: 7, marginBottom: 6')
+  && !families.includes("minWidth: 820"),
+  "SS-27 Customer Families: Families and Customers/Prospects are dense tables with the code frozen, not cards or a clipped wide table");
+check(count(families, /runMutation\(/g) === 16 && count(families, /openModal\(\{ kind/g) === 10
+  && families.includes("<CapabilityGate profile={profile} capability={CREATE_CAPS}>\n            <details")
+  && families.includes("addFamilySectorBody(newSectorId, family.content_version)")
+  && families.includes("FIRST / BATCH SUGGESTION") && families.includes("Every Customer Family requires at least one Sector"),
+  "SS-28 Customer Families: every governed call, modal, gate and Sector rule is unchanged; + Family / + Prospect share one CREATE_CAPS gate");
+check(families.includes("function LocationsList({ party, locations, locationVersions, profile, currentFamilyId, openModal })")
+  && !families.includes("defaultExpanded") && families.includes('<ProvenanceTag kind="governed" />'),
+  "SS-29 Customer Families: a Party's Locations and References open directly from the row, not behind a second disclosure");
+
+// ── Pricing Basis drill-down tables ──────────────────────────────────────
+check(count(pricingBasis, /\.\.\.denseTable, minWidth/g) === 3 && pricingBasis.includes("function Head({ children })")
+  && pricingBasis.includes("style={{ ...denseCell, color: C.slateM, fontWeight: emphasis ? 800 : 500 }}")
+  && !pricingBasis.includes('fontSize: 8.5, color: C.slateL }}>'),
+  "SS-30 Pricing Basis: the Rate, Freight and interest drill-down tables use dense one-line rows");
 
 console.log(`\n${passes} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);

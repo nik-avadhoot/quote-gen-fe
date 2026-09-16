@@ -30,6 +30,17 @@
 // /masters/customer-locations/* routes. There is deliberately no
 // eligibility-change action — post-proposal eligibility change is
 // Product-Owner-blocked, not designed.
+//
+// ── SCREEN SPACE ──────────────────────────────────────────────────────────
+// The shared standard, as on Commercial Masters and Users & Access. The TopBar
+// names the screen, so there is no page title. Two panels with a draggable
+// divider (30 : 70) and expand icons: the Family list is a dense table with the
+// code frozen under ONE toolbar (search, status, + New), and the detail panel's
+// ONE toolbar carries the Family's identity and its actions. Sectors and
+// Aliases stay as tiles; Customers / Prospects are 26px rows with their
+// Locations and References one row toggle away, opened directly rather than
+// behind a second disclosure. Provenance sits once in each footer. Every
+// capability gate, confirm, content_version body and gate string is unchanged.
 // ═══════════════════════════════════════════════════════════════════════════
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
@@ -52,6 +63,12 @@ import {
 } from "../lib/customerLocationActions.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag, SummaryRow, VersionHistory } from "../ui/dataDisplay.jsx";
+import { PanelDivider, PanelFocusToggle, ScreenFooter, ToolbarLabel } from "../ui/screenChrome.jsx";
+import {
+  cellInput, control, denseCell, denseHead, denseTable, frozenCell, inputCell, menuPanel, menuSummary, toolbar,
+  usePanelFocus, useSplitPanels,
+} from "../ui/screenStandards.js";
+import { panelLayout } from "../lib/panelSplit.js";
 import CapabilityGate from "../ui/CapabilityGate.jsx";
 import { Btn, Inp, Sel } from "../ui/primitives.jsx";
 import { inputSt } from "../ui/styles.js";
@@ -62,6 +79,8 @@ const CREATE_CAPS = [MANAGE, "make_quote"]; // mirrors the DB's own OR condition
 
 const overlaySt = { position: "fixed", inset: 0, background: "rgba(28,43,58,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000 };
 const cardSt = { width: 380, background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: 22, boxShadow: "0 8px 32px rgba(0,0,0,.2)", fontFamily: sans };
+const rowButton = { ...control, height: 20, padding: "0 7px", fontSize: T.label, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
+const toolbarButton = { ...control, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
 const labelSt = { fontSize: 10, fontWeight: 700, color: C.slateM, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4, marginTop: 10 };
 
 export default function CustomerFamiliesScreen({ showToast }) {
@@ -123,53 +142,75 @@ export default function CustomerFamiliesScreen({ showToast }) {
   }, [state.families, query, statusFilter]);
 
   const selected = filtered.find(f => f.id === selectedId) || filtered[0] || null;
+  const { split, setSplit, dragging, startDrag, nudgeSplit, bodyRef } = useSplitPanels(30);
+  const { focusPanel, toggleFocus, exitFocusOnEscape } = usePanelFocus();
 
   if (!isActive) return <AccessDeniedState reason="Your account is deactivated." />;
   if (state.status === "loading") return <LoadingState label="Loading Customer Families…" />;
   if (state.status === "denied") return <AccessDeniedState reason="You do not have access to Customer Families (requires read_party_master)." />;
   if (state.status === "error") return <AccessDeniedState reason="Customer Families could not be loaded." />;
 
+  const layout = panelLayout(split, focusPanel);
+  const statuses = [...new Set(state.families.map(f => f.status))];
+
   return (
-    <div style={{ display: "flex", height: "100%", fontFamily: sans }}>
-      <div style={{ width: 280, flexShrink: 0, borderRight: `1px solid ${C.border}`, padding: 14, overflowY: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: T.heading, fontWeight: 700, color: C.slate, whiteSpace: "nowrap" }}>Customer Families</div>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <CapabilityGate profile={profile} capability={CREATE_CAPS}>
-              <Btn ch="+ Family" sm v="secondary" onClick={() => setModal({ kind: "propose" })} />
-            </CapabilityGate>
-            <CapabilityGate profile={profile} capability={CREATE_CAPS}>
-              <Btn ch="+ Prospect" sm v="secondary" onClick={() => setModal({ kind: "prospect" })} />
-            </CapabilityGate>
-          </div>
-        </div>
-        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or code…"
-          style={{ ...inputSt, marginBottom: 8 }} />
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inputSt, marginBottom: 12 }}>
-          <option value="">All statuses</option>
-          {[...new Set(state.families.map(f => f.status))].map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        {!state.families.length && <EmptyState title="No Customer Families" hint="None are recorded yet." />}
-        {state.families.length > 0 && !filtered.length && <EmptyState title="No matches" hint="Try a different search or filter." />}
-        {filtered.map(f => {
-          const isSelected = selected?.id === f.id;
-          return (
-            <div key={f.id} onClick={() => setSelectedId(f.id)}
-              style={{
-                padding: "7px 10px", borderRadius: 7, marginBottom: 6, cursor: "pointer",
-                border: `1px solid ${isSelected ? C.amber : C.border}`,
-                background: isSelected ? C.amberL : C.white,
-              }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                <PermanentCode code={f.group_customer_code} />
-                <LifecycleBadge status={f.status} />
+    <div onKeyDown={exitFocusOnEscape} style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0,
+      fontFamily: sans, background: C.cream }}>
+      <div ref={bodyRef} style={{ flex: 1, display: "flex", minHeight: 0 }}>
+      {layout.showList && <div aria-label="Customer Family list" style={{ width: layout.listWidth,
+        flex: layout.showDetail ? "0 0 auto" : "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", background: C.white }}>
+        <div role="toolbar" aria-label="Customer Family list controls" style={toolbar}>
+          <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or code…"
+            aria-label="Search Customer Families" style={{ ...control, width: 90, minWidth: 60, flex: "1 1 90px" }} />
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} aria-label="Family status" style={control}>
+            <option value="">All</option>
+            {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <CapabilityGate profile={profile} capability={CREATE_CAPS}>
+            <details style={{ position: "relative" }}>
+              <summary style={menuSummary(false)}>+ New ▾</summary>
+              <div style={{ ...menuPanel, minWidth: 180 }}>
+                <Btn ch="+ Family" sm v="secondary" onClick={() => setModal({ kind: "propose" })} />
+                <Btn ch="+ Prospect" sm v="secondary" onClick={() => setModal({ kind: "prospect" })} />
               </div>
-              <div style={{ fontSize: T.value, color: C.slateM, marginTop: 3 }}>{f.name}</div>
-            </div>
-          );
-        })}
-      </div>
-      <div className="screen-end-padded" style={{ flex: 1, padding: 20, overflowY: "auto" }}>
+            </details>
+          </CapabilityGate>
+          <span style={{ flex: "1 1 auto" }} />
+          <PanelFocusToggle panel="list" noun="Family list" focused={focusPanel === "list"} onToggle={toggleFocus} />
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+          {!state.families.length && <EmptyState title="No Customer Families" hint="None are recorded yet." />}
+          {state.families.length > 0 && !filtered.length && <EmptyState title="No matches" hint="Try a different search or filter." />}
+          {filtered.length > 0 && <table style={denseTable}>
+            <thead><tr>
+              <th scope="col" style={{ ...denseHead, ...frozenCell(false, true) }}>Code</th>
+              <th scope="col" style={denseHead}>Family</th>
+              <th scope="col" style={denseHead}>Status</th>
+            </tr></thead>
+            <tbody>{filtered.map(f => {
+              const isSelected = selected?.id === f.id;
+              const background = isSelected ? "#FEF3E8" : C.white;
+              return (
+                <tr key={f.id} aria-selected={isSelected} onClick={() => setSelectedId(f.id)}
+                  style={{ height: 26, background, cursor: "pointer" }}>
+                  <td style={{ ...frozenCell(isSelected), boxShadow: isSelected ? `inset 3px 0 0 ${C.amber}` : undefined }}>
+                    <PermanentCode code={f.group_customer_code} /></td>
+                  <td style={{ ...denseCell, color: C.slateM, fontWeight: isSelected ? 700 : 500 }} title={f.name}>{f.name}</td>
+                  <td style={denseCell}><LifecycleBadge status={f.status} /></td>
+                </tr>
+              );
+            })}</tbody>
+          </table>}
+        </div>
+        <ScreenFooter right={`${filtered.length} of ${state.families.length}`}>
+          <ProvenanceTag kind="governed" />
+          <span>Customer Families</span>
+        </ScreenFooter>
+      </div>}
+      {layout.showDivider && <PanelDivider label="Resize Family list and Family detail" split={split} dragging={dragging}
+        onPointerDown={startDrag} onReset={() => setSplit(30)} onKeyDown={nudgeSplit} resetLabel="30 : 70" />}
+      {layout.showDetail && <div aria-label="Customer Family detail" style={{ flex: 1, minWidth: 0, display: "flex",
+        flexDirection: "column", background: C.cream }}>
         {!selected ? (
           <EmptyState title="Select a family" />
         ) : (
@@ -177,8 +218,11 @@ export default function CustomerFamiliesScreen({ showToast }) {
             parties={state.parties} families={state.families} locations={state.locations} externalReferences={state.externalReferences}
             locationVersions={state.locationVersions} familySectors={state.familySectors}
             sectors={state.sectors} profile={profile}
-            showToast={showToast} onReload={load} openModal={setModal} />
+            showToast={showToast} onReload={load} openModal={setModal}
+            focusToggle={<PanelFocusToggle panel="detail" noun="Family detail" focused={focusPanel === "detail"}
+              onToggle={toggleFocus} />} />
         )}
+      </div>}
       </div>
       {modal?.kind === "propose" && (
         <ProposeFamilyModal sectors={state.sectors} showToast={showToast}
@@ -606,82 +650,76 @@ function EditLocationModal({ location, currentVersion, onClose, onDone, showToas
 // proposal), status, incomplete-details indication, and the actions this
 // slice authorises (Propose/Edit/Approve/Retire/Assign-Code). No eligibility
 // action exists — post-proposal eligibility change is Product-Owner-blocked.
-function LocationsList({ party, locations, locationVersions, profile, currentFamilyId, openModal,
-  defaultExpanded = false }) {
+function LocationsList({ party, locations, locationVersions, profile, currentFamilyId, openModal }) {
   const activeCount = locations.filter(location => location.status === "active").length;
   const incompleteCount = locations.filter(location => {
     const currentVersion = locationVersions.find(version => version.location_id === location.id
       && version.status === "current");
     return hasIncompleteDetails(currentVersion);
   }).length;
+  // Opened from its Party row's own toggle, so it renders open: a second
+  // disclosure inside the first would only add a click and a band.
   return (
-    <SummaryRow title="Locations"
-      facts={[
-        `${locations.length} ${locations.length === 1 ? "location" : "locations"}`,
-        `${activeCount} active`,
-        ...(incompleteCount ? [`${incompleteCount} incomplete`] : []),
-      ]}
-      status={locations.length ? "Recorded" : "None"}
-      statusTone={incompleteCount ? "warning" : locations.length ? "positive" : "neutral"}
-      defaultExpanded={defaultExpanded}
-    >
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: locations.length ? 8 : 0 }}>
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: locations.length ? 4 : 0 }}>
+        <ToolbarLabel>Locations</ToolbarLabel>
+        <span style={{ fontSize: T.label, color: C.slateL }}>
+          {locations.length} {locations.length === 1 ? "location" : "locations"} · {activeCount} active
+          {incompleteCount ? <span style={{ color: C.amberD }}> · {incompleteCount} incomplete</span> : null}
+        </span>
+        <span style={{ flex: "1 1 auto" }} />
         <CapabilityGate profile={profile} capability={CREATE_CAPS}>
-          <Btn ch="+ Location" sm v="ghost" onClick={() => openModal({ kind: "propose-location", party, currentFamilyId })} />
+          <button type="button" style={rowButton}
+            onClick={() => openModal({ kind: "propose-location", party, currentFamilyId })}>+ Location</button>
         </CapabilityGate>
       </div>
       {locations.length ? (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", minWidth: 620, borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ background: C.paper, color: C.slateM, textAlign: "left", fontSize: T.label }}>
-                <th style={{ padding: "7px 8px" }}>Code</th>
-                <th style={{ padding: "7px 8px" }}>Eligibility</th>
-                <th style={{ padding: "7px 8px" }}>Status</th>
-                <th style={{ padding: "7px 8px" }}>Detail</th>
-                <th style={{ padding: "7px 8px" }}>Actions</th>
+        <table style={{ ...denseTable, background: C.white, border: `1px solid ${C.border}` }}>
+          <thead>
+            <tr>
+              {["Code", "Eligibility", "Status", "Detail", "Actions"].map(h =>
+                <th key={h} scope="col" style={{ ...denseHead, position: "static", background: C.paper, color: C.slateM }}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>{locations.map(loc => {
+            const currentVersion = locationVersions.find(v => v.location_id === loc.id && v.status === "current");
+            const incomplete = hasIncompleteDetails(currentVersion);
+            const eligibility = [loc.bill_to_eligible && "Bill-to", loc.ship_to_eligible && "Ship-to"]
+              .filter(Boolean).join(" / ");
+            return (
+              <tr key={loc.id} style={{ height: 26 }}>
+                <td style={denseCell}><PermanentCode code={loc.location_code} style={{ fontSize: T.body }} /></td>
+                <td style={{ ...denseCell, color: C.slateM }}>{eligibility}</td>
+                <td style={denseCell}><LifecycleBadge status={loc.status} /></td>
+                <td style={{ ...denseCell, fontSize: T.label, color: incomplete ? C.amberD : C.slateL }}>
+                  {incomplete ? "Details incomplete" : "Complete"}
+                </td>
+                <td style={{ ...denseCell, padding: "2px 8px" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <CapabilityGate profile={profile} capability={MANAGE}>
+                      <button type="button" style={rowButton}
+                        onClick={() => openModal({ kind: "edit-location", location: loc, currentVersion, currentFamilyId })}>Edit</button>
+                      {loc.status === "proposed" && (
+                        <button type="button" style={rowButton}
+                          onClick={() => openModal({ kind: "approve-location", location: loc, currentFamilyId })}>Approve</button>
+                      )}
+                      {loc.status === "active" && (
+                        <button type="button" style={rowButton}
+                          onClick={() => openModal({ kind: "retire-location", location: loc, currentFamilyId })}>Retire</button>
+                      )}
+                      {!loc.location_code && party.customer_code && (
+                        <button type="button" style={rowButton}
+                          onClick={() => openModal({ kind: "assign-location-code", location: loc, currentFamilyId })}>Assign Code</button>
+                      )}
+                    </CapabilityGate>
+                  </span>
+                </td>
               </tr>
-            </thead>
-            <tbody>{locations.map(loc => {
-              const currentVersion = locationVersions.find(v => v.location_id === loc.id && v.status === "current");
-              const incomplete = hasIncompleteDetails(currentVersion);
-              const eligibility = [loc.bill_to_eligible && "Bill-to", loc.ship_to_eligible && "Ship-to"]
-                .filter(Boolean).join(" / ");
-              return (
-                <tr key={loc.id} style={{ borderTop: `1px solid ${C.border}` }}>
-                  <td style={{ padding: "7px 8px" }}><PermanentCode code={loc.location_code} style={{ fontSize: T.body }} /></td>
-                  <td style={{ padding: "7px 8px", fontSize: T.body, color: C.slateM }}>{eligibility}</td>
-                  <td style={{ padding: "7px 8px" }}><LifecycleBadge status={loc.status} /></td>
-                  <td style={{ padding: "7px 8px", fontSize: T.label, color: incomplete ? C.amberD : C.slateL }}>
-                    {incomplete ? "Details incomplete" : "Complete"}
-                  </td>
-                  <td style={{ padding: "4px 8px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-                      <CapabilityGate profile={profile} capability={MANAGE}>
-                        <Btn ch="Edit" sm v="ghost"
-                          onClick={() => openModal({ kind: "edit-location", location: loc, currentVersion, currentFamilyId })} />
-                        {loc.status === "proposed" && (
-                          <Btn ch="Approve" sm v="ghost"
-                            onClick={() => openModal({ kind: "approve-location", location: loc, currentFamilyId })} />
-                        )}
-                        {loc.status === "active" && (
-                          <Btn ch="Retire" sm v="ghost"
-                            onClick={() => openModal({ kind: "retire-location", location: loc, currentFamilyId })} />
-                        )}
-                        {!loc.location_code && party.customer_code && (
-                          <Btn ch="Assign Code" sm v="ghost"
-                            onClick={() => openModal({ kind: "assign-location-code", location: loc, currentFamilyId })} />
-                        )}
-                      </CapabilityGate>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}</tbody>
-          </table>
-        </div>
+            );
+          })}</tbody>
+        </table>
       ) : <div style={{ fontSize: T.body, color: C.slateL }}>None yet.</div>}
-    </SummaryRow>
+    </div>
   );
 }
 
@@ -700,13 +738,14 @@ function LocationsList({ party, locations, locationVersions, profile, currentFam
 //
 // These belong to the Customer/Prospect (party_external_references.party_id),
 // not to any Location: the table's References column opens them on their own.
-function ExternalReferencesList({ refs, defaultExpanded = false }) {
+function ExternalReferencesList({ refs }) {
   return (
-    <SummaryRow title="External references"
-      facts={[`${refs.length} ${refs.length === 1 ? "reference" : "references"}`, "Recognition only"]}
-      status="Read-only"
-      defaultExpanded={defaultExpanded}
-    >
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <ToolbarLabel>External references</ToolbarLabel>
+        <span style={{ fontSize: T.label, color: C.slateL }}>
+          {refs.length} {refs.length === 1 ? "reference" : "references"} · Read-only · recognition only</span>
+      </div>
       {refs.map(r => (
         <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: T.body, color: C.slateM, padding: "2px 0" }}>
           <span style={{ color: C.slateL }}>{externalRefKindLabel(r.ref_kind)}</span>
@@ -718,12 +757,12 @@ function ExternalReferencesList({ refs, defaultExpanded = false }) {
             Recorded for recognition only — not a Customer Code, and not a Batch link.
           </div>
         : <div style={{ fontSize: T.body, color: C.slateL }}>None recorded.</div>}
-    </SummaryRow>
+    </div>
   );
 }
 
 function FamilyDetail({ family, aliases, memberships, parties, families, locations, locationVersions,
-  externalReferences, familySectors, sectors, profile, showToast, onReload, openModal }) {
+  externalReferences, familySectors, sectors, profile, showToast, onReload, openModal, focusToggle }) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(family.name);
   const [nameBusy, setNameBusy] = useState(false);
@@ -814,57 +853,60 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
   };
 
   return (
-    <div>
-      {/* Identity header — the same bordered card language as the SummaryRow
-          sections below it. Presentation only: every action keeps its gate. */}
-      <div style={{ border: `1px solid ${C.border}`, borderRadius: 7, background: C.white, padding: "10px 12px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              {editingName ? (
-                <>
-                  <Inp value={nameDraft} onChange={setNameDraft} st={{ width: 220 }} />
-                  <Btn ch="Save" sm disabled={nameBusy} onClick={saveName} />
-                  <Btn ch="Cancel" sm v="secondary" disabled={nameBusy}
-                    onClick={() => { setNameDraft(family.name); setEditingName(false); }} />
-                </>
-              ) : (
-                <>
-                  <span style={{ fontSize: T.heading, fontWeight: 700, color: C.slate }}>{family.name}</span>
-                  <LifecycleBadge status={family.status} />
-                </>
-              )}
-            </div>
-            <PermanentCode code={family.group_customer_code} style={{ display: "inline-block", marginTop: 3, fontSize: T.title }} />
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-            {!editingName && (
-              <CapabilityGate profile={profile} capability={MANAGE}>
-                {!isRetired && <Btn ch="Edit" sm v="ghost" onClick={() => { setNameDraft(family.name); setEditingName(true); }} />}
-              </CapabilityGate>
-            )}
-            {family.status === "proposed" && (
-              <CapabilityGate profile={profile} capability={MANAGE}>
-                <Btn ch="Approve" sm disabled={!attachedSectors.length}
-                  onClick={() => openModal({ kind: "approve", family })} />
-              </CapabilityGate>
-            )}
-            {!isRetired && (
-              <CapabilityGate profile={profile} capability={MANAGE}>
-                <Btn ch="Merge into…" sm v="secondary" onClick={() => openModal({ kind: "merge", family })} />
-              </CapabilityGate>
-            )}
-          </div>
-        </div>
+    <>
+      {/* ONE toolbar for the detail panel: identity and the Family actions.
+          Presentation only - every action keeps its gate. */}
+      <div role="toolbar" aria-label="Customer Family controls" style={toolbar}>
+        {editingName ? (
+          <>
+            <input value={nameDraft} onChange={e => setNameDraft(e.target.value)} aria-label="Family name"
+              style={{ ...control, width: 220 }} />
+            <Btn ch="Save" sm disabled={nameBusy} onClick={saveName} />
+            <Btn ch="Cancel" sm v="secondary" disabled={nameBusy}
+              onClick={() => { setNameDraft(family.name); setEditingName(false); }} />
+          </>
+        ) : (
+          <>
+            <span style={{ fontSize: T.title, fontWeight: 700, color: C.slate, whiteSpace: "nowrap", overflow: "hidden",
+              textOverflow: "ellipsis", minWidth: 0 }} title={family.name}>{family.name}</span>
+            <PermanentCode code={family.group_customer_code} />
+            <LifecycleBadge status={family.status} />
+          </>
+        )}
+        <span style={{ flex: "1 1 auto" }} />
+        {!editingName && (
+          <CapabilityGate profile={profile} capability={MANAGE}>
+            {!isRetired && <button type="button" style={toolbarButton}
+              onClick={() => { setNameDraft(family.name); setEditingName(true); }}>Edit</button>}
+          </CapabilityGate>
+        )}
+        {family.status === "proposed" && (
+          <CapabilityGate profile={profile} capability={MANAGE}>
+            <button type="button" disabled={!attachedSectors.length}
+              title={attachedSectors.length ? "Approve this Family" : "Attach a Sector before approval"}
+              style={{ ...toolbarButton, background: attachedSectors.length ? C.amber : "#CCC", color: C.white, border: "none" }}
+              onClick={() => openModal({ kind: "approve", family })}>Approve</button>
+          </CapabilityGate>
+        )}
+        {!isRetired && (
+          <CapabilityGate profile={profile} capability={MANAGE}>
+            <button type="button" style={toolbarButton} onClick={() => openModal({ kind: "merge", family })}>Merge into…</button>
+          </CapabilityGate>
+        )}
+        {focusToggle}
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 10px 16px", display: "grid",
+        gap: 8, alignContent: "start" }}>
         {survivingInto && (
-          <div style={{ marginTop: 8, fontSize: T.body, color: C.red }}>
+          <div style={{ fontSize: T.body, color: C.red }}>
             Merged into <PermanentCode code={survivingInto.group_customer_code} /> ({survivingInto.name})
           </div>
         )}
 
         {/* Sectors and Aliases are part of the Family profile: two tiles side by
-            side; an opened tile spans the full header width. Content unchanged. */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>
+            side; an opened tile spans the full width. Content unchanged. */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
       <SummaryRow title="Sectors"
         facts={[
           `${attachedSectors.length} attached`,
@@ -879,19 +921,19 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
           borderColor: attachedSectors.length ? C.border : C.red,
           background: attachedSectors.length ? C.white : "#fff5f3" }}
       >
-        <div style={{ fontSize: 11, color: C.slateL, lineHeight: 1.45, marginBottom: 7 }}>
+        <div style={{ fontSize: T.body, color: C.slateL, lineHeight: 1.45, marginBottom: 7 }}>
           A Customer Family needs at least one Sector and may have more. Each Batch uses exactly one attached Sector; its guidance and inheritance follow only that selected Sector.
         </div>
         {attachedSectors.map((item, index) => <div key={item.sector_id}
-          style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", fontSize: 12 }}>
+          style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", fontSize: T.value }}>
           <span style={{ fontFamily: mono, fontWeight: 700, color: C.slate }}>
             {item.sector?.sector_code || `Sector #${item.sector_id}`}
           </span>
           <span style={{ color: C.slateM }}>{item.sector?.name || "Identity details unavailable"}</span>
           <span style={{ color: C.slateL }}>#{item.sector_id}</span>
-          {index === 0 && <span style={{ fontSize: 9, color: C.amber, fontWeight: 700 }}>FIRST / BATCH SUGGESTION</span>}
+          {index === 0 && <span style={{ fontSize: T.label, color: C.amber, fontWeight: 700 }}>FIRST / BATCH SUGGESTION</span>}
         </div>)}
-        {!attachedSectors.length && <div style={{ fontSize: 11, color: C.red, fontWeight: 700 }}>
+        {!attachedSectors.length && <div style={{ fontSize: T.body, color: C.red, fontWeight: 700 }}>
           Sector classification required before Family approval or Batch creation.
         </div>}
         {!isRetired && <CapabilityGate profile={profile} capability={MANAGE}>
@@ -916,7 +958,7 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
         style={{ gridColumn: headerSection === "aliases" ? "1 / -1" : "auto" }}
       >
         {familyAliases.map(a => (
-          <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.slateM, padding: "3px 0" }}>
+          <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: T.value, color: C.slateM, padding: "3px 0" }}>
             {editingAliasId === a.id ? (
               <>
                 <Inp value={editAliasDraft} onChange={setEditAliasDraft} st={{ width: 180 }} />
@@ -928,18 +970,18 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
                 <span style={{ textDecoration: a.status === "retired" ? "line-through" : "none", color: a.status === "retired" ? C.slateL : C.slateM }}>
                   {a.alias}
                 </span>
-                {a.status === "retired" && <span style={{ fontSize: 9, color: C.slateL }}>(retired)</span>}
+                {a.status === "retired" && <span style={{ fontSize: T.label, color: C.slateL }}>(retired)</span>}
                 {a.status !== "retired" && !isRetired && (
                   <CapabilityGate profile={profile} capability={MANAGE}>
-                    <Btn ch="Edit" sm v="ghost" onClick={() => { setEditingAliasId(a.id); setEditAliasDraft(a.alias); }} />
-                    <Btn ch="Retire" sm v="ghost" onClick={() => openModal({ kind: "retire-alias", alias: a, currentFamilyId: family.id })} />
+                    <button type="button" style={rowButton} onClick={() => { setEditingAliasId(a.id); setEditAliasDraft(a.alias); }}>Edit</button>
+                    <button type="button" style={rowButton} onClick={() => openModal({ kind: "retire-alias", alias: a, currentFamilyId: family.id })}>Retire</button>
                   </CapabilityGate>
                 )}
               </>
             )}
           </div>
         ))}
-        {!familyAliases.length && <div style={{ fontSize: 11, color: C.slateL }}>None yet.</div>}
+        {!familyAliases.length && <div style={{ fontSize: T.body, color: C.slateL }}>None yet.</div>}
         {!isRetired && (
           <CapabilityGate profile={profile} capability={MANAGE}>
             {addingAlias ? (
@@ -949,31 +991,22 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
                 <Btn ch="Cancel" sm v="secondary" onClick={() => { setAddingAlias(false); setAliasDraft(""); }} />
               </div>
             ) : (
-              <Btn ch="+ Alias" sm v="ghost" onClick={() => setAddingAlias(true)} />
+              <button type="button" style={{ ...rowButton, marginTop: 4 }} onClick={() => setAddingAlias(true)}>+ Alias</button>
             )}
           </CapabilityGate>
         )}
       </SummaryRow>
         </div>
-      </div>
 
-      <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: T.label, fontWeight: 800, color: C.slateM, textTransform: "uppercase", marginBottom: 6 }}>
-          Current Customers / Prospects — {current.length}
-          {/* Edits here are governed, versioned Master changes — not local drafts. */}
-          <ProvenanceTag kind="governed" style={{ marginLeft: 6, verticalAlign: "middle" }} />
-        </div>
-        {!current.length && <div style={{ fontSize: T.body, color: C.slateL }}>None currently.</div>}
-        {!!current.length && <div style={{ overflowX: "auto", border: `1px solid ${C.border}`, borderRadius: 7 }}>
-          <table style={{ width: "100%", minWidth: 820, borderCollapse: "collapse", background: C.white }}>
+        {!current.length && <div style={{ fontSize: T.body, color: C.slateL }}>No current Customers / Prospects.</div>}
+        {!!current.length && <div style={{ overflowX: "auto", border: `1px solid ${C.border}`, borderRadius: 6, background: C.white }}>
+          <table style={denseTable}>
             <thead>
-              <tr style={{ background: C.slate, color: C.white, textAlign: "left", fontSize: T.label }}>
-                <th style={{ padding: "8px 9px" }}>Code</th>
-                <th style={{ padding: "8px 9px" }}>Name</th>
-                <th style={{ padding: "8px 9px" }}>Status</th>
-                <th style={{ padding: "8px 9px" }}>Locations</th>
-                <th style={{ padding: "8px 9px" }}>References</th>
-                <th style={{ padding: "8px 9px" }}>Actions</th>
+              <tr>
+                <th scope="col" style={{ ...denseHead, ...frozenCell(false, true) }}
+                  title="Current Customers / Prospects of this Family">Customer · {current.length} current</th>
+                {["Name", "Status", "Locations", "References", "Actions"].map(h =>
+                  <th key={h} scope="col" style={denseHead}>{h}</th>)}
               </tr>
             </thead>
             <tbody>{current.map(m => {
@@ -986,63 +1019,64 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
           // each has its own toggle; opening one never reveals the other.
           const locationsOpen = expandedParty?.id === party.id && expandedParty.section === "locations";
           const referencesOpen = expandedParty?.id === party.id && expandedParty.section === "references";
+          const open = locationsOpen || referencesOpen;
           return (
             <Fragment key={m.id}>
-              <tr style={{ borderTop: `1px solid ${C.border}` }}>
-                <td style={{ padding: "8px 9px" }}><PermanentCode code={party.customer_code} /></td>
-                <td style={{ padding: "8px 9px", fontSize: T.body, color: C.slateM }}>
+              <tr style={{ height: 26, background: open ? "#FEF3E8" : C.white }}>
+                <td style={frozenCell(open)}><PermanentCode code={party.customer_code} /></td>
+                <td style={{ ...denseCell, color: C.slateM, ...(isEditingParty ? inputCell : {}) }} title={party.display_name}>
                   {isEditingParty
-                    ? <Inp value={editPartyDraft} onChange={setEditPartyDraft} st={{ width: 190 }} />
+                    ? <input value={editPartyDraft} onChange={e => setEditPartyDraft(e.target.value)}
+                        aria-label="Customer / Prospect name" style={{ ...cellInput, width: 200 }} />
                     : party.display_name}
                 </td>
-                <td style={{ padding: "8px 9px" }}><LifecycleBadge status={party.lifecycle_state} /></td>
-                <td style={{ padding: "5px 9px" }}>
+                <td style={denseCell}><LifecycleBadge status={party.lifecycle_state} /></td>
+                <td style={{ ...denseCell, padding: "2px 8px" }}>
                   <button type="button" aria-expanded={locationsOpen}
                     onClick={() => setExpandedParty(locationsOpen ? null : { id: party.id, section: "locations" })}
-                    style={{ border: `1px solid ${locationsOpen ? C.amber : C.border}`, background: C.white, borderRadius: 5,
-                      padding: "5px 8px", color: C.slateM, fontSize: T.label, fontWeight: 750,
-                      cursor: "pointer", whiteSpace: "nowrap" }}>
+                    style={{ ...rowButton, borderColor: locationsOpen ? C.amber : C.border }}>
                     {partyLocations.length} {partyLocations.length === 1 ? "location" : "locations"} {locationsOpen ? "▴" : "▾"}
                   </button>
                 </td>
-                <td style={{ padding: "5px 9px" }}>
+                <td style={{ ...denseCell, padding: "2px 8px" }}>
                   <button type="button" aria-expanded={referencesOpen}
                     title="Legacy codes and customer item references recorded against this Customer/Prospect — recognition only"
                     onClick={() => setExpandedParty(referencesOpen ? null : { id: party.id, section: "references" })}
-                    style={{ border: `1px solid ${referencesOpen ? C.amber : C.border}`, background: C.white, borderRadius: 5,
-                      padding: "5px 8px", color: partyRefs.length ? C.slateM : C.slateL, fontSize: T.label, fontWeight: 750,
-                      cursor: "pointer", whiteSpace: "nowrap" }}>
+                    style={{ ...rowButton, borderColor: referencesOpen ? C.amber : C.border,
+                      color: partyRefs.length ? C.slateM : C.slateL }}>
                     {partyRefs.length} {partyRefs.length === 1 ? "reference" : "references"} {referencesOpen ? "▴" : "▾"}
                   </button>
                 </td>
-                <td style={{ padding: "4px 9px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                <td style={{ ...denseCell, padding: "2px 8px" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                     {isEditingParty ? (
                       <>
-                        <Btn ch="Save" sm disabled={partyBusy} onClick={() => saveParty(party)} />
-                        <Btn ch="Cancel" sm v="secondary" disabled={partyBusy} onClick={() => setEditingPartyId(null)} />
+                        <button type="button" disabled={partyBusy} onClick={() => saveParty(party)}
+                          style={{ ...rowButton, background: C.amber, color: C.white, border: "none" }}>Save</button>
+                        <button type="button" disabled={partyBusy} onClick={() => setEditingPartyId(null)} style={rowButton}>Cancel</button>
                       </>
                     ) : (
                       <CapabilityGate profile={profile} capability={MANAGE}>
-                        <Btn ch="Edit" sm v="ghost"
-                          onClick={() => { setEditPartyDraft(party.display_name); setEditingPartyId(party.id); }} />
-                        <Btn ch="Reassign" sm v="ghost"
-                          onClick={() => openModal({ kind: "reassign", party, membership: m, currentFamilyId: family.id })} />
+                        <button type="button" style={rowButton}
+                          onClick={() => { setEditPartyDraft(party.display_name); setEditingPartyId(party.id); }}>Edit</button>
+                        <button type="button" style={rowButton}
+                          onClick={() => openModal({ kind: "reassign", party, membership: m, currentFamilyId: family.id })}>Reassign</button>
                         {party.lifecycle_state === "prospect" && (
-                          <Btn ch="Graduate" sm v="ghost"
-                            onClick={() => openModal({ kind: "graduate", party, currentFamilyId: family.id })} />
+                          <button type="button" style={rowButton}
+                            onClick={() => openModal({ kind: "graduate", party, currentFamilyId: family.id })}>Graduate</button>
                         )}
                       </CapabilityGate>
                     )}
-                  </div>
+                  </span>
                 </td>
               </tr>
-              {(locationsOpen || referencesOpen) && <tr style={{ background: C.cream }}>
-                <td colSpan={6} style={{ padding: 9, borderTop: `1px solid ${C.border}` }}>
+              {open && <tr>
+                <td colSpan={6} style={{ ...denseCell, whiteSpace: "normal", maxWidth: "none", background: "#FBF8F3",
+                  padding: "6px 10px 8px 26px" }}>
                   {locationsOpen
                     ? <LocationsList party={party} locations={partyLocations} locationVersions={locationVersions}
-                        profile={profile} currentFamilyId={family.id} openModal={openModal} defaultExpanded />
-                    : <ExternalReferencesList refs={partyRefs} defaultExpanded />}
+                        profile={profile} currentFamilyId={family.id} openModal={openModal} />
+                    : <ExternalReferencesList refs={partyRefs} />}
                 </td>
               </tr>}
             </Fragment>
@@ -1050,7 +1084,6 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
         })}</tbody>
           </table>
         </div>}
-      </div>
 
       <SummaryRow title="Membership history"
         facts={[
@@ -1058,7 +1091,6 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
           `${current.length} current`,
         ]}
         status="Effective-dated"
-        style={{ marginTop: 12 }}
       >
         <VersionHistory entries={familyMemberships} renderEntry={m => {
           const party = partyById[m.party_id];
@@ -1072,6 +1104,13 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
           );
         }} />
       </SummaryRow>
-    </div>
+      </div>
+
+      <ScreenFooter right="Sectors, aliases and memberships are effective-dated">
+        {/* Edits here are governed, versioned Master changes — not local drafts. */}
+        <ProvenanceTag kind="governed" />
+        <span>Every edit is a governed, versioned Master change</span>
+      </ScreenFooter>
+    </>
   );
 }
