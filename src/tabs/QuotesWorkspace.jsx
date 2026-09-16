@@ -1,3 +1,17 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// src/tabs/QuotesWorkspace.jsx — the Quotes screen's three views (U5).
+//
+// ── SCREEN SPACE ──────────────────────────────────────────────────────────
+// The TopBar already says "Quotes". The view switch used to sit in a band of
+// its own above whichever view was mounted, so every Quotes view spent one
+// band on navigation and a second on its own controls. The switch is now
+// passed INTO the active view as its toolbar's leading control, which keeps
+// the standard's "one toolbar per panel" literally true.
+//
+// Each view carries the shared provenance tag, so local working items and
+// immutable governed evidence are told apart by a stable visual signal, not
+// only by banner text (UX policy §3).
+// ═══════════════════════════════════════════════════════════════════════════
 import { useState } from "react";
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
@@ -6,14 +20,14 @@ import QuoteCatalogueScreen from "./QuoteCatalogueScreen.jsx";
 import QuoteItemsTab from "./QuoteItemsTab.jsx";
 import QuotesScreen from "./QuotesScreen.jsx";
 import { ProvenanceTag } from "../ui/dataDisplay.jsx";
+import { ScreenFooter } from "../ui/screenChrome.jsx";
+import { segment, toolbar } from "../ui/screenStandards.js";
+import { C, T, sans } from "../theme.js";
 
-// Each view carries the shared provenance tag, so local working items and
-// immutable governed evidence are told apart by a stable visual signal, not
-// only by banner text (UX policy §3).
 const QUOTE_VIEWS = [
-  { id: "working-items", label: "Working Quote Items", provenance: "local" },
-  { id: "governed", label: "Governed Quote evidence", provenance: "immutable" },
-  { id: "history", label: "Quote History", provenance: "immutable" },
+  { id: "working-items", label: "Working", name: "Working Quote Items", provenance: "local" },
+  { id: "governed", label: "Governed", name: "Governed Quote evidence", provenance: "immutable" },
+  { id: "history", label: "History", name: "Quote History", provenance: "immutable" },
 ];
 
 export default function QuotesWorkspace({ fixtureOnly = false, initialView = "working-items", onExitFixture }) {
@@ -69,29 +83,56 @@ export default function QuotesWorkspace({ fixtureOnly = false, initialView = "wo
     }
   };
 
-  return <div className="quotes-screen">
-    {fixtureOnly && <div className="quote-fixture-banner"><strong>U5 · FIXTURE ONLY</strong>
-      Isolated Quotes illustration. No authoritative read, workflow transition, or database write occurs.
-      {onExitFixture && <button type="button" onClick={onExitFixture}>Return to sign in</button>}
-    </div>}
-    <div className="quotes-view-switch" role="tablist" aria-label="Quotes views">
-      {QUOTE_VIEWS.map(option => <button type="button" role="tab" key={option.id}
-        aria-selected={view === option.id} className={view === option.id ? "is-active" : ""}
-        onClick={() => selectView(option.id)}>
-        {option.label} <ProvenanceTag kind={option.provenance} style={{ marginLeft: 4, verticalAlign: "middle" }} />
-      </button>)}
-    </div>
-    {view === "governed" && <QuotesScreen fixtureOnly={fixtureOnly} embedded showFixtureBanner={false}
+  // Rendered as the leading control of the active view's own toolbar, so the
+  // screen never spends a second band on choosing between its views.
+  const viewSwitch = <div role="tablist" aria-label="Quotes views"
+    style={{ display: "inline-flex", border: `1px solid ${C.border}`, borderRadius: 5,
+      overflow: "hidden", flexShrink: 0, background: C.white }}>
+    {QUOTE_VIEWS.map(option => <button type="button" role="tab" key={option.id}
+      aria-selected={view === option.id} onClick={() => selectView(option.id)}
+      title={`${option.name} — ${option.provenance === "local"
+        ? "kept in this browser only" : "frozen governed evidence"}`}
+      style={{ ...segment(view === option.id), display: "inline-flex", alignItems: "center", gap: 5,
+        whiteSpace: "nowrap" }}>
+      {option.label}
+      {view === option.id && <ProvenanceTag kind={option.provenance}
+        style={{ background: "transparent", color: C.white, border: "1px solid rgba(255,255,255,.4)" }} />}
+    </button>)}
+  </div>;
+
+  const banner = fixtureOnly && <div className="quote-fixture-banner"><strong>U5 · FIXTURE ONLY</strong>
+    Isolated Quotes illustration. No authoritative read, workflow transition, or database write occurs.
+    {onExitFixture && <button type="button" onClick={onExitFixture}>Return to sign in</button>}
+  </div>;
+
+  return <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0,
+    fontFamily: sans, background: C.cream }}>
+    {banner}
+    {view === "governed" && <QuotesScreen fixtureOnly={fixtureOnly} showFixtureBanner={false}
+      toolbarLead={viewSwitch}
       onOpenSourceBatch={fixtureOnly ? null : openSourceBatch} sourceBatchState={sourceBatchState} />}
-    {view === "working-items" && <div className="quote-tab-panel">
-      <div className="quote-local-warning">Local working items are not an immutable governed Quote revision.</div>
-      <QuoteItemsTab />
-    </div>}
+    {view === "working-items" && <>
+      <div role="toolbar" aria-label="Working Quote Items controls" style={toolbar}>
+        {viewSwitch}
+        <span style={{ fontSize: T.label, color: C.amberD }}>
+          Local working items are not an immutable governed Quote revision.</span>
+        <span style={{ flex: "1 1 auto" }} />
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "10px 12px 16px", background: C.paper }}>
+        <QuoteItemsTab />
+      </div>
+      <ScreenFooter right="Send a Batch to create a governed revision">
+        <ProvenanceTag kind="local" />
+        <span title="Kept in this browser only — not a governed record.">
+          Working items · this browser only</span>
+      </ScreenFooter>
+    </>}
     {view === "history" && <QuoteCatalogueScreen mode="history" fixtureOnly={fixtureOnly}
+      toolbarLead={viewSwitch}
       initialRevisionId={fixtureOnly ? null : quoteWorkspaceRequest?.revisionId}
       initialBatchId={fixtureOnly ? null : quoteWorkspaceRequest?.batchId}
       requestId={fixtureOnly ? null : quoteWorkspaceRequest?.requestId}
       onOpenSourceBatch={fixtureOnly ? null : openSourceBatch} sourceBatchState={sourceBatchState}
-      embedded showFixtureBanner={false} />}
+      showFixtureBanner={false} />}
   </div>;
 }

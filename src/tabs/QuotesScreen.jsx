@@ -5,8 +5,13 @@ import {
   orderedQuoteRevisions, quoteActor, quoteRevisionLabel, U5_QUOTE_ILLUSTRATION,
 } from "../lib/quoteEvidenceModel.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
-import { LifecycleBadge, PermanentCode } from "../ui/dataDisplay.jsx";
+import { LifecycleBadge, PermanentCode, ProvenanceTag } from "../ui/dataDisplay.jsx";
+import { PendingActions, ScreenFooter } from "../ui/screenChrome.jsx";
+import { control, toolbar } from "../ui/screenStandards.js";
+import { C, T, mono, sans } from "../theme.js";
 
+// S9 Speedbreaker: visible, disabled, and carrying their reason - inside the
+// screen's ONE toolbar rather than in a band of their own.
 const ACTION_LABELS = [
   "Calculate", "Send", "Submit", "Approve", "Return", "Withdraw", "Issue",
   "Create revision", "Amend", "Reprice",
@@ -193,8 +198,8 @@ export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, 
 }
 
 export default function QuotesScreen({
-  embedded = false, fixtureOnly = false, onExitFixture, onOpenSourceBatch, sourceBatchState,
-  showFixtureBanner = true,
+  fixtureOnly = false, onExitFixture, onOpenSourceBatch, sourceBatchState,
+  showFixtureBanner = true, toolbarLead = null,
 }) {
   const [reference, setReference] = useState(fixtureOnly ? U5_QUOTE_ILLUSTRATION.quote_reference : "");
   const [state, setState] = useState(fixtureOnly
@@ -219,27 +224,43 @@ export default function QuotesScreen({
     }
   };
 
-  return <div className={embedded ? "quote-tab-panel" : "quotes-screen"}>
+  // The TopBar already says "Quotes", so there is no page header here: one
+  // toolbar at the shared height carries the reference lookup and the
+  // activation-blocked actions, and the evidence takes the rest of the height.
+  return <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0,
+    fontFamily: sans, background: C.cream }}>
     {fixtureOnly && showFixtureBanner && <div className="quote-fixture-banner"><strong>U5 · FIXTURE ONLY</strong>
       Isolated browser illustration. No authoritative read, workflow transition, or database write occurs.
       {onExitFixture && <button type="button" onClick={onExitFixture}>Return to sign in</button>}
     </div>}
-    <header className="quotes-screen-header">
-      <div><span>U5 · governed read-only workspace</span><h1>Quotes and immutable evidence</h1>
-        <p>Open the permanent Quote reference to inspect frozen revisions. Current Batch and master values never replace snapshot evidence.</p></div>
-      <form onSubmit={openQuote}><label htmlFor="quote-reference">Permanent Quote reference</label>
-        <div><input id="quote-reference" value={reference} onChange={event => setReference(event.target.value)} disabled={fixtureOnly}
-          placeholder="NAG/QUO/2026-27/00001" /><button type="submit" disabled={fixtureOnly || !reference.trim()}>Open Quote</button></div></form>
-    </header>
-    <div className="quote-disabled-actions" aria-label="Unavailable Quote workflow actions">
-      <strong>Backend activation pending</strong>{ACTION_LABELS.map(label => <button type="button" disabled key={label}>{label}</button>)}
+    <div role="toolbar" aria-label="Governed Quote evidence controls" style={toolbar}>
+      {toolbarLead}
+      <form onSubmit={openQuote} style={{ display: "contents" }}>
+        <input id="quote-reference" aria-label="Permanent Quote reference" value={reference}
+          onChange={event => setReference(event.target.value)} disabled={fixtureOnly}
+          placeholder="NAG/QUO/2026-27/00001 ↵"
+          title="Open a governed Quote by its permanent reference. Current Batch and master values never replace snapshot evidence."
+          style={{ ...control, width: 232, minWidth: 150, flex: "0 1 232px", fontFamily: mono }} />
+        <button type="submit" disabled={fixtureOnly || !reference.trim()}
+          style={{ ...control, fontSize: T.label, fontWeight: 700, cursor: "pointer",
+            borderColor: C.amber, color: C.amberD }}>Open Quote</button>
+      </form>
+      <PendingActions actions={ACTION_LABELS} label="Quote workflow actions awaiting backend activation" />
+      <span style={{ flex: "1 1 auto" }} />
     </div>
-    {state.status === "idle" && <EmptyState title="Open a governed Quote" hint="Enter its permanent reference. No fixture is used in the authenticated workspace." />}
-    {state.status === "loading" && <LoadingState label="Loading immutable Quote evidence…" />}
-    {state.status === "denied" && <AccessDeniedState reason={state.message || "This Quote is not visible to your caller and plant authority."} />}
-    {state.status === "empty" && <EmptyState title="Quote not found" hint="No caller-visible Quote matches that permanent reference." />}
-    {state.status === "error" && <div className="quote-error-state"><strong>Quote could not be loaded</strong><span>{state.message}</span></div>}
-    {state.status === "ready" && state.quote && <QuoteEvidence quote={state.quote} selectedId={selectedId} onSelect={setSelectedId}
-      onOpenSourceBatch={onOpenSourceBatch} sourceBatchState={sourceBatchState} />}
+    <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "10px 12px 16px" }}>
+      {state.status === "idle" && <EmptyState title="Open a governed Quote" hint="Enter its permanent reference. No fixture is used in the authenticated workspace." />}
+      {state.status === "loading" && <LoadingState label="Loading immutable Quote evidence…" />}
+      {state.status === "denied" && <AccessDeniedState reason={state.message || "This Quote is not visible to your caller and plant authority."} />}
+      {state.status === "empty" && <EmptyState title="Quote not found" hint="No caller-visible Quote matches that permanent reference." />}
+      {state.status === "error" && <div className="quote-error-state"><strong>Quote could not be loaded</strong><span>{state.message}</span></div>}
+      {state.status === "ready" && state.quote && <QuoteEvidence quote={state.quote} selectedId={selectedId} onSelect={setSelectedId}
+        onOpenSourceBatch={onOpenSourceBatch} sourceBatchState={sourceBatchState} />}
+    </div>
+    <ScreenFooter right="Read-only · a permanent reference is allocated on first approval">
+      <ProvenanceTag kind="immutable" />
+      <span title="Frozen at Send. Current Batch and master values never replace snapshot evidence.">
+        Quote evidence · never edited in place</span>
+    </ScreenFooter>
   </div>;
 }

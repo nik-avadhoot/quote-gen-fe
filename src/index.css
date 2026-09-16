@@ -2103,21 +2103,12 @@ code {
 }
 .sidebar-collapse:hover { color: rgb(255 255 255 / 78%); }
 
-/* U5 · read-only governed Quote workspace */
-.quotes-screen {
-  height: 100%;
-  overflow: auto;
-  box-sizing: border-box;
-  padding: 14px 16px 28px;
-  background: #faf7f2;
-  color: #1c2b3a;
-}
-.quotes-view-switch { display: flex; gap: 5px; margin-bottom: 9px; }
-.quotes-view-switch button {
-  padding: 6px 10px; border: 1px solid #ddd4c7; border-radius: 6px;
-  background: #fff; color: #4a647d; font: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer;
-}
-.quotes-view-switch button.is-active { border-color: #d97b2e; background: #fef3e8; color: #b5641f; }
+/* U5 · Quotes, Approval Inbox and Quote History now use the shared
+   screen-space standard (src/ui/screenStandards.js): one toolbar per panel,
+   dense rows, a frozen identity column, a split evidence panel and a footer.
+   The page-header, view-switch, disabled-action-band and catalogue-table
+   rules were removed with the markup that used them. What remains below is
+   the immutable-evidence presentation, which is unchanged. */
 .quote-fixture-banner {
   display: flex; align-items: center; gap: 9px; margin-bottom: 10px; padding: 8px 10px;
   border: 1px solid #d97b2e; border-radius: 7px; background: #fef3e8; color: #2e4057;
@@ -2125,25 +2116,7 @@ code {
 }
 .quote-fixture-banner strong { color: #b5641f; }
 .quote-fixture-banner button { margin-left: auto; border: 0; background: transparent; color: #b5641f; font-weight: 750; cursor: pointer; }
-.quotes-screen-header {
-  display: grid; grid-template-columns: minmax(360px, 1fr) minmax(360px, .75fr); align-items: end; gap: 24px;
-  padding: 13px 15px; border: 1px solid #ddd4c7; border-radius: 9px; background: #fff;
-}
-.quotes-screen-header > div > span { color: #b5641f; font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
-.quotes-screen-header h1 { margin: 2px 0 3px; font-size: 18px; line-height: 1.15; }
-.quotes-screen-header p { margin: 0; color: #4a647d; font-size: 10.5px; }
-.quotes-screen-header form label { display: block; margin-bottom: 4px; color: #4a647d; font-size: 9px; font-weight: 750; text-transform: uppercase; }
-.quotes-screen-header form > div { display: flex; gap: 6px; }
-.quotes-screen-header input { min-width: 0; flex: 1; padding: 7px 9px; border: 1px solid #ddd4c7; border-radius: 6px; font: 11px 'JetBrains Mono','Courier New',monospace; }
-.quotes-screen-header form button { padding: 7px 11px; border: 1px solid #d97b2e; border-radius: 6px; background: #d97b2e; color: #fff; font: inherit; font-size: 10.5px; font-weight: 750; cursor: pointer; }
-.quotes-screen-header form button:disabled { opacity: .45; cursor: not-allowed; }
-.quote-disabled-actions {
-  display: flex; align-items: center; gap: 6px; margin: 9px 0; padding: 7px 9px;
-  border: 1px solid #ead9c9; border-radius: 7px; background: #fffaf5; overflow-x: auto;
-}
-.quote-disabled-actions strong { margin-right: 3px; color: #b5641f; font-size: 9.5px; white-space: nowrap; }
-.quote-disabled-actions button { padding: 4px 7px; border: 1px solid #ddd4c7; border-radius: 5px; background: #f0eae0; color: #4a647d; font: inherit; font-size: 9px; font-weight: 650; white-space: nowrap; }
-.quote-partial-notice, .quote-error-state, .quote-local-warning {
+.quote-partial-notice, .quote-error-state {
   margin: 9px 0; padding: 8px 10px; border: 1px solid #d97b2e; border-radius: 7px;
   background: #fef3e8; color: #2e4057; font-size: 10px;
 }
@@ -2212,52 +2185,11 @@ code {
 .quote-frozen-json > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 9px 9px; }
 .quote-frozen-json section > strong { color: #4a647d; font-size: 8.5px; text-transform: uppercase; }
 .quote-frozen-json pre { max-height: 240px; overflow: auto; margin: 4px 0 0; padding: 8px; border-radius: 5px; background: #1c2b3a; color: #eef5f8; font-size: 8.5px; line-height: 1.45; }
-.quote-catalogue-screen {
-  height: 100%; overflow: auto; box-sizing: border-box; padding: 14px 16px 28px;
-  background: #faf7f2; color: #1c2b3a;
-}
-.quote-catalogue-screen.is-embedded { height: auto; overflow: visible; padding: 0; background: transparent; }
-.quote-tab-panel { min-width: 0; }
-.quote-catalogue-header {
-  display: grid; grid-template-columns: minmax(370px, 1fr) minmax(300px, .6fr);
-  align-items: end; gap: 24px; padding: 13px 15px; border: 1px solid #ddd4c7;
-  border-radius: 9px; background: #fff;
-}
-.quote-catalogue-header > div:first-child > span { color: #b5641f; font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
-.quote-catalogue-header h1 { margin: 2px 0 3px; font-size: 18px; line-height: 1.15; }
-.quote-catalogue-header p { margin: 0; color: #4a647d; font-size: 10.5px; line-height: 1.45; }
-.quote-catalogue-filters { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; }
-.quote-catalogue-filters label { grid-column: 1 / -1; color: #4a647d; font-size: 9px; font-weight: 750; text-transform: uppercase; }
-.quote-catalogue-filters input, .quote-catalogue-filters select {
-  min-width: 0; padding: 7px 9px; border: 1px solid #ddd4c7; border-radius: 6px;
-  background: #fff; color: #2e4057; font: inherit; font-size: 10px;
-}
-.quote-catalogue-limit { margin: 9px 0; padding: 8px 10px; border: 1px solid #d97b2e; border-radius: 7px; background: #fef3e8; color: #b5641f; font-size: 10px; font-weight: 700; }
-.quote-catalogue-table-wrap { margin-top: 9px; border: 1px solid #ddd4c7; border-radius: 8px; background: #fff; overflow-x: auto; }
-.quote-catalogue-table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
-.quote-catalogue-table th { padding: 7px 9px; background: #2e4057; color: #fff; font-size: 8.5px; text-align: left; white-space: nowrap; }
-.quote-catalogue-table td { min-width: 100px; padding: 8px 9px; border-bottom: 1px solid #eee6dc; vertical-align: top; }
-.quote-catalogue-table tr:last-child td { border-bottom: 0; }
-.quote-catalogue-table tr.is-selected td { background: #fef3e8; }
-.quote-catalogue-table td > strong, .quote-catalogue-table td > small { display: block; }
-.quote-catalogue-table td > strong { color: #2e4057; font-size: 9.5px; }
-.quote-catalogue-table td > small { margin-top: 3px; color: #4a647d; font-size: 8px; }
-.quote-catalogue-table td:nth-child(5) span { margin-right: 8px; }
-.quote-catalogue-table td:last-child { min-width: 85px; text-align: right; }
-.quote-catalogue-table td:last-child button, .quote-catalogue-detail > header button {
-  padding: 5px 7px; border: 1px solid #d97b2e; border-radius: 5px; background: #fff;
-  color: #b5641f; font: inherit; font-size: 8.5px; font-weight: 750; cursor: pointer; white-space: nowrap;
-}
-.quote-catalogue-detail { margin-top: 12px; padding: 10px; border: 2px solid #d97b2e; border-radius: 9px; background: #faf7f2; }
-.quote-catalogue-detail > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.quote-catalogue-detail > header strong { color: #b5641f; font-size: 10px; text-transform: uppercase; }
 
 /* U4 · My Batches now uses the shared screen-space standard
    (src/ui/screenStandards.js): one toolbar, dense rows, frozen identity
    column and a footer. Its .batch-catalogue-* rules were removed with it. */
 @media (max-width: 1050px) {
-  .quotes-screen-header { grid-template-columns: 1fr; }
-  .quote-catalogue-header { grid-template-columns: 1fr; }
   .quote-identity-card { grid-template-columns: repeat(3, 1fr); }
   .quote-identity-card > div:nth-child(3) { border-right: 0; }
   .quote-revision-facts, .quote-evidence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

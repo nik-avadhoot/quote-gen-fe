@@ -18,6 +18,8 @@ const uiState = fs.readFileSync(path.join(root, "src/state/useUiState.js"), "utf
 const app = fs.readFileSync(path.join(root, "src/App.jsx"), "utf8");
 const shell = fs.readFileSync(path.join(root, "src/QuotationApp.jsx"), "utf8");
 const sidebar = fs.readFileSync(path.join(root, "src/ui/Sidebar.jsx"), "utf8");
+const standards = fs.readFileSync(path.join(root, "src/ui/screenStandards.js"), "utf8");
+const css = fs.readFileSync(path.join(root, "src/index.css"), "utf8");
 let passes = 0;
 const failures = [];
 function check(condition, label) {
@@ -93,8 +95,9 @@ check(!catalogueScreen.includes(".rpc(") && !catalogueScreen.includes("supabase"
 check(catalogueScreen.includes("Allocated on first approval")
   && catalogueScreen.includes("No hidden identity has been inferred"),
   "U5-FE-20 pre-approval identity and caller-visible partial data are described truthfully");
-check(catalogueScreen.includes("Results are limited to the first")
-  && catalogueScreen.includes("This is not the complete catalogue"),
+check(catalogueScreen.includes("caller-visible records only")
+  && catalogueScreen.includes("This is not the complete catalogue")
+  && catalogueScreen.includes("in the returned window"),
   "U5-FE-21 a bounded 50-row result never implies catalogue completeness");
 check(catalogueScreen.includes("AccessDeniedState") && catalogueScreen.includes("EmptyState")
   && catalogueScreen.includes("No fixture was substituted"),
@@ -105,7 +108,7 @@ check(shell.includes('tab==="approvalinbox"') && shell.includes('mode="inbox"')
   "U5-FE-23 Approval Inbox remains routed while Quote History is consolidated into Quotes");
 check(sidebar.includes('item("approvalinbox"') && sidebar.includes('hasCapability(profile,"check_quote")')
   && sidebar.includes('item("items"') && !sidebar.includes('item("quotehistory"')
-  && workspace.includes('{ id: "history", label: "Quote History", provenance: "immutable" }')
+  && workspace.includes('{ id: "history", label: "History", name: "Quote History", provenance: "immutable" }')
   && workspace.includes('<QuoteCatalogueScreen mode="history"'),
   "U5-FE-24 Approval Inbox stays capability-aware and Quote History is the third Quotes tab");
 check(uiState.includes('const[quoteView,setQuoteView]=useState("working-items")')
@@ -113,6 +116,8 @@ check(uiState.includes('const[quoteView,setQuoteView]=useState("working-items")'
   && /setQuoteView\("working-items"\);\s*setTab\("items"\);/.test(quoteActions),
   "U5-FE-25 Send to Quote explicitly lands on Working Quote Items");
 check(workspace.indexOf('{ id: "working-items"')<workspace.indexOf('{ id: "governed"')
+  && workspace.includes('name: "Working Quote Items"') && workspace.includes('name: "Governed Quote evidence"')
+  && workspace.includes("${option.name} —")
   && workspace.includes('initialView = "working-items"'),
   "U5-FE-26 Working Quote Items is the first and default Quotes view");
 check(workspace.includes("initialRevisionId={fixtureOnly ? null : quoteWorkspaceRequest?.revisionId}")
@@ -168,6 +173,55 @@ check(workspace.includes("durableBatch.caller_holds_lock")
   && !workspace.includes(".rpc(") && !workspace.includes("service_role")
   && !workspace.includes("method:"),
   "U5-FE-36 Quote-to-Batch navigation preserves the held-lock guard and remains read-only");
+// ───────────────────────────── the shared screen-space standard (UX policy)
+check(!catalogueScreen.includes("<h1") && !screen.includes("<h1") && !workspace.includes("<h1")
+  && !css.includes(".quote-catalogue-header") && !css.includes(".quotes-screen-header")
+  && !css.includes(".quote-disabled-actions") && !css.includes(".quotes-view-switch"),
+  "U5-FE-37 no page header under the TopBar on any Quotes view, and the dead rules left the stylesheet with it");
+check((catalogueScreen.match(/role="toolbar"/g) || []).length === 2
+  && (screen.match(/role="toolbar"/g) || []).length === 1
+  && (workspace.match(/role="toolbar"/g) || []).length === 1
+  && standards.includes("export const TOOLBAR_MIN_HEIGHT = 43")
+  && !/const toolbar = {/.test(catalogueScreen) && !/const toolbar = {/.test(screen),
+  "U5-FE-38 one toolbar per panel, every one at the single shared height from the shared module");
+check(workspace.includes("toolbarLead={viewSwitch}")
+  && (workspace.match(/toolbarLead={viewSwitch}/g) || []).length === 2
+  && catalogueScreen.includes("{toolbarLead}") && screen.includes("{toolbarLead}")
+  && !workspace.includes('className="quotes-view-switch"'),
+  "U5-FE-39 the Quotes view switch rides inside the active view's own toolbar, not in a band of its own");
+check(catalogueScreen.includes("<PendingActions actions={PENDING_WORKFLOW}")
+  && screen.includes("<PendingActions actions={ACTION_LABELS}")
+  && catalogueScreen.includes('"Approve", "Return", "Withdraw", "Issue", "Create revision"')
+  && !catalogueScreen.includes("quote-disabled-actions") && !screen.includes("quote-disabled-actions"),
+  "U5-FE-40 the activation-blocked actions stay visible and disabled inside that toolbar, never hidden or rebanded");
+check(catalogueScreen.includes("<PanelDivider") && catalogueScreen.includes("useSplitPanels()")
+  && catalogueScreen.includes("panelLayout(split, focusPanel)")
+  && catalogueScreen.includes("layout.showList &&") && catalogueScreen.includes("layout.showDetail &&")
+  && catalogueScreen.includes("layout.showDivider &&"),
+  "U5-FE-41 evidence opens as its own panel beside the list, so the two no longer share one scroll");
+check(catalogueScreen.includes('<PanelFocusToggle panel="list"')
+  && catalogueScreen.includes('<PanelFocusToggle panel="detail"')
+  && catalogueScreen.includes("usePanelFocus()") && catalogueScreen.includes("onKeyDown={exitFocusOnEscape}")
+  && !/requestFullscreen|fullscreenElement/.test(catalogueScreen),
+  "U5-FE-42 either panel can fill the screen area through the shared icon, inside the app window only");
+check(catalogueScreen.includes("frozenCell(selected)") && catalogueScreen.includes("frozenCell(false, true)")
+  && catalogueScreen.includes("height: 26") && standards.includes('position: "sticky", left: 0'),
+  "U5-FE-43 catalogue rows are 26px with the Quote identity frozen while the rest scrolls sideways");
+check(catalogueScreen.includes("<RowDisclosure open={open}") && catalogueScreen.includes("rowDetail(row).map")
+  && catalogueScreen.includes('["Revision identity", `#${row.id}`]')
+  && catalogueScreen.includes('["Standing", row.standing || "Not allocated"]'),
+  "U5-FE-44 revision identity, standing and timestamps moved into the row disclosure rather than being dropped");
+check(catalogueScreen.includes("<ScreenFooter") && screen.includes("<ScreenFooter") && workspace.includes("<ScreenFooter")
+  && catalogueScreen.includes("never edited in place"),
+  "U5-FE-45 provenance is stated once per view in a footer, not repeated on every row");
+check(catalogueScreen.includes('import { C, T, mono, sans } from "../theme.js"')
+  && screen.includes('import { C, T, mono, sans } from "../theme.js"')
+  && !/fontSize: (?!T.)[0-9]/.test(catalogueScreen) && !/fontSize: (?!T.)[0-9]/.test(workspace),
+  "U5-FE-46 every type size on these views is a T token, never a hardcoded off-scale pixel value");
+check(catalogueScreen.indexOf("<PendingActions") > catalogueScreen.indexOf('aria-label="Quote evidence controls"')
+  && catalogueScreen.includes('role="group" aria-label="Split"')
+  && catalogueScreen.indexOf('role="group" aria-label="Split"') < catalogueScreen.indexOf('aria-label="Quote evidence controls"'),
+  "U5-FE-47 workflow actions sit with the revision they act on, and the split presets in the list disclosure, so neither toolbar wraps at 50:50");
 
 console.log(`\n${passes} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);
