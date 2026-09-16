@@ -523,7 +523,7 @@ check(workspacePanel.includes('runMutation(`/batches/${batch.id}/sets`')
 const canonicalNavigation = [
   "Start Costing", "Batch Builder", "My Batches", "Approval Inbox", "Quotes",
   "Customer Families", "Customers and Prospects", "Construction Library", "Plant Construction Adoption",
-  "SKUs", "Commercial Policies", "Rate Masters", "Freight Masters", "Pricing Basis Releases",
+  "SKU Master", "Commercial Policies", "Rate Masters", "Freight Masters", "Pricing Basis Releases",
   "Plant Configuration", "Users & Access", "Producing Plants", "Audit History",
 ];
 check(["Workspace", "Customer Masters", "Product Masters", "Commercial Masters", "Technical Masters",
@@ -551,8 +551,9 @@ const productMastersMenu = sidebar.slice(
   sidebar.indexOf('["Product Masters"'), sidebar.indexOf('["Commercial Masters"'));
 check(productMastersMenu.includes(':[pending("CL","Construction Library"')
   && productMastersMenu.includes('pending("PA","Plant Construction Adoption"')
-  && productMastersMenu.includes('pending("SK","SKUs"')
-  && productMastersMenu.includes('Versions, specifications and Location applicability included')
+  && productMastersMenu.includes('item("skus","SK","SKU Master"')
+  && productMastersMenu.includes(':[pending("SK","SKU Master"')
+  && productMastersMenu.includes('Read-only governed SKUs, versions, specifications and Location applicability')
   && !productMastersMenu.includes('pending("SV","SKU Versions"')
   && !productMastersMenu.includes('pending("SL","SKU–Location Applicability"')
   && !productMastersMenu.includes('pending("SR","Specification Reference"')
