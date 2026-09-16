@@ -10,6 +10,11 @@
 // is clamped, that the destination is flag- and capability-gated at both the nav
 // entry and the mount, and that the screen is read-only.
 //
+// U2-SKU-FE-88+ guard the CDM-45 PRICING PORTFOLIO: a closed, mandatory
+// vocabulary that is RECORDED ONLY - shown and filterable, and reaching no
+// pricing decision at all until an approved rate mechanism consumes it. It has
+// no edit affordance, because the SKU Master has no governed write path.
+//
 // U2-SKU-FE-67+ guard the ONE SEARCH BOX: it covers the six identity factors
 // and nothing else, words narrow rather than widen, the screen says which
 // factors were actually reached, and an empty answer distinguishes "nothing
@@ -19,14 +24,16 @@ import {
   NOT_VISIBLE, PANEL_FOCUS, PENDING, SPEC_FIELD_KEYS, SPLIT_DEFAULT, UNAVAILABLE, adoptionLabel, applicabilityLocationLabel,
   canOpenSkuMaster, clampSplit, constructionLabel, customerLabel, dimensionSummary, familyLabel, formatMeasure,
   gridCellText, latestVersionFacts, normaliseSkuCatalogue, panelLayout, plantItemCodeLabel, qtyPerSetText, replacementLabel,
-  SEARCH_FIELD_LABELS, SKU_SEARCH_FIELDS, SKU_SEARCH_MAX_TERMS, schemaPendingNotice, searchCoverageNotice,
+  PRICING_PORTFOLIO_NOTE, SEARCH_FIELD_LABELS, SKU_SEARCH_FIELDS, SKU_SEARCH_MAX_TERMS,
+  schemaPendingNotice, searchCoverageNotice,
   searchScanNotice, searchScopeHint, skuCatalogueQuery, skuEmptyState, skuPlantScope,
   skuSearchTerms, skuSearchValidation, skuSetGroups, skuSetView,
   specFieldCell, specRowFromCatalogue, specRowFromDetail, specificationRows, unrecordedFieldsNotice, visibilityText,
 } from "../src/lib/skuMasterModel.js";
 import { SKU_FIXTURE_DETAILS, fixtureSkuCatalogue } from "../src/lib/skuMasterFixture.js";
 import {
-  PRINT_TECHNOLOGIES, PRODUCTION_BACKLOG, PRODUCTION_BACKLOG_COUNT, SKU_SPEC_FIELD_COUNT, SKU_SPEC_GROUPS,
+  PRICING_PORTFOLIOS, PRINT_TECHNOLOGIES, PRODUCTION_BACKLOG, PRODUCTION_BACKLOG_COUNT,
+  SKU_SPEC_FIELD_COUNT, SKU_SPEC_GROUPS,
 } from "../src/lib/skuSpecRegistry.js";
 
 let passes = 0;
@@ -142,16 +149,16 @@ check(Object.values(SKU_FIXTURE_DETAILS).every(d => d.mutations === "none")
 // ────────────────────────────────────────── CDM-43 field registry (Amendment 02)
 const fields = SKU_SPEC_GROUPS.flatMap(g => g.fields);
 const sheetFields = fields.filter(f => f.origin === "sheet");
-check(SKU_SPEC_FIELD_COUNT === 39 && fields.length === 39 && sheetFields.length === 36
+check(SKU_SPEC_FIELD_COUNT === 40 && fields.length === 40 && sheetFields.length === 36
   && fields.filter(f => f.origin === "new").map(f => f.key).join() === "PT,NC"
-  && fields.filter(f => f.origin === "app").map(f => f.key).join() === "LC",
-  "U2-SKU-FE-22 SKU Master holds 39 fields: 36 SPEC columns, Print Technology, Number of Colours and the app lifecycle");
+  && fields.filter(f => f.origin === "app").map(f => f.key).join() === "LC,PF",
+  "U2-SKU-FE-22 SKU Master holds 40 fields: 36 SPEC columns, Print Technology, Number of Colours, the app lifecycle and the pricing portfolio");
 check(SKU_SPEC_GROUPS.map(g => g.label).join(" | ")
   === "Identity & Linking | STD Carton Specification | STD Internal Dimensions | STD Board & Paper Composition | Conversion · Deckle · Sheet Sizing | Status & Governance",
   "U2-SKU-FE-23 fields keep the SPEC sheet groups in sheet order");
 check(SKU_SPEC_GROUPS.every(g => g.fields.every((f, i) => i === 0 || f.order > g.fields[i - 1].order)),
   "U2-SKU-FE-24 fields keep sheet order inside each group");
-check(fields.map(f => f.key).join() === "A,B,C,D,E,F,G,H,I,J,K,L,N,PT,NC,O,AA,AE,AF,AG,AI,AJ,AK,AL,AM,AN,AO,AP,AQ,AR,AS,AT,AU,AV,AW,BH,LC,DX,DZ",
+check(fields.map(f => f.key).join() === "A,B,C,D,E,F,G,H,I,J,K,L,N,PT,NC,O,AA,AE,AF,AG,AI,AJ,AK,AL,AM,AN,AO,AP,AQ,AR,AS,AT,AU,AV,AW,BH,LC,PF,DX,DZ",
   "U2-SKU-FE-25 the stored field list is exactly the ruled quote and costing set, Cobb included");
 const backlogSheets = PRODUCTION_BACKLOG.flatMap(g => g.columns.map(c => c.sheet));
 check(PRODUCTION_BACKLOG_COUNT === 94 && backlogSheets.length === 94
@@ -405,6 +412,49 @@ check(screen.includes("skuEmptyState({ search: catalogue.search, anyFilter")
   && !screen.includes('title="No governed SKUs match."'),
   "U2-SKU-FE-87 the empty state comes from the one honest rule, not a fixed sentence");
 
+// ─────────────────────────── CDM-45 pricing portfolio: recorded only (Amendment 03)
+check(JSON.stringify(PRICING_PORTFOLIOS) === JSON.stringify(["Transactional", "Strategic"]),
+  "U2-SKU-FE-88 the portfolio vocabulary is exactly Transactional and Strategic, and closed");
+const pfField = SKU_SPEC_GROUPS.flatMap(g => g.fields).find(f => f.key === "PF");
+check(pfField && pfField.origin === "app" && pfField.sheet === null
+  && SKU_SPEC_GROUPS.find(g => g.id === "status").fields.some(f => f.key === "PF")
+  && /no pricing rule/i.test(pfField.use),
+  "U2-SKU-FE-89 it is an app-owned Status & Governance field - no SPEC column carries it - and it says it decides no price");
+
+// Mandatory means every row has one; the model never invents or blanks it.
+check(fixtureRows.every(row => PRICING_PORTFOLIOS.includes(row.pricing_portfolio)),
+  "U2-SKU-FE-90 every SKU carries a portfolio - the preview has no unclassified row, because the model has no such state");
+check(specRowFromCatalogue(fixtureRows[0]).pricing_portfolio === fixtureRows[0].pricing_portfolio
+  && specRowFromDetail(SKU_FIXTURE_DETAILS[9101]).pricing_portfolio === "Strategic",
+  "U2-SKU-FE-91 the catalogue row and the detail carry it through the same normalisation");
+const pfCell = specFieldCell("PF", specRowFromCatalogue(fixtureRows[0]), { schemaPending: {} });
+check(pfCell.state === "value" && pfCell.text === "Strategic",
+  "U2-SKU-FE-92 a recorded portfolio renders as its exact value");
+const pfPending = specFieldCell("PF", specRowFromCatalogue(fixtureRows[0]), { schemaPending: { pricing_portfolio: true } });
+check(pfPending.state === "pending" && pfPending.text === PENDING,
+  "U2-SKU-FE-93 unactivated storage reads as pending, never as an unclassified or blank portfolio");
+check(schemaPendingNotice({ pricing_portfolio: true }).includes("the pricing portfolio"),
+  "U2-SKU-FE-94 the pending notice names the portfolio among what is not activated");
+
+// A dropdown, and never part of the one identity search box.
+check(skuCatalogueQuery({ portfolio: "Strategic" }) === "/masters/skus?portfolio=Strategic"
+  && skuCatalogueQuery({ q: "Strategic" }) === "/masters/skus?q=Strategic",
+  "U2-SKU-FE-95 portfolio travels as its own server filter, not as a search term");
+check(!SKU_SEARCH_FIELDS.includes("pricing_portfolio")
+  && fixtureSkuCatalogue({ q: "Strategic" }).skus.length === 0
+  && fixtureSkuCatalogue({ portfolio: "Strategic" }).skus.length === 3,
+  "U2-SKU-FE-96 the identity box does NOT match a portfolio; the dropdown does");
+
+// It creates no pricing rule, and offers no way to change it.
+check(/recorded only/i.test(PRICING_PORTFOLIO_NOTE) && /no rate, margin or discount/i.test(PRICING_PORTFOLIO_NOTE),
+  "U2-SKU-FE-97 the C-04 boundary is stated where the field is presented");
+check(!/portfolio/i.test(read("../src/engine/costing.js")),
+  "U2-SKU-FE-98 the costing engine does not read the portfolio at all");
+check(screen.includes('aria-label="Pricing Portfolio"') && screen.includes("disabled={portfolioPending}"),
+  "U2-SKU-FE-99 the screen filters by portfolio and disables that filter while its storage is pending");
+check(!/(Save|Edit|Change|Reclassify|Set)s+portfolio/i.test(screen) && !/portfolio.{0,40}onSubmit/i.test(screen)
+  && !screen.includes("apiFetch(`/masters/skus`, { method"),
+  "U2-SKU-FE-100 there is NO edit affordance for the portfolio - the SKU Master has no governed write path to promise");
 console.log(`\n${passes} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);
 console.log("U2 SKU Master frontend fixture gate PASS");

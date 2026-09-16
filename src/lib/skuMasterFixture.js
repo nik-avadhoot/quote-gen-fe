@@ -73,36 +73,37 @@ const REFS_9101 = { customer_item_code: ["FIX-CIC-778"], softcomp_code: ["FIX-01
 
 const ROWS = [
   { id: 9101, plant_item_code: "__U2_FIXTURE_ONLY__/NAG/0001", status: "active", replacement_sku_id: null,
-    content_version: 2, plant: NAG, party_id: 501, customer: CUSTOMER, family: FAMILY, version_count: 2,
+    content_version: 2, pricing_portfolio: "Strategic", plant: NAG, party_id: 501, customer: CUSTOMER, family: FAMILY, version_count: 2,
     latest_version: latest(91012, 2, 2, false, false, 41, SPEC_BOX_V2, QF_BOX_V2), construction: CONSTRUCTION,
     references: REFS_9101, locations: [{ location_id: 601, location_code: "FIX-LOC-601", scope: "master", status: "approved" },
       { location_id: 602, location_code: null, scope: "batch_only", status: "proposed" }], sets: setFor(9101) },
-  { id: 9102, plant_item_code: null, status: "proposed", replacement_sku_id: null, content_version: 1,
+  { id: 9102, plant_item_code: null, status: "proposed", replacement_sku_id: null, content_version: 1, pricing_portfolio: "Transactional",
     plant: NAG, party_id: 501, customer: CUSTOMER, family: FAMILY, version_count: 0, latest_version: null,
     construction: null, references: {}, locations: [], sets: [] },
   { id: 9103, plant_item_code: "__U2_FIXTURE_ONLY__/NAG/0003", status: "discontinued", replacement_sku_id: 9101,
-    content_version: 4, plant: NAG, party_id: 502, customer: PROSPECT, family: null, version_count: 1,
+    content_version: 4, pricing_portfolio: "Transactional", plant: NAG, party_id: 502, customer: PROSPECT, family: null, version_count: 1,
     latest_version: latest(91031, 1, 1, true, true, 43, SPEC_OLD, { ...QF_BOX_V1, item_short_name: "OLD RS 375" }),
     construction: null, references: {}, locations: [{ location_id: 603, location_code: null, scope: "master", status: "withdrawn" }],
     sets: [] },
   { id: 9104, plant_item_code: "__U2_FIXTURE_ONLY__/NAG/0001P1", status: "proposed", replacement_sku_id: null,
-    content_version: 1, plant: NAG, party_id: 501, customer: CUSTOMER, family: FAMILY, version_count: 1,
+    content_version: 1, pricing_portfolio: "Strategic", plant: NAG, party_id: 501, customer: CUSTOMER, family: FAMILY, version_count: 1,
     latest_version: latest(91041, 1, 1, false, true, 44, SPEC_PLATE, QF_PLATE), construction: BOARD_CONSTRUCTION,
     references: {}, locations: [], sets: setFor(9104) },
   { id: 9105, plant_item_code: "__U2_FIXTURE_ONLY__/NAG/0001Q1", status: "proposed", replacement_sku_id: null,
-    content_version: 1, plant: NAG, party_id: 501, customer: CUSTOMER, family: FAMILY, version_count: 1,
+    content_version: 1, pricing_portfolio: "Strategic", plant: NAG, party_id: 501, customer: CUSTOMER, family: FAMILY, version_count: 1,
     latest_version: latest(91051, 1, 1, false, true, 44, SPEC_PARTITION, QF_PARTITION), construction: BOARD_CONSTRUCTION,
     references: {}, locations: [], sets: setFor(9105) },
   { id: 9201, plant_item_code: "__U2_FIXTURE_ONLY__/PUN/0001", status: "active", replacement_sku_id: null,
-    content_version: 1, plant: PUN, party_id: 501, customer: CUSTOMER, family: FAMILY, version_count: 1,
+    content_version: 1, pricing_portfolio: "Transactional", plant: PUN, party_id: 501, customer: CUSTOMER, family: FAMILY, version_count: 1,
     latest_version: latest(92011, 1, 1, true, true, 41, SPEC_PUN, { ...QF_BOX_V2, print_technology: "CMYK", number_of_colours: 4 }),
     construction: CONSTRUCTION, references: {}, locations: [], sets: [] },
 ];
 
 const VISIBLE = { customer: "visible", construction: "visible", plant_adoption: "visible", locations: "visible", sets: "visible" };
-const PENDING_NONE = { quote_fields: false, sku_sets: false };
+const PENDING_NONE = { quote_fields: false, sku_sets: false, pricing_portfolio: false };
 const common = { schema_pending: PENDING_NONE, mode: "governed_read_only", authority: "caller_token_rls_only", mutations: "none" };
 const header = row => ({ id: row.id, plant_item_code: row.plant_item_code, status: row.status,
+  pricing_portfolio: row.pricing_portfolio,
   replacement_sku_id: row.replacement_sku_id, content_version: row.content_version, plant: row.plant,
   party_id: row.party_id, customer: row.customer, family: row.family });
 const detailVersion = (id, versionNo, approved, priceDriving, cvId, spec, quoteFields, construction, adoption) => ({
@@ -168,17 +169,19 @@ const identityText = row => [
 ].filter(Boolean).join(" ").toLowerCase();
 
 // Fixture-only stand-in for the database filtering the governed route does.
-export function fixtureSkuCatalogue({ plant, status, q, familyId, partyId } = {}) {
+export function fixtureSkuCatalogue({ plant, status, q, portfolio, familyId, partyId } = {}) {
   const terms = fixtureSearchTerms(q);
   const skus = ROWS.filter(row => (!plant || row.plant.plant_code === plant)
     && (!status || row.status === status)
+    // A dropdown, deliberately NOT part of the one identity search box.
+    && (!portfolio || row.pricing_portfolio === portfolio)
     // Every word must match somewhere: words narrow, they never widen.
     && terms.every(term => identityText(row).includes(term.toLowerCase()))
     && (!familyId || row.family?.id === Number(familyId))
     && (!partyId || row.party_id === Number(partyId)));
   return { skus, truncated: false, limit: 200, plant_scope: ["NAG", "PUN"],
     filters: { plant: plant || null, status: status || null, q: (q || "").trim() || null,
-      party_id: partyId || null, family_id: familyId || null },
+      portfolio: portfolio || null, party_id: partyId || null, family_id: familyId || null },
     // The fixture carries every identity factor, so all six are searched.
     search: terms.length ? { q: (q || "").trim(), terms, executed: true, scan_truncated: false, degraded: false,
       fields: { plant_item_code: "searched", item_name: "searched", item_short_name: "searched",

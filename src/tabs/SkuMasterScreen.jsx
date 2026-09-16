@@ -53,10 +53,12 @@ import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
 import { SKU_FIXTURE_DETAILS, fixtureSkuCatalogue } from "../lib/skuMasterFixture.js";
 import {
-  PRINT_TECHNOLOGIES, PRODUCTION_BACKLOG, PRODUCTION_BACKLOG_COUNT, SKU_SPEC_FIELD_COUNT, SKU_SPEC_GROUPS,
+  PRICING_PORTFOLIOS, PRINT_TECHNOLOGIES, PRODUCTION_BACKLOG, PRODUCTION_BACKLOG_COUNT,
+  SKU_SPEC_FIELD_COUNT, SKU_SPEC_GROUPS,
 } from "../lib/skuSpecRegistry.js";
 import {
-  APPLICABILITY_SCOPE_LABELS, REFERENCE_KIND_LABELS, SKU_STATUSES, SPLIT_DEFAULT, adoptionLabel,
+  APPLICABILITY_SCOPE_LABELS, PENDING, PRICING_PORTFOLIO_NOTE, REFERENCE_KIND_LABELS, SKU_STATUSES, SPLIT_DEFAULT,
+  adoptionLabel,
   applicabilityLocationLabel, clampSplit, constructionLabel, customerLabel, familyLabel, gridCellText,
   normaliseSkuCatalogue, panelLayout, plantItemCodeLabel, plantLabel, replacementLabel, schemaPendingNotice,
   searchCoverageNotice, searchScanNotice, searchScopeHint, skuCatalogueQuery, skuEmptyState, skuPlantScope,
@@ -69,7 +71,7 @@ import { CollapseIcon, ExpandIcon, RefreshIcon } from "../ui/icons.jsx";
 import { control, iconButton, menuPanel, menuSummary, segment, toolbar } from "../ui/screenStandards.js";
 import { C, T, mono, sans } from "../theme.js";
 
-const EMPTY_FILTERS = { plant: "", status: "", q: "", familyId: "", partyId: "" };
+const EMPTY_FILTERS = { plant: "", status: "", q: "", portfolio: "", familyId: "", partyId: "" };
 const FROZEN = ["C", "D"];
 const GROUP_TONE = {
   identity: { band: C.slateM, ink: C.white, soft: "#F3F1EC", softInk: C.slateM },
@@ -258,12 +260,15 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   const partyFiltersVisible = customerVisibility === "visible";
   const gridCtx = { visibility: catalogue.visibility || {}, schemaPending: catalogue.schemaPending || {} };
   const pendingNotice = schemaPendingNotice(catalogue.schemaPending);
+  // A pending portfolio cannot be filtered on: the column does not exist yet,
+  // and the route refuses rather than quietly answering a different question.
+  const portfolioPending = catalogue.schemaPending?.pricing_portfolio === true;
   // What the one identity box actually reached on this read, in words.
   const searchCoverage = searchCoverageNotice(catalogue.search);
   const searchScan = searchScanNotice(catalogue.search);
   const layout = panelLayout(split, focusPanel);
   const fieldCols = focusPanel === "detail" ? 3 : split >= 62 ? 1 : 2;
-  const moreFilters = [filters.familyId, filters.partyId].filter(Boolean).length;
+  const moreFilters = [filters.portfolio, filters.familyId, filters.partyId].filter(Boolean).length;
   const anyFilter = Object.values(filters).some(Boolean);
   const selectedCode = selectedId == null ? null
     : plantItemCodeLabel(gridRows.find(r => r.id === selectedId)?.plant_item_code ?? detail.data?.sku?.plant_item_code);
@@ -298,7 +303,17 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
             <details style={{ position: "relative" }}>
               <summary style={menuSummary(moreFilters > 0)}>Filters{moreFilters ? ` · ${moreFilters}` : ""} ▾</summary>
               <div style={menuPanel}>
-                <label style={{ display: "grid", gap: 3, fontSize: T.label, color: C.slateL }}>Customer Family
+                <label style={{ display: "grid", gap: 3, fontSize: T.label, color: C.slateL }}>Pricing Portfolio
+                <select aria-label="Pricing Portfolio" value={filters.portfolio} disabled={portfolioPending}
+                  title={portfolioPending ? PENDING : PRICING_PORTFOLIO_NOTE}
+                  onChange={e => setFilter("portfolio", e.target.value)} style={control}>
+                  <option value="">{portfolioPending ? "Portfolio pending" : "All portfolios"}</option>
+                  {!portfolioPending && PRICING_PORTFOLIOS.map(value =>
+                    <option key={value} value={value}>{value}</option>)}
+                </select>
+                <span style={{ fontSize: T.micro, color: C.slateL, lineHeight: 1.35 }}>{PRICING_PORTFOLIO_NOTE}</span>
+              </label>
+              <label style={{ display: "grid", gap: 3, fontSize: T.label, color: C.slateL }}>Customer Family
                   <select aria-label="Customer Family" value={filters.familyId} disabled={!partyFiltersVisible}
                     title={partyFiltersVisible ? "Families seen in results so far" : visibilityText(customerVisibility) || ""}
                     onChange={e => setFilter("familyId", e.target.value)} style={control}>

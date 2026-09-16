@@ -67,6 +67,18 @@ export const APPLICABILITY_SCOPE_LABELS = {
 
 export const SET_ROLE_LABELS = { box: "Box", plate: "Plate", partition: "Partition" };
 
+// ── CDM-45 pricing portfolio ───────────────────────────────────────────────
+// A closed, mandatory vocabulary, RECORDED ONLY. Nothing in this module, the
+// costing engine or any rate path reads it to decide a price: it is shown and
+// it can be filtered on, and that is the whole of its behaviour until an
+// approved rate mechanism consumes it (Amendment 03 C-04, Amendment 01 A-06).
+//
+// There is deliberately no edit affordance anywhere. An administrator may
+// reclassify a SKU (C-03), but no governed write operation exists for the SKU
+// Master at all, so a control here would promise one that does not.
+export const PRICING_PORTFOLIO_NOTE =
+  "Recorded only — no rate, margin or discount is derived from the pricing portfolio.";
+
 export const UNRECORDED_FIELD_LABELS = {
   printing_technology: "Printing Technology",
   number_of_colours: "Number of colours",
@@ -170,10 +182,11 @@ export function skuEmptyState({ search, anyFilter, plantScope } = {}) {
 // Only filters that carry a value reach the query string; the server applies
 // them in the database - including the identity search - so nothing unrelated
 // is loaded and filtered here, and no other plant's rows are ever fetched.
-export function skuCatalogueQuery({ plant, status, q, familyId, partyId } = {}) {
+export function skuCatalogueQuery({ plant, status, q, portfolio, familyId, partyId } = {}) {
   const params = new URLSearchParams();
   if (plant) params.set("plant", plant);
   if (status) params.set("status", status);
+  if (portfolio) params.set("portfolio", portfolio);
   const search = (q || "").trim();
   if (search) params.set("q", search);
   if (familyId) params.set("family_id", String(familyId));
@@ -311,6 +324,7 @@ export function specificationRows(spec) {
 export function specRowFromCatalogue(row) {
   return {
     id: row.id, plant_item_code: row.plant_item_code, status: row.status, plant: row.plant,
+    pricing_portfolio: row.pricing_portfolio ?? null,
     customer: row.customer ?? null, family: row.family ?? null, party_id: row.party_id,
     replacement_sku_id: row.replacement_sku_id, content_version: row.content_version,
     version: row.latest_version ?? null, version_count: row.version_count ?? 0,
@@ -361,7 +375,7 @@ export const SPEC_FIELD_KEYS = [
   "A", "B", "C", "D", "E", "F", "G", "H",
   ...Object.keys(CONSTRUCTION_KEY), "J", ...Object.keys(LAYER_KEY),
   ...Object.keys(QUOTE_KEY).filter(k => !["B", "C", "G", "H"].includes(k)),
-  ...Object.keys(VERSION_KEY), "LC", "DZ",
+  ...Object.keys(VERSION_KEY), "LC", "PF", "DZ",
 ];
 
 const cell = (state, text, title) => ({ state, text, title: title || text });
@@ -416,6 +430,11 @@ export function specFieldCell(key, row, ctx = {}) {
       return row.plant_item_code ? cell("value", row.plant_item_code) : cell("blank", "Plant Item Code not assigned");
     case "LC":
       return valueCell(row.status);
+    case "PF":
+      // Pending storage is not a blank portfolio: CDM-45 makes one mandatory,
+      // so "nothing recorded" can only mean the migration is not applied.
+      if (pending.pricing_portfolio) return cell("pending", PENDING);
+      return valueCell(row.pricing_portfolio);
     case "E": {
       const hidden = hiddenCell(vis.customer);
       if (hidden) return hidden;
@@ -453,6 +472,7 @@ export function schemaPendingNotice(pending) {
   const parts = [];
   if (pending?.quote_fields) parts.push("item names, printing, Cobb and stated strength fields");
   if (pending?.sku_sets) parts.push("SKU Sets");
+  if (pending?.pricing_portfolio) parts.push("the pricing portfolio");
   if (!parts.length) return null;
   return `The SKU Master storage for ${parts.join(" and ")} is not activated yet, so those fields show as pending rather than blank.`;
 }

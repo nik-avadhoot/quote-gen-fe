@@ -14,6 +14,11 @@
 
 export const PRINT_TECHNOLOGIES = ["Flexo", "CMYK", "Offset", "Unprinted"];
 
+// Canonical Amendment 03, CDM-45. Closed vocabulary, app-owned (no SPEC column
+// carries it). RECORDED ONLY: no pricing is inferred or applied from it until
+// an approved rate mechanism consumes it.
+export const PRICING_PORTFOLIOS = ["Transactional", "Strategic"];
+
 export const SKU_SPEC_GROUPS = [
   {
     "id": "identity",
@@ -436,6 +441,16 @@ export const SKU_SPEC_GROUPS = [
         "origin": "app",
         "authority": null,
         "use": "Proposed → Active → Discontinued (CDM-11)"
+      },
+      {
+        "key": "PF",
+        "sheet": null,
+        "order": 125.95,
+        "label": "Pricing Portfolio",
+        "width": 110,
+        "origin": "app",
+        "authority": null,
+        "use": "Transactional or Strategic (CDM-45) — recorded only, no pricing rule"
       },
       {
         "key": "DX",
@@ -1127,5 +1142,7 @@ export const PRODUCTION_BACKLOG = [
   }
 ];
 
-export const SKU_SPEC_FIELD_COUNT = 39;
+// 36 SPEC columns + Print Technology + Number of Colours + lifecycle (CDM-43,
+// Amendment 02) + the pricing portfolio (CDM-45, Amendment 03).
+export const SKU_SPEC_FIELD_COUNT = 40;
 export const PRODUCTION_BACKLOG_COUNT = 94;
