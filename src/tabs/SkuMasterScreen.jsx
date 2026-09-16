@@ -17,6 +17,14 @@
 // a field with no storage yet or one this caller may not read is named on the
 // screen rather than quietly missing rows.
 //
+// ── COLUMN-HEADER FILTERS ─────────────────────────────────────────────────
+// Every filterable column has a funnel in its header (src/lib/skuColumnFilters.js).
+// Filters are applied by the server, in the database, inside the caller's
+// plants; a version column matches the SKU's latest version; a column whose
+// storage is pending, which is derived, or whose master the caller may not read
+// shows a disabled funnel with that reason. Lifecycle and portfolio share one
+// state with their toolbar controls. Filter state is screen state (ruled).
+//
 // Left: one toolbar (search, lifecycle, plant, Filters ▾, Columns ▾, count,
 // refresh, expand — the Batch Builder toolbar idiom) above SKUs row by row with
 // the CDM-43 fields in SPEC sheet groups and sheet order, code and short name
@@ -65,13 +73,20 @@ import {
   skuSearchValidation, skuSetGroups, skuSetView, specFieldCell,
   specRowFromCatalogue, specRowFromDetail, visibilityText,
 } from "../lib/skuMasterModel.js";
+import {
+  COLUMN_FILTERS, COLUMN_FILTER_MAX, COLUMN_FILTER_OP_LABELS, columnFilterAvailability, columnFilterScanNotice,
+  columnFilterSummary, columnFilterValidation, sharedFilterFromState, sharedStateFromFilter,
+} from "../lib/skuColumnFilters.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag, SummaryRow } from "../ui/dataDisplay.jsx";
 import { CollapseIcon, ExpandIcon, RefreshIcon } from "../ui/icons.jsx";
 import { control, iconButton, menuPanel, menuSummary, segment, toolbar } from "../ui/screenStandards.js";
 import { C, T, mono, sans } from "../theme.js";
 
-const EMPTY_FILTERS = { plant: "", status: "", q: "", portfolio: "", familyId: "", partyId: "" };
+const EMPTY_FILTERS = { plant: "", status: "", q: "", portfolio: "", familyId: "", partyId: "", columns: {} };
+const FIELD_BY_KEY = Object.fromEntries(SKU_SPEC_GROUPS.flatMap(g => g.fields.map(f => [f.key, f])));
+const LABEL_BY_API_FIELD = Object.fromEntries(Object.entries(COLUMN_FILTERS)
+  .filter(([, s]) => s.field).map(([key, s]) => [s.field, FIELD_BY_KEY[key]?.label]));
 // Frozen identity, in this order and always leftmost: the Plant Item Code
 // (SPEC D) first, then Item Short Name (Product Owner, 2026-09-16).
 const FROZEN = ["D", "C"];
@@ -120,6 +135,7 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   const [dragging, setDragging] = useState(false);
   const [hiddenGroups, setHiddenGroups] = useState([]);
   const [groupBySet, setGroupBySet] = useState(false);
+  const [openFilter, setOpenFilter] = useState(null); // { key, anchor } | null
   const bodyRef = useRef(null);
   const { setSidebarCollapsed, sidebarCollapsed } = useAppState();
   const [focusPanel, setFocusPanel] = useState(null); // null · "list" · "detail"
@@ -215,7 +231,24 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
 
   const setFilter = (key, value) => setFilters(f => ({ ...f, [key]: value }));
   const applySearch = e => { e.preventDefault(); if (!searchError) setFilter("q", searchDraft.trim()); };
-  const clearFilters = () => { setFilters(EMPTY_FILTERS); setSearchDraft(""); };
+  const clearFilters = () => { setFilters(EMPTY_FILTERS); setSearchDraft(""); setOpenFilter(null); };
+  // Lifecycle and portfolio live in their shared toolbar state; every other
+  // column lives in `filters.columns`. Either way the server applies it.
+  const columnFilterOf = key => COLUMN_FILTERS[key]?.shared
+    ? sharedFilterFromState(filters[COLUMN_FILTERS[key].shared]) : filters.columns[key] || null;
+  const setColumnFilter = (key, filter) => {
+    const shared = COLUMN_FILTERS[key]?.shared;
+    if (shared) setFilter(shared, sharedStateFromFilter(filter));
+    else setFilters(f => {
+      const columns = { ...f.columns };
+      if (filter) columns[key] = filter; else delete columns[key];
+      return { ...f, columns };
+    });
+    setOpenFilter(null);
+  };
+  const activeColumnKeys = Object.keys(COLUMN_FILTERS).filter(key => columnFilterOf(key));
+  const columnLimitReached = Object.keys(filters.columns).length
+    + [filters.status, filters.portfolio].filter(v => (v || "").includes("|")).length >= COLUMN_FILTER_MAX;
   const toggleGroup = id => setHiddenGroups(h => h.includes(id) ? h.filter(x => x !== id) : [...h, id]);
 
   const startDrag = e => {
@@ -270,8 +303,14 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   const searchScan = searchScanNotice(catalogue.search);
   const layout = panelLayout(split, focusPanel);
   const fieldCols = focusPanel === "detail" ? 3 : split >= 62 ? 1 : 2;
-  const moreFilters = [filters.portfolio, filters.familyId, filters.partyId].filter(Boolean).length;
-  const anyFilter = Object.values(filters).some(Boolean);
+  const columnKeysInMenu = activeColumnKeys.filter(key => !COLUMN_FILTERS[key].shared);
+  const moreFilters = [filters.portfolio, filters.familyId, filters.partyId].filter(Boolean).length + columnKeysInMenu.length;
+  const anyFilter = [filters.plant, filters.status, filters.q, filters.portfolio, filters.familyId, filters.partyId]
+    .some(Boolean) || columnKeysInMenu.length > 0;
+  const columnSummaries = activeColumnKeys.map(key => columnFilterSummary(FIELD_BY_KEY[key]?.label || key, columnFilterOf(key)));
+  const filterScan = columnFilterScanNotice(catalogue.columnFilters, field => LABEL_BY_API_FIELD[field]);
+  const filterCtx = { visibility: catalogue.visibility || {}, schemaPending: catalogue.schemaPending || {} };
+  const openColumn = openFilter && FIELD_BY_KEY[openFilter.key];
   const selectedCode = selectedId == null ? null
     : plantItemCodeLabel(gridRows.find(r => r.id === selectedId)?.plant_item_code ?? detail.data?.sku?.plant_item_code);
   const skuCount = catalogue.status === "ready"
@@ -296,6 +335,7 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
             </form>
             <select aria-label="Lifecycle" value={filters.status} onChange={e => setFilter("status", e.target.value)} style={control}>
               <option value="">All lifecycles</option>
+              {filters.status.includes("|") && <option value={filters.status}>{filters.status.split("|").join(" + ")}</option>}
               {SKU_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             <select aria-label="Plant" value={filters.plant} onChange={e => setFilter("plant", e.target.value)} style={control}>
@@ -310,6 +350,7 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
                   title={portfolioPending ? PENDING : PRICING_PORTFOLIO_NOTE}
                   onChange={e => setFilter("portfolio", e.target.value)} style={control}>
                   <option value="">{portfolioPending ? "Portfolio pending" : "All portfolios"}</option>
+                  {filters.portfolio.includes("|") && <option value={filters.portfolio}>{filters.portfolio.split("|").join(" + ")}</option>}
                   {!portfolioPending && PRICING_PORTFOLIOS.map(value =>
                     <option key={value} value={value}>{value}</option>)}
                 </select>
@@ -331,6 +372,18 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
                     {customerOptions.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
                   </select>
                 </label>
+                <div style={{ display: "grid", gap: 4, borderTop: `1px solid ${C.border}`, paddingTop: 7 }}>
+                  <span style={{ fontSize: T.micro, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: C.slateL }}>
+                    Column filters · from the headers</span>
+                  {columnKeysInMenu.length === 0 && <span style={{ fontSize: T.label, color: C.slateL }}>
+                    None. Use the funnel in a column header.</span>}
+                  {columnKeysInMenu.map(key => <span key={key} style={{ display: "flex", alignItems: "center", gap: 6,
+                    fontSize: T.label, color: C.amberD }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>{columnFilterSummary(FIELD_BY_KEY[key]?.label || key, filters.columns[key])}</span>
+                    <button type="button" aria-label={`Remove the ${FIELD_BY_KEY[key]?.label} filter`} onClick={() => setColumnFilter(key, null)}
+                      style={{ border: 0, background: "transparent", color: C.red, cursor: "pointer", fontSize: T.title, lineHeight: 1 }}>×</button>
+                  </span>)}
+                </div>
                 <button type="button" onClick={clearFilters} disabled={!anyFilter && !searchDraft}
                   style={{ ...control, fontSize: T.label, cursor: "pointer" }}>Clear all filters</button>
               </div>
@@ -368,6 +421,14 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
               {focusPanel === "list" ? <CollapseIcon size={14} /> : <ExpandIcon size={14} />}</button>
           </div>
 
+          {filterScan && (
+            <div role="status" style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 10px", flexShrink: 0,
+              borderBottom: `1px solid ${C.amber}55`, background: C.amberL, fontSize: T.label, color: C.amberD, lineHeight: 1.35 }}>
+              <span style={{ fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: T.micro, whiteSpace: "nowrap" }}>
+                Filter reach</span>
+              <span style={{ minWidth: 0 }}>{filterScan}</span>
+            </div>
+          )}
           {(searchCoverage || searchScan) && (
             <div role="status" style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 10px", flexShrink: 0,
               borderBottom: `1px solid ${C.amber}55`, background: C.amberL, fontSize: T.label, color: C.amberD,
@@ -388,10 +449,16 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
               </div>
             )}
             {catalogue.status === "ready" && (gridRows.length === 0
-              ? <EmptyState {...skuEmptyState({ search: catalogue.search, anyFilter,
+              ? <EmptyState {...skuEmptyState({ search: catalogue.search, anyFilter, columnSummaries,
                   plantScope: fixtureOnly ? scope : catalogue.plantScope })} />
               : <SpecGrid rows={gridRows} ctx={gridCtx} groups={visibleGroups} selectedId={selectedId}
-                  onSelect={setSelectedId} groupBySet={groupBySet} />)}
+                  onSelect={setSelectedId} groupBySet={groupBySet}
+                  filterOf={columnFilterOf} availability={key => columnFilterAvailability(key, filterCtx)}
+                  openFilterKey={openFilter?.key} limitReached={columnLimitReached}
+                  onOpenFilter={(key, anchor) => setOpenFilter(o => o?.key === key ? null : { key, anchor })} />)}
+            {openColumn && <ColumnFilterMenu key={openFilter.key} column={openColumn} anchor={openFilter.anchor}
+              filter={columnFilterOf(openFilter.key)} onClose={() => setOpenFilter(null)}
+              onApply={draft => setColumnFilter(openFilter.key, draft)} onClear={() => setColumnFilter(openFilter.key, null)} />}
           </div>
           <div style={{ height: 24, flex: "0 0 24px", display: "flex", alignItems: "center", gap: 6, padding: "0 10px",
             borderTop: `1px solid ${C.border}`, background: "#FBF8F3", fontSize: T.label, color: C.slateL, overflow: "hidden", whiteSpace: "nowrap" }}>
@@ -460,7 +527,71 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   );
 }
 
-function SpecGrid({ rows, ctx, groups, selectedId, onSelect, groupBySet }) {
+
+// ── Column-header filter menu ──────────────────────────────────────────────
+// Opens under the header's funnel, positioned in the viewport so the grid's
+// clipped header cells cannot cut it off. Its draft is local until Apply, so a
+// half-typed value never issues a read.
+const FUNNEL = <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true">
+  <path d="M0.5 1h9L6 5.2V9L4 8V5.2z" fill="currentColor" /></svg>;
+
+function ColumnFilterMenu({ column, filter, anchor, onApply, onClear, onClose }) {
+  const spec = COLUMN_FILTERS[column.key];
+  const [op, setOp] = useState(filter?.op || spec.ops[0]);
+  const [textValue, setTextValue] = useState(filter?.op === "contains" ? filter.value : "");
+  const [range, setRange] = useState(filter?.op === "between" ? filter.value.map(v => v ?? "") : ["", ""]);
+  const [picked, setPicked] = useState(filter?.op === "in" ? filter.value : []);
+  const ref = useRef(null);
+  const draft = { op, value: op === "contains" ? textValue : op === "between" ? range : op === "in" ? picked : null };
+  const error = columnFilterValidation(column.key, draft);
+
+  useEffect(() => {
+    const away = e => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [onClose]);
+
+  const left = Math.max(8, Math.min(anchor.left, window.innerWidth - 268));
+  const apply = e => { e.preventDefault(); if (!error) onApply(draft); };
+  return (
+    <form ref={ref} role="dialog" aria-label={`Filter ${column.label}`} onSubmit={apply}
+      onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}
+      style={{ ...menuPanel, position: "fixed", left, top: anchor.bottom + 4, width: 260, minWidth: 0, zIndex: 60 }}>
+      <div style={{ fontSize: T.label, fontWeight: 800, color: C.slateM }}>
+        {column.label}<span style={{ fontWeight: 400, color: C.slateL }}> · SPEC {column.sheet || column.key}</span></div>
+      <select aria-label="Operator" value={op} onChange={e => setOp(e.target.value)} style={control}>
+        {spec.ops.map(o => <option key={o} value={o}>{COLUMN_FILTER_OP_LABELS[o]}</option>)}
+      </select>
+      {op === "contains" && <input autoFocus aria-label="Contains" value={textValue}
+        onChange={e => setTextValue(e.target.value)} style={{ ...control, fontFamily: mono }} />}
+      {op === "between" && <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <input autoFocus aria-label="Minimum" inputMode="decimal" placeholder="min" value={range[0]}
+          onChange={e => setRange([e.target.value, range[1]])} style={{ ...control, width: "100%", fontFamily: mono }} />
+        <span style={{ fontSize: T.body, color: C.slateL }}>–</span>
+        <input aria-label="Maximum" inputMode="decimal" placeholder="max" value={range[1]}
+          onChange={e => setRange([range[0], e.target.value])} style={{ ...control, width: "100%", fontFamily: mono }} />
+      </span>}
+      {op === "in" && <div style={{ display: "grid", gap: 4 }}>
+        {spec.values.map(v => <label key={v} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: T.body, color: C.slateM }}>
+          <input type="checkbox" checked={picked.includes(v)} style={{ accentColor: C.amber }}
+            onChange={() => setPicked(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v])} />{v}</label>)}
+      </div>}
+      {spec.pending === "quote_fields" || spec.gate === "construction" || ["AE", "AF", "AG", "BH"].includes(column.key)
+        ? <span style={{ fontSize: T.micro, color: C.slateL, lineHeight: 1.35 }}>Matches each SKU's latest version.</span> : null}
+      {(op === "blank") && <span style={{ fontSize: T.micro, color: C.slateL, lineHeight: 1.35 }}>
+        Blank is not zero: a recorded 0 does not match.</span>}
+      {error && op !== "blank" && op !== "not_blank" && <span role="alert" style={{ fontSize: T.label, color: C.red }}>{error}</span>}
+      <span style={{ display: "flex", gap: 6 }}>
+        <button type="submit" disabled={!!error} style={{ ...control, flex: 1, fontWeight: 700, border: "none",
+          background: error ? "#CCC" : C.amber, color: C.white, cursor: error ? "not-allowed" : "pointer" }}>Apply</button>
+        <button type="button" onClick={onClear} disabled={!filter} style={{ ...control, cursor: "pointer" }}>Clear</button>
+      </span>
+    </form>
+  );
+}
+
+function SpecGrid({ rows, ctx, groups, selectedId, onSelect, groupBySet, filterOf, availability, openFilterKey,
+  limitReached, onOpenFilter }) {
   const registryCols = groups.flatMap(g => g.fields.map(f => ({ ...f, group: g })));
   // Frozen columns lead, in FROZEN order, so "first frozen" is also "first".
   const cols = [...FROZEN.map(key => registryCols.find(c => c.key === key)).filter(Boolean),
@@ -497,20 +628,36 @@ function SpecGrid({ rows, ctx, groups, selectedId, onSelect, groupBySet }) {
         ))}
       </div>
       <div style={{ display: "flex", position: "sticky", top: 22, zIndex: 5, height: 40 }}>
-        {cols.map(c => (
-          <div key={c.key} role="columnheader" title={`${c.sheet ? `${c.sheet} · ` : ""}${c.label}\nUsed for: ${c.use}`}
+        {cols.map(c => {
+          const filter = filterOf(c.key);
+          const { available, reason } = availability(c.key);
+          const blockedByLimit = available && !filter && limitReached;
+          return (
+          <div key={c.key} role="columnheader" aria-sort="none" title={`${c.sheet ? `${c.sheet} · ` : ""}${c.label}\nUsed for: ${c.use}`}
             style={{ width: c.width, flex: `0 0 ${c.width}px`, ...stick(c, 4), height: 40, padding: "4px 6px",
-              background: c.origin === "new" ? C.amberL : c.origin === "app" ? "#EEF3F0" : "#FBF8F3",
-              borderRight: `1px solid ${edge(c)}`, borderBottom: `1px solid ${C.border}`, overflow: "hidden", boxSizing: "border-box" }}>
+              background: filter ? "#FCE9D6" : c.origin === "new" ? C.amberL : c.origin === "app" ? "#EEF3F0" : "#FBF8F3",
+              borderRight: `1px solid ${edge(c)}`, borderBottom: `1px solid ${filter ? C.amber : C.border}`, overflow: "hidden", boxSizing: "border-box" }}>
             <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
               <span style={{ fontFamily: mono, fontSize: T.micro + 0.5, fontWeight: 700, color: c.origin === "new" ? C.amberD : C.slateL }}>
                 {c.sheet || (c.origin === "new" ? "+" : "app")}</span>
               <span style={{ fontSize: T.micro, fontWeight: 800, color: C.slateL }}>{fieldTag(c)}</span>
+              <button type="button" aria-label={filter ? `Filter on ${c.label}: ${columnFilterSummary(c.label, filter)}` : `Filter ${c.label}`}
+                aria-haspopup="dialog" aria-expanded={openFilterKey === c.key}
+                disabled={!available || blockedByLimit}
+                title={!available ? reason : blockedByLimit ? `At most ${COLUMN_FILTER_MAX} column filters at once.`
+                  : filter ? columnFilterSummary(c.label, filter) : `Filter ${c.label}`}
+                onClick={e => { e.stopPropagation(); onOpenFilter(c.key, e.currentTarget.getBoundingClientRect()); }}
+                style={{ marginLeft: "auto", width: 16, height: 14, display: "inline-grid", placeItems: "center", padding: 0,
+                  borderRadius: 3, border: `1px solid ${filter ? C.amber : "transparent"}`,
+                  background: filter ? C.amber : "transparent", color: filter ? C.white : C.slateL,
+                  opacity: available && !blockedByLimit ? 1 : 0.3, cursor: available && !blockedByLimit ? "pointer" : "not-allowed" }}>
+                {FUNNEL}</button>
             </div>
             <div style={{ fontSize: T.label, fontWeight: 700, color: C.slateM, lineHeight: 1.15, overflow: "hidden",
               display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{c.label}</div>
           </div>
-        ))}
+          );
+        })}
       </div>
       {sections.map(section => (
         <div key={section.key} role="rowgroup">

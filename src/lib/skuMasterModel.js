@@ -22,6 +22,8 @@ export { PANEL_FOCUS, SPLIT_DEFAULT, SPLIT_MAX, SPLIT_MIN, clampSplit, panelLayo
 
 export const SKU_STATUSES = ["proposed", "active", "discontinued"];
 export const SKU_SEARCH_MAX = 60;
+import { COLUMN_FILTERS, columnFilterParam } from "./skuColumnFilters.js";
+
 export const SKU_SEARCH_MAX_TERMS = 5;
 const SEARCH_CHARS = /^[A-Za-z0-9 ._/-]*$/;
 
@@ -159,7 +161,7 @@ function listWords(names) {
 // Four different empty answers, never one. "Nothing matched" and "nothing is
 // visible to you" are different facts, and RLS makes absent and hidden the
 // same answer, so the wording says which claim is actually being made.
-export function skuEmptyState({ search, anyFilter, plantScope } = {}) {
+export function skuEmptyState({ search, anyFilter, plantScope, columnSummaries = [] } = {}) {
   if (!(plantScope || []).length) {
     return { title: "No plant is in your access scope.",
       hint: "The SKU Master lists SKUs at plants where you hold plant access. That is a visibility "
@@ -175,24 +177,38 @@ export function skuEmptyState({ search, anyFilter, plantScope } = {}) {
   }
   if (anyFilter) {
     return { title: "No governed SKU visible to you matches these filters.",
-      hint: "Clear a filter to widen the answer. A SKU you cannot see reads the same as one that does not exist." };
+      hint: `${columnSummaries.length ? `Column filters: ${columnSummaries.join("; ")}. ` : ""}`
+        + "Clear a filter to widen the answer. Version columns match each SKU's latest version. "
+        + "A SKU you cannot see reads the same as one that does not exist." };
   }
   return { title: "No governed SKUs are visible to you here.",
     hint: "SKUs appear here once proposed or published for a plant you can access." };
 }
 
 // Only filters that carry a value reach the query string; the server applies
-// them in the database - including the identity search - so nothing unrelated
-// is loaded and filtered here, and no other plant's rows are ever fetched.
-export function skuCatalogueQuery({ plant, status, q, portfolio, familyId, partyId } = {}) {
+// them in the database - including the identity search and every column-header
+// filter - so nothing unrelated is loaded and filtered here, and no other
+// plant's rows are ever fetched.
+//
+// Lifecycle and portfolio are one state shared by the toolbar control and the
+// column header: a single value travels as `status=` / `portfolio=`, several
+// as the header filter `f=status:in:a|b`.
+export function skuCatalogueQuery({ plant, status, q, portfolio, familyId, partyId, columns } = {}) {
   const params = new URLSearchParams();
   if (plant) params.set("plant", plant);
-  if (status) params.set("status", status);
-  if (portfolio) params.set("portfolio", portfolio);
+  if (status && !status.includes("|")) params.set("status", status);
+  if (portfolio && !portfolio.includes("|")) params.set("portfolio", portfolio);
   const search = (q || "").trim();
   if (search) params.set("q", search);
   if (familyId) params.set("family_id", String(familyId));
   if (partyId) params.set("party_id", String(partyId));
+  if (status && status.includes("|")) params.append("f", `status:in:${status}`);
+  if (portfolio && portfolio.includes("|")) params.append("f", `pricing_portfolio:in:${portfolio}`);
+  // Registry order, so the same filters always make the same query string.
+  for (const key of Object.keys(COLUMN_FILTERS)) {
+    const filter = columns?.[key];
+    if (filter && !COLUMN_FILTERS[key].shared) params.append("f", columnFilterParam(key, filter));
+  }
   const text = params.toString();
   return text ? `/masters/skus?${text}` : "/masters/skus";
 }
@@ -301,6 +317,8 @@ export function normaliseSkuCatalogue(data) {
     visibility: data?.detail_visibility || {},
     schemaPending: data?.schema_pending || {},
     search: data?.search || null,
+    // What each column-header filter applied, and whether it hit a scan cap.
+    columnFilters: Array.isArray(data?.column_filters) ? data.column_filters : [],
     plantScope: Array.isArray(data?.plant_scope) ? data.plant_scope : [],
   };
 }

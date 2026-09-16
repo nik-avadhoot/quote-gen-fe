@@ -10,6 +10,9 @@
 // read by, written to, or mistaken for a governed record.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { COLUMN_FILTERS, fixtureCellMatches } from "./skuColumnFilters.js";
+import { specFieldCell, specRowFromCatalogue } from "./skuMasterModel.js";
+
 const NAG = { id: 7, plant_code: "NAG", name: "Nagpur" };
 const PUN = { id: 8, plant_code: "PUN", name: "Pune" };
 const CUSTOMER = { id: 501, customer_code: "FIX-CUST-501", display_name: "__U2_FIXTURE_ONLY__ Distillers Unit 1",
@@ -160,8 +163,8 @@ export const SKU_FIXTURE_DETAILS = {
 
 // The seven identity factors the one search box covers, and nothing else -
 // deliberately NOT lifecycle, plant, portfolio or any specification value.
-// The fixture reads the latest version only, where the governed route searches
-// every version's Item Name; that is a fixture simplification, not a rule.
+// The fixture reads the latest version only, as the governed route now does
+// (versions are not part of the search window, ruled 2026-09-16).
 const identityText = row => [
   row.plant_item_code,
   row.latest_version?.quote_fields?.item_name,
@@ -173,12 +176,19 @@ const identityText = row => [
 ].filter(Boolean).join(" ").toLowerCase();
 
 // Fixture-only stand-in for the database filtering the governed route does.
-export function fixtureSkuCatalogue({ plant, status, q, portfolio, familyId, partyId } = {}) {
+// Column filters are applied to the cell the grid shows - the latest version -
+// exactly as the route resolves them.
+export function fixtureSkuCatalogue({ plant, status, q, portfolio, familyId, partyId, columns } = {}) {
   const terms = fixtureSearchTerms(q);
+  const statuses = (status || "").split("|").filter(Boolean);
+  const portfolios = (portfolio || "").split("|").filter(Boolean);
+  const active = Object.entries(columns || {}).filter(([key, f]) => f && COLUMN_FILTERS[key]?.field);
+  const ctx = { visibility: {}, schemaPending: {} };
   const skus = ROWS.filter(row => (!plant || row.plant.plant_code === plant)
-    && (!status || row.status === status)
+    && (!statuses.length || statuses.includes(row.status))
     // A dropdown, deliberately NOT part of the one identity search box.
-    && (!portfolio || row.pricing_portfolio === portfolio)
+    && (!portfolios.length || portfolios.includes(row.pricing_portfolio))
+    && active.every(([key, f]) => fixtureCellMatches(f, specFieldCell(key, specRowFromCatalogue(row), ctx)))
     // Every word must match somewhere: words narrow, they never widen.
     && terms.every(term => identityText(row).includes(term.toLowerCase()))
     && (!familyId || row.family?.id === Number(familyId))
@@ -186,6 +196,8 @@ export function fixtureSkuCatalogue({ plant, status, q, portfolio, familyId, par
   return { skus, truncated: false, limit: 200, plant_scope: ["NAG", "PUN"],
     filters: { plant: plant || null, status: status || null, q: (q || "").trim() || null,
       portfolio: portfolio || null, party_id: partyId || null, family_id: familyId || null },
+    column_filters: active.map(([key, f]) => ({ field: COLUMN_FILTERS[key].field, op: f.op, value: f.value,
+      state: "applied", scan_truncated: false })),
     // The fixture carries every identity factor, so all seven are searched.
     search: terms.length ? { q: (q || "").trim(), terms, executed: true, scan_truncated: false, degraded: false,
       fields: { plant_item_code: "searched", item_name: "searched", item_short_name: "searched",

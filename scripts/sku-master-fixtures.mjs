@@ -32,6 +32,10 @@ import {
 } from "../src/lib/skuMasterModel.js";
 import { SKU_FIXTURE_DETAILS, fixtureSkuCatalogue } from "../src/lib/skuMasterFixture.js";
 import {
+  COLUMN_FILTERS, FILTERABLE_COLUMN_COUNT, columnFilterAvailability, columnFilterParam, columnFilterScanNotice,
+  columnFilterSummary, columnFilterValidation, fixtureCellMatches, sharedFilterFromState, sharedStateFromFilter,
+} from "../src/lib/skuColumnFilters.js";
+import {
   PRICING_PORTFOLIOS, PRINT_TECHNOLOGIES, PRODUCTION_BACKLOG, PRODUCTION_BACKLOG_COUNT,
   SKU_SPEC_FIELD_COUNT, SKU_SPEC_GROUPS,
 } from "../src/lib/skuSpecRegistry.js";
@@ -463,6 +467,68 @@ check(screen.includes('aria-label="Pricing Portfolio"') && screen.includes("disa
 check(!/(Save|Edit|Change|Reclassify|Set)s+portfolio/i.test(screen) && !/portfolio.{0,40}onSubmit/i.test(screen)
   && !screen.includes("apiFetch(`/masters/skus`, { method"),
   "U2-SKU-FE-100 there is NO edit affordance for the portfolio - the SKU Master has no governed write path to promise");
+// ──────────────────────── column-header filters (rulings 2026-09-16)
+const registryKeys = SKU_SPEC_GROUPS.flatMap(g => g.fields.map(f => f.key));
+check(registryKeys.every(key => COLUMN_FILTERS[key]) && Object.keys(COLUMN_FILTERS).length === registryKeys.length
+  && FILTERABLE_COLUMN_COUNT === 39 && COLUMN_FILTERS.J.derived && !COLUMN_FILTERS.J.field,
+  "U2-SKU-FE-101 every one of the 40 registry columns is classified: 39 filterable, Flute Type derived with its reason");
+check(Object.values(COLUMN_FILTERS).filter(s => s.field).every(s =>
+  (s.type === "text" && s.ops.includes("contains")) || (s.type === "number" && s.ops[0] === "between")
+  || (s.type === "enum" && s.ops[0] === "in" && s.values.length > 0)),
+  "U2-SKU-FE-102 operators follow the ruled types: text contains, numbers between, closed vocabularies a value list");
+const filterPendingCtx = { visibility: { customer: "visible", construction: "visible", locations: "visible" },
+  schemaPending: { quote_fields: true, pricing_portfolio: true } };
+check(!columnFilterAvailability("B", filterPendingCtx).available && /migration pending/.test(columnFilterAvailability("B", filterPendingCtx).reason)
+  && !columnFilterAvailability("DZ", filterPendingCtx).available && !columnFilterAvailability("PF", filterPendingCtx).available
+  && columnFilterAvailability("AE", filterPendingCtx).available && columnFilterAvailability("D", filterPendingCtx).available,
+  "U2-SKU-FE-103 a column with no storage yet offers no filter and says why; stored columns still filter");
+const filterHiddenCtx = { visibility: { customer: "not_visible_to_caller", construction: "not_visible_to_caller",
+  locations: "not_visible_to_caller" }, schemaPending: {} };
+check(["E", "A", "I", "AJ"].every(k => !columnFilterAvailability(k, filterHiddenCtx).available
+  && /Not visible to this caller/.test(columnFilterAvailability(k, filterHiddenCtx).reason))
+  && columnFilterAvailability("F", filterHiddenCtx).available,
+  "U2-SKU-FE-104 a column whose master the caller may not read offers no filter, never an answer RLS would falsify");
+check(columnFilterValidation("AE", { op: "between", value: ["", ""] }) && columnFilterValidation("AE", { op: "between", value: ["5", "1"] })
+  && columnFilterValidation("D", { op: "contains", value: "<x>" }) && columnFilterValidation("PT", { op: "in", value: ["Laser"] })
+  && columnFilterValidation("AE", { op: "between", value: ["300", ""] }) === null
+  && columnFilterValidation("D", { op: "blank", value: null }) === null,
+  "U2-SKU-FE-105 the header refuses locally exactly what the route refuses");
+check(columnFilterParam("AE", { op: "between", value: ["300", ""] }) === "length_mm:between:300,"
+  && columnFilterParam("PT", { op: "in", value: ["Flexo", "CMYK"] }) === "print_technology:in:Flexo|CMYK"
+  && columnFilterParam("D", { op: "blank" }) === "plant_item_code:blank"
+  && skuCatalogueQuery({ columns: { AE: { op: "between", value: ["300", "400"] }, D: { op: "contains", value: "NAG" } } })
+    === "/masters/skus?f=plant_item_code%3Acontains%3ANAG&f=length_mm%3Abetween%3A300%2C400",
+  "U2-SKU-FE-106 filters travel to the server as f=field:op:value in registry order; nothing is filtered in the browser");
+check(skuCatalogueQuery({ status: "active" }) === "/masters/skus?status=active"
+  && skuCatalogueQuery({ status: "active|proposed" }) === "/masters/skus?f=status%3Ain%3Aactive%7Cproposed"
+  && sharedStateFromFilter(sharedFilterFromState("active|proposed")) === "active|proposed"
+  && COLUMN_FILTERS.LC.shared === "status" && COLUMN_FILTERS.PF.shared === "portfolio",
+  "U2-SKU-FE-107 lifecycle and portfolio are ONE state shared by the toolbar control and the header");
+check(columnFilterSummary("Length", { op: "between", value: ["300", ""] }) === "Length ≥ 300"
+  && columnFilterScanNotice([{ field: "length_mm", scan_truncated: true }], () => "Length").includes("scan limit")
+  && columnFilterScanNotice([{ field: "length_mm", scan_truncated: false }], () => "Length") === null
+  && normaliseSkuCatalogue({ column_filters: [{ field: "x" }] }).columnFilters.length === 1,
+  "U2-SKU-FE-108 a filter that reached its scan cap is reported as a partial answer, never a complete one");
+check(fixtureCellMatches({ op: "blank" }, { state: "blank" }) && !fixtureCellMatches({ op: "blank" }, { state: "value", text: "0" })
+  && fixtureCellMatches({ op: "between", value: ["0", "0"] }, { state: "value", text: "0" })
+  && !fixtureCellMatches({ op: "not_blank" }, { state: "pending" }),
+  "U2-SKU-FE-109 blank and zero stay distinct in filtering; a pending cell is not 'not blank'");
+check(fixtureSkuCatalogue({ columns: { D: { op: "blank" } } }).skus.map(r => r.id).join() === "9102"
+  && fixtureSkuCatalogue({ status: "active|discontinued" }).skus.every(r => r.status !== "proposed")
+  && fixtureSkuCatalogue({ columns: { D: { op: "blank" } } }).column_filters[0].field === "plant_item_code",
+  "U2-SKU-FE-110 the labelled preview applies the same operators and reports them like the route");
+check(screen.includes("availability={key => columnFilterAvailability(key, filterCtx)}")
+  && screen.includes("disabled={!available || blockedByLimit}") && screen.includes("title={!available ? reason")
+  && screen.includes("<ColumnFilterMenu") && screen.includes("Matches each SKU's latest version.")
+  && screen.includes("Blank is not zero") && screen.includes("Filter reach")
+  && !/requestFullscreen/.test(screen),
+  "U2-SKU-FE-111 every header carries a funnel that is disabled with its reason when it cannot filter, and reach is reported");
+check(skuEmptyState({ plantScope: ["NAG"], anyFilter: true, columnSummaries: ["Length ≥ 300"] }).hint.includes("Length ≥ 300")
+  && skuEmptyState({ plantScope: ["NAG"], anyFilter: true }).hint.includes("latest version"),
+  "U2-SKU-FE-112 an empty filtered answer names the column filters and says version columns read the latest version");
+check(JSON.stringify(SKU_SEARCH_FIELDS) === JSON.stringify(["plant_item_code", "item_name", "item_short_name",
+  "customer_item_code", "softcomp_code", "legacy_plant_item_code", "customer_name"]),
+  "U2-SKU-FE-113 the identity search box is unchanged by the header filters - still identity only");
 console.log(`\n${passes} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);
 console.log("U2 SKU Master frontend fixture gate PASS");
