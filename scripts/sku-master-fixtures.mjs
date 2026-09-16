@@ -9,12 +9,19 @@
 // governed membership with a quantity per member (CDM-44), that the split view
 // is clamped, that the destination is flag- and capability-gated at both the nav
 // entry and the mount, and that the screen is read-only.
+//
+// U2-SKU-FE-67+ guard the ONE SEARCH BOX: it covers the six identity factors
+// and nothing else, words narrow rather than widen, the screen says which
+// factors were actually reached, and an empty answer distinguishes "nothing
+// matched" from "nothing is visible to you".
 import fs from "node:fs";
 import {
   NOT_VISIBLE, PANEL_FOCUS, PENDING, SPEC_FIELD_KEYS, SPLIT_DEFAULT, UNAVAILABLE, adoptionLabel, applicabilityLocationLabel,
   canOpenSkuMaster, clampSplit, constructionLabel, customerLabel, dimensionSummary, familyLabel, formatMeasure,
   gridCellText, latestVersionFacts, normaliseSkuCatalogue, panelLayout, plantItemCodeLabel, qtyPerSetText, replacementLabel,
-  schemaPendingNotice, skuCatalogueQuery, skuPlantScope, skuSearchValidation, skuSetGroups, skuSetView,
+  SEARCH_FIELD_LABELS, SKU_SEARCH_FIELDS, SKU_SEARCH_MAX_TERMS, schemaPendingNotice, searchCoverageNotice,
+  searchScanNotice, searchScopeHint, skuCatalogueQuery, skuEmptyState, skuPlantScope,
+  skuSearchTerms, skuSearchValidation, skuSetGroups, skuSetView,
   specFieldCell, specRowFromCatalogue, specRowFromDetail, specificationRows, unrecordedFieldsNotice, visibilityText,
 } from "../src/lib/skuMasterModel.js";
 import { SKU_FIXTURE_DETAILS, fixtureSkuCatalogue } from "../src/lib/skuMasterFixture.js";
@@ -303,6 +310,97 @@ check((screen.match(/<details style=\{\{ position: "relative" \}\}>/g) || []).le
   && screen.includes("Filters{moreFilters ?") && screen.includes("Columns{hiddenGroups.length ?")
   && screen.includes('aria-label="Refresh SKU list"') && screen.includes("read at ${readAt"),
   "U2-SKU-FE-66 secondary filters and column groups sit in disclosures, and the read time rides on the refresh icon");
+
+// ──────────────────────────────── one search box over identity factors only
+check(JSON.stringify(SKU_SEARCH_FIELDS) === JSON.stringify(["plant_item_code", "item_name", "item_short_name",
+  "customer_item_code", "softcomp_code", "customer_name"])
+  && Object.keys(SEARCH_FIELD_LABELS).length === SKU_SEARCH_FIELDS.length
+  && SKU_SEARCH_FIELDS.every(f => typeof SEARCH_FIELD_LABELS[f] === "string"),
+  "U2-SKU-FE-67 the box covers exactly the six identity factors, each with a name a reader would use");
+const hint = searchScopeHint();
+check(SKU_SEARCH_FIELDS.every(f => hint.includes(SEARCH_FIELD_LABELS[f]))
+  && /identity only/i.test(hint) && /every word must match/i.test(hint)
+  && /lifecycle, plant and specification/i.test(hint),
+  "U2-SKU-FE-68 the box states what it searches, that words narrow, and what it deliberately does not search");
+
+check(JSON.stringify(skuSearchTerms("  Pernod  pernod   375 ")) === JSON.stringify(["Pernod", "375"])
+  && skuSearchTerms("").length === 0 && skuSearchTerms(null).length === 0,
+  "U2-SKU-FE-69 words are split and de-duplicated case-insensitively, so a repeat costs no extra read");
+check(skuSearchValidation("pernod 375") === null
+  && skuSearchValidation("a b c d e f") === `Search is limited to ${SKU_SEARCH_MAX_TERMS} words.`
+  && skuSearchValidation("a a a a a a") === null
+  && skuSearchValidation("50%") !== null && skuSearchValidation("A".repeat(61)) !== null,
+  "U2-SKU-FE-70 the box enforces the route's own character, length and word rules before asking");
+check(skuCatalogueQuery({ q: "  pernod 375  " }) === "/masters/skus?q=pernod+375",
+  "U2-SKU-FE-71 the whole phrase goes to the server; nothing is matched in the browser");
+
+// The server says what it reached; the screen repeats it in words.
+const ALL_SEARCHED = Object.fromEntries(SKU_SEARCH_FIELDS.map(f => [f, "searched"]));
+check(searchCoverageNotice({ executed: true, fields: ALL_SEARCHED }) === null
+  && searchCoverageNotice({ executed: false, fields: ALL_SEARCHED }) === null
+  && searchCoverageNotice(null) === null,
+  "U2-SKU-FE-72 a search that reached every identity factor says nothing extra");
+const degraded = searchCoverageNotice({ executed: true, fields: { ...ALL_SEARCHED,
+  item_name: "schema_pending", item_short_name: "schema_pending", customer_name: "not_visible_to_caller" } });
+check(degraded.includes("Item Name and Item Short Name were not searched because their storage is not activated yet")
+  && degraded.includes("Customer name was not searched because you may not read the Customer master")
+  && degraded.includes("A SKU matching only on those was not found here."),
+  "U2-SKU-FE-73 an unreachable factor is named with its reason - the search degrades visibly, never silently");
+check(searchCoverageNotice({ executed: true, fields: { ...ALL_SEARCHED, softcomp_code: "unavailable" } })
+  .includes("SoftComp Code was not searched because that read did not succeed"),
+  "U2-SKU-FE-74 a failed factor read is distinct from one that has no storage and one that is not visible");
+check(searchScanNotice({ scan_truncated: true }).includes("partial")
+  && searchScanNotice({ scan_truncated: false }) === null && searchScanNotice(null) === null,
+  "U2-SKU-FE-75 reaching the scan bound is reported as a partial answer, never as a complete one");
+
+const noScope = skuEmptyState({ plantScope: [] });
+const noMatch = skuEmptyState({ plantScope: ["NAG"], search: { executed: true, terms: ["pernod", "375"], fields: ALL_SEARCHED } });
+const filtered = skuEmptyState({ plantScope: ["NAG"], anyFilter: true });
+const nothing = skuEmptyState({ plantScope: ["NAG"] });
+check(noScope.title !== noMatch.title && noMatch.title !== filtered.title && filtered.title !== nothing.title,
+  "U2-SKU-FE-76 four empty answers stay four distinct claims, never one 'no results'");
+check(/no plant is in your access scope/i.test(noScope.title) && /visibility\s+limit/i.test(noScope.hint),
+  "U2-SKU-FE-77 no plant access is stated as a visibility limit, not as an empty master");
+check(noMatch.title.includes('"pernod" + "375"') && /visible to you/i.test(noMatch.title)
+  && noMatch.hint.includes("Lifecycle, plant") && /cannot see reads the same as one that does not exist/i.test(noMatch.hint),
+  "U2-SKU-FE-78 'no match' names the words, says it speaks only for what you can see, and what was not searched");
+check(skuEmptyState({ plantScope: ["NAG"], search: { executed: true, terms: ["x"],
+  fields: { ...ALL_SEARCHED, item_name: "schema_pending", item_short_name: "schema_pending" } } })
+  .hint.includes("storage is not activated yet"),
+  "U2-SKU-FE-79 an empty answer from a degraded search carries the reason, not a bare 'no match'");
+
+check(normaliseSkuCatalogue({ search: { executed: true, terms: ["a"] } }).search.executed === true
+  && normaliseSkuCatalogue({}).search === null,
+  "U2-SKU-FE-80 the search report is carried through normalisation, and its absence is null");
+
+// The fixture preview searches the same six factors and nothing else.
+const fixtureIds = q => fixtureSkuCatalogue({ q }).skus.map(r => r.id);
+check(fixtureIds("__U2_FIXTURE_ONLY__/NAG/0001Q1").length === 1 && fixtureIds("PARTITION").length === 1
+  && fixtureIds("FIX-CIC-778").length === 1 && fixtureIds("FIX-011145").length === 1
+  && fixtureIds("Distillers Unit 1").length > 0,
+  "U2-SKU-FE-81 the preview finds a SKU by code, name, Customer Item Code, SoftComp Code and Customer name");
+check(fixtureIds("RSC").length === 0 && fixtureIds("2L+2W+F").length === 0
+  && fixtureIds("discontinued").length === 0 && fixtureIds("Pune").length === 0,
+  "U2-SKU-FE-82 a specification, lifecycle or plant value is NOT an identity factor and matches nothing");
+const wide = fixtureIds("Distillers");
+const narrow = fixtureIds("Distillers 375");
+check(wide.length > narrow.length && narrow.every(id => wide.includes(id)) && narrow.length > 0,
+  "U2-SKU-FE-83 a second word narrows the answer to a subset - words never widen it");
+check(fixtureSkuCatalogue({ q: "Distillers 375" }).search.terms.length === 2
+  && fixtureSkuCatalogue({}).search === null,
+  "U2-SKU-FE-84 the preview reports its own search reach in the governed response shape");
+
+check(screen.includes('aria-label="Search SKU identity"') && !screen.includes('aria-label="Search Plant Item Code"')
+  && !screen.includes('placeholder="Plant Item Code… ↵"')
+  && (screen.match(/<input type="search"/g) || []).length === 1,
+  "U2-SKU-FE-85 one box, named for identity - the Plant-Item-Code-only box is gone");
+check(screen.includes("title={searchError || searchScopeHint()}")
+  && screen.includes("searchCoverageNotice(catalogue.search)") && screen.includes("searchScanNotice(catalogue.search)")
+  && screen.includes('role="status"') && screen.includes("Search reach"),
+  "U2-SKU-FE-86 the screen shows the box's reach on hover and its shortfall as a visible strip");
+check(screen.includes("skuEmptyState({ search: catalogue.search, anyFilter")
+  && !screen.includes('title="No governed SKUs match."'),
+  "U2-SKU-FE-87 the empty state comes from the one honest rule, not a fixed sentence");
 
 console.log(`\n${passes} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);

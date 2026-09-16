@@ -154,17 +154,45 @@ export const SKU_FIXTURE_DETAILS = {
     lineage: { replaced_by: null, replacement_visible: true, replaces: [] }, sets: [] },
 };
 
+// The six identity factors the one search box covers, and nothing else -
+// deliberately NOT lifecycle, plant, portfolio or any specification value.
+// The fixture reads the latest version only, where the governed route searches
+// every version's Item Name; that is a fixture simplification, not a rule.
+const identityText = row => [
+  row.plant_item_code,
+  row.latest_version?.quote_fields?.item_name,
+  row.latest_version?.quote_fields?.item_short_name,
+  ...(row.references?.customer_item_code || []),
+  ...(row.references?.softcomp_code || []),
+  row.customer?.display_name,
+].filter(Boolean).join(" ").toLowerCase();
+
 // Fixture-only stand-in for the database filtering the governed route does.
 export function fixtureSkuCatalogue({ plant, status, q, familyId, partyId } = {}) {
-  const search = (q || "").trim().toLowerCase();
+  const terms = fixtureSearchTerms(q);
   const skus = ROWS.filter(row => (!plant || row.plant.plant_code === plant)
     && (!status || row.status === status)
-    && (!search || (row.plant_item_code || "").toLowerCase().includes(search))
+    // Every word must match somewhere: words narrow, they never widen.
+    && terms.every(term => identityText(row).includes(term.toLowerCase()))
     && (!familyId || row.family?.id === Number(familyId))
     && (!partyId || row.party_id === Number(partyId)));
   return { skus, truncated: false, limit: 200, plant_scope: ["NAG", "PUN"],
-    filters: { plant: plant || null, status: status || null, q: search || null,
+    filters: { plant: plant || null, status: status || null, q: (q || "").trim() || null,
       party_id: partyId || null, family_id: familyId || null },
+    // The fixture carries every identity factor, so all six are searched.
+    search: terms.length ? { q: (q || "").trim(), terms, executed: true, scan_truncated: false, degraded: false,
+      fields: { plant_item_code: "searched", item_name: "searched", item_short_name: "searched",
+        customer_item_code: "searched", softcomp_code: "searched", customer_name: "searched" } } : null,
     detail_visibility: { customer: "visible", construction: "visible", references: "visible", locations: "visible", sets: "visible" },
     ...common };
+}
+
+function fixtureSearchTerms(q) {
+  const seen = new Set();
+  const terms = [];
+  for (const word of (q || "").trim().split(/\s+/).filter(Boolean)) {
+    const key = word.toLowerCase();
+    if (!seen.has(key)) { seen.add(key); terms.push(word); }
+  }
+  return terms;
 }

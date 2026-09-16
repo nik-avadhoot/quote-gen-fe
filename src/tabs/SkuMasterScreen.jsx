@@ -8,6 +8,15 @@
 //
 // ── LAYOUT ────────────────────────────────────────────────────────────────
 // The TopBar already names the screen, so there is no second page header.
+// ── ONE SEARCH BOX, IDENTITY ONLY ─────────────────────────────────────────
+// The box matches identity and nothing else: Plant Item Code, Item Name, Item
+// Short Name, Customer Item Code, SoftComp Code and the owning Customer's name.
+// Every word must match somewhere, so words narrow. Lifecycle, plant and every
+// specification field keep their own controls. The server searches in the
+// database, caller-scoped, and reports which of the six it ACTUALLY reached;
+// a field with no storage yet or one this caller may not read is named on the
+// screen rather than quietly missing rows.
+//
 // Left: one toolbar (search, lifecycle, plant, Filters ▾, Columns ▾, count,
 // refresh, expand — the Batch Builder toolbar idiom) above SKUs row by row with
 // the CDM-43 fields in SPEC sheet groups and sheet order, code and short name
@@ -50,7 +59,8 @@ import {
   APPLICABILITY_SCOPE_LABELS, REFERENCE_KIND_LABELS, SKU_STATUSES, SPLIT_DEFAULT, adoptionLabel,
   applicabilityLocationLabel, clampSplit, constructionLabel, customerLabel, familyLabel, gridCellText,
   normaliseSkuCatalogue, panelLayout, plantItemCodeLabel, plantLabel, replacementLabel, schemaPendingNotice,
-  skuCatalogueQuery, skuPlantScope, skuSearchValidation, skuSetGroups, skuSetView, specFieldCell,
+  searchCoverageNotice, searchScanNotice, searchScopeHint, skuCatalogueQuery, skuEmptyState, skuPlantScope,
+  skuSearchValidation, skuSetGroups, skuSetView, specFieldCell,
   specRowFromCatalogue, specRowFromDetail, visibilityText,
 } from "../lib/skuMasterModel.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
@@ -262,6 +272,9 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   const partyFiltersVisible = customerVisibility === "visible";
   const gridCtx = { visibility: catalogue.visibility || {}, schemaPending: catalogue.schemaPending || {} };
   const pendingNotice = schemaPendingNotice(catalogue.schemaPending);
+  // What the one identity box actually reached on this read, in words.
+  const searchCoverage = searchCoverageNotice(catalogue.search);
+  const searchScan = searchScanNotice(catalogue.search);
   const layout = panelLayout(split, focusPanel);
   const fieldCols = focusPanel === "detail" ? 3 : split >= 62 ? 1 : 2;
   const moreFilters = [filters.familyId, filters.partyId].filter(Boolean).length;
@@ -282,10 +295,11 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
           minWidth: 0, display: "flex", flexDirection: "column", background: C.white }}>
           <div role="toolbar" aria-label="SKU list controls" style={toolbar}>
             <form onSubmit={applySearch} style={{ display: "contents" }}>
-              <input type="search" aria-label="Search Plant Item Code" placeholder="Plant Item Code… ↵" value={searchDraft}
-                title={searchError || "Press Enter to search Plant Item Codes"}
+              <input type="search" aria-label="Search SKU identity" placeholder="Code, name or customer… ↵" value={searchDraft}
+                title={searchError || searchScopeHint()}
                 onChange={e => setSearchDraft(e.target.value)}
-                style={{ ...control, width: 170, fontFamily: mono, borderColor: searchError ? C.red : C.border }} />
+                style={{ ...control, width: 232, minWidth: 140, flex: "0 1 232px", fontFamily: mono,
+                  borderColor: searchError ? C.red : searchCoverage ? C.amber : C.border }} />
             </form>
             <select aria-label="Lifecycle" value={filters.status} onChange={e => setFilter("status", e.target.value)} style={control}>
               <option value="">All lifecycles</option>
@@ -351,6 +365,16 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
               {focusPanel === "list" ? <CollapseIcon size={14} /> : <ExpandIcon size={14} />}</button>
           </div>
 
+          {(searchCoverage || searchScan) && (
+            <div role="status" style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 10px", flexShrink: 0,
+              borderBottom: `1px solid ${C.amber}55`, background: C.amberL, fontSize: T.label, color: C.amberD,
+              lineHeight: 1.35 }}>
+              <span style={{ fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase",
+                fontSize: T.micro, whiteSpace: "nowrap" }}>Search reach</span>
+              <span style={{ minWidth: 0 }}>{[searchCoverage, searchScan].filter(Boolean).join(" ")}</span>
+            </div>
+          )}
+
           <div style={{ flex: 1, minHeight: 0, overflow: "auto", background: C.white }}>
             {catalogue.status === "loading" && <LoadingState label="Loading SKUs…" />}
             {catalogue.status === "error" && (
@@ -361,8 +385,8 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
               </div>
             )}
             {catalogue.status === "ready" && (gridRows.length === 0
-              ? <EmptyState title="No governed SKUs match."
-                  hint="SKUs appear here once proposed or published for a plant you can access." />
+              ? <EmptyState {...skuEmptyState({ search: catalogue.search, anyFilter,
+                  plantScope: fixtureOnly ? scope : catalogue.plantScope })} />
               : <SpecGrid rows={gridRows} ctx={gridCtx} groups={visibleGroups} selectedId={selectedId}
                   onSelect={setSelectedId} groupBySet={groupBySet} />)}
           </div>

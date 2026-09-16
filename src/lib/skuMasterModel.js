@@ -18,7 +18,31 @@
 
 export const SKU_STATUSES = ["proposed", "active", "discontinued"];
 export const SKU_SEARCH_MAX = 60;
+export const SKU_SEARCH_MAX_TERMS = 5;
 const SEARCH_CHARS = /^[A-Za-z0-9 ._/-]*$/;
+
+// ── One search box, identity only ──────────────────────────────────────────
+// The box matches identity factors and NOTHING else. Lifecycle, plant,
+// portfolio and every specification field keep their own controls, so a
+// lifecycle word never quietly filters the list from the search box.
+export const SKU_SEARCH_FIELDS = ["plant_item_code", "item_name", "item_short_name",
+  "customer_item_code", "softcomp_code", "customer_name"];
+
+export const SEARCH_FIELD_LABELS = {
+  plant_item_code: "Plant Item Code",
+  item_name: "Item Name",
+  item_short_name: "Item Short Name",
+  customer_item_code: "Customer Item Code",
+  softcomp_code: "SoftComp Code",
+  customer_name: "Customer name",
+};
+
+// Why a field could not be searched. Each is a REASON, never silence.
+const SEARCH_STATE_REASON = {
+  schema_pending: "their storage is not activated yet",
+  not_visible_to_caller: "you may not read the Customer master",
+  unavailable: "that read did not succeed",
+};
 
 export const NOT_VISIBLE = "Not visible to this caller";
 export const UNAVAILABLE = "Details unavailable";
@@ -60,15 +84,91 @@ export function canOpenSkuMaster(profile) {
   return skuPlantScope(profile).length > 0;
 }
 
+export function skuSearchTerms(q) {
+  const seen = new Set();
+  const terms = [];
+  for (const word of (q || "").trim().split(/\s+/).filter(Boolean)) {
+    const key = word.toLowerCase();
+    if (!seen.has(key)) { seen.add(key); terms.push(word); }
+  }
+  return terms;
+}
+
+// The same character, length and word rules the route enforces, so the box
+// refuses locally exactly what the server would refuse.
 export function skuSearchValidation(q) {
   const value = (q || "").trim();
   if (value.length > SKU_SEARCH_MAX) return `Search is limited to ${SKU_SEARCH_MAX} characters.`;
-  if (!SEARCH_CHARS.test(value)) return "Search Plant Item Codes with letters, digits, spaces or . _ / - only.";
+  if (!SEARCH_CHARS.test(value)) return "Search with letters, digits, spaces or . _ / - only.";
+  if (skuSearchTerms(value).length > SKU_SEARCH_MAX_TERMS) {
+    return `Search is limited to ${SKU_SEARCH_MAX_TERMS} words.`;
+  }
   return null;
 }
 
+export function searchScopeHint() {
+  return `Searches identity only — ${SKU_SEARCH_FIELDS.map(f => SEARCH_FIELD_LABELS[f]).join(", ")}. `
+    + "Every word must match somewhere, so words narrow the list. Lifecycle, plant and specification "
+    + "have their own controls. Press Enter to search.";
+}
+
+// Names the identity fields that were NOT searched, and why. Returning null
+// means all six were searched - never that the question was not asked.
+export function searchCoverageNotice(search) {
+  if (!search || search.executed !== true) return null;
+  const states = search.fields || {};
+  const byReason = {};
+  for (const field of SKU_SEARCH_FIELDS) {
+    const state = states[field] || "unavailable";
+    if (state === "searched") continue;
+    (byReason[state] ||= []).push(SEARCH_FIELD_LABELS[field]);
+  }
+  const parts = Object.entries(byReason).map(([state, names]) =>
+    `${listWords(names)} ${names.length === 1 ? "was" : "were"} not searched because `
+    + `${SEARCH_STATE_REASON[state] || "that read did not succeed"}`);
+  if (!parts.length) return null;
+  return `${parts.join("; ")}. A SKU matching only on those was not found here.`;
+}
+
+export function searchScanNotice(search) {
+  return search?.scan_truncated === true
+    ? "More SKUs matched than were scanned, so this answer is partial — add a word to narrow it."
+    : null;
+}
+
+function listWords(names) {
+  if (names.length <= 1) return names[0] || "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+// Four different empty answers, never one. "Nothing matched" and "nothing is
+// visible to you" are different facts, and RLS makes absent and hidden the
+// same answer, so the wording says which claim is actually being made.
+export function skuEmptyState({ search, anyFilter, plantScope } = {}) {
+  if (!(plantScope || []).length) {
+    return { title: "No plant is in your access scope.",
+      hint: "The SKU Master lists SKUs at plants where you hold plant access. That is a visibility "
+        + "limit, not an empty master." };
+  }
+  const coverage = searchCoverageNotice(search);
+  if (search?.executed === true) {
+    const words = (search.terms || []).map(t => `"${t}"`).join(" + ");
+    return { title: `No SKU visible to you matches ${words || "that search"}.`,
+      hint: coverage || `All ${SKU_SEARCH_FIELDS.length} identity factors were searched. Lifecycle, plant `
+        + "and specification are not searched from this box — use their own controls. A SKU you cannot "
+        + "see reads the same as one that does not exist." };
+  }
+  if (anyFilter) {
+    return { title: "No governed SKU visible to you matches these filters.",
+      hint: "Clear a filter to widen the answer. A SKU you cannot see reads the same as one that does not exist." };
+  }
+  return { title: "No governed SKUs are visible to you here.",
+    hint: "SKUs appear here once proposed or published for a plant you can access." };
+}
+
 // Only filters that carry a value reach the query string; the server applies
-// them in the database, so nothing unrelated is loaded and filtered here.
+// them in the database - including the identity search - so nothing unrelated
+// is loaded and filtered here, and no other plant's rows are ever fetched.
 export function skuCatalogueQuery({ plant, status, q, familyId, partyId } = {}) {
   const params = new URLSearchParams();
   if (plant) params.set("plant", plant);
@@ -184,6 +284,7 @@ export function normaliseSkuCatalogue(data) {
     customerVisibility: data?.detail_visibility?.customer || "unavailable",
     visibility: data?.detail_visibility || {},
     schemaPending: data?.schema_pending || {},
+    search: data?.search || null,
     plantScope: Array.isArray(data?.plant_scope) ? data.plant_scope : [],
   };
 }
