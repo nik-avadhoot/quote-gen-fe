@@ -126,12 +126,13 @@ export function useSplitPanels(initial = SPLIT_DEFAULT) {
 
 export const denseTable = {
   borderCollapse: "collapse", width: "100%", fontFamily: sans, fontSize: T.body, tableLayout: "auto",
+  lineHeight: 1.45,
 };
 
 export const denseHead = {
   position: "sticky", top: 0, zIndex: 5, background: C.slateM, color: C.white,
   fontSize: T.micro, fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase",
-  textAlign: "left", padding: "4px 8px", whiteSpace: "nowrap",
+  textAlign: "left", padding: "4px 8px", whiteSpace: "nowrap", lineHeight: 1.45,
 };
 
 // 26px compact rows: 8px of padding around one 11px line, and nothing else.

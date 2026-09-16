@@ -126,7 +126,8 @@ check(workspace.includes("initialBatchId={fixtureOnly ? null : quoteWorkspaceReq
   && catalogueScreen.includes("/quotes/workspace?batch_id=${encodeURIComponent(batchId)}")
   && catalogueScreen.includes("Opened from exact Batch identity"),
   "U5-FE-29 a durable Batch identity resolves its newest caller-visible linked revision");
-check(myBatches.includes("Open Quote evidence") && myBatches.includes("batch-catalogue-${row.id}-${Date.now()}")
+check(myBatches.includes(">Quote evidence</button>") && myBatches.includes("Open the linked immutable Quote evidence")
+  && myBatches.includes("batch-catalogue-${row.id}-${Date.now()}")
   && batchWorkspace.includes("Linked immutable Quote evidence")
   && batchWorkspace.includes("batch-workspace-${batch.id}-${Date.now()}"),
   "U5-FE-30 My Batches and the reopened Batch workspace both expose the durable Quote handoff");
