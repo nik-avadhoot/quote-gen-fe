@@ -12,6 +12,7 @@ import {
 } from "../lib/pricingBasisModel.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, SummaryRow } from "../ui/dataDisplay.jsx";
+import { denseCell, denseHead, denseTable } from "../ui/screenStandards.js";
 import { C, T, mono, sans } from "../theme.js";
 import BatchPricingCard from "./batch/BatchPricingCard.jsx";
 
@@ -84,10 +85,15 @@ function VersionHistory({ label, versions = [] }) {
   );
 }
 
-function Cell({ children, emphasis = false }) {
-  return <td style={{ padding: "6px 7px", borderTop: `1px solid ${C.border}`,
-    fontSize: 9.5, color: C.slateM, fontWeight: emphasis ? 800 : 500,
-    verticalAlign: "top" }}>{children}</td>;
+// Drill-down tables follow the shared dense-row standard: one 26px line per
+// entry, secondary text on hover rather than a second line in the row.
+function Cell({ children, emphasis = false, title }) {
+  return <td title={title ?? (typeof children === "string" ? children : undefined)}
+    style={{ ...denseCell, color: C.slateM, fontWeight: emphasis ? 800 : 500 }}>{children}</td>;
+}
+
+function Head({ children }) {
+  return <th scope="col" style={{ ...denseHead, position: "static", background: C.paper, color: C.slateM }}>{children}</th>;
 }
 
 function DrilldownNotice({ children }) {
@@ -137,15 +143,15 @@ function RateDrilldown({ rate }) {
         </div>
       ) : (
         <div style={{ overflowX: "auto", marginTop: 8 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
-            <thead><tr style={{ textAlign: "left", fontSize: 8.5, color: C.slateL }}>
-              <th>Grade</th><th>Base price</th><th>Discount</th><th>Inbound freight</th>
-              <th>Supplier credit · upstream</th><th>Effective material rate</th>
+          <table style={{ ...denseTable, minWidth: 720, border: `1px solid ${C.border}` }}>
+            <thead><tr>
+              <Head>Grade</Head><Head>Base price</Head><Head>Discount</Head><Head>Inbound freight</Head>
+              <Head>Supplier credit · upstream</Head><Head>Effective material rate</Head>
             </tr></thead>
             <tbody>{entries.map(entry => (
               <tr key={entry.id}>
-                <Cell emphasis><PermanentCode code={entry.grade_code || "Grade unavailable"} />
-                  {entry.description && <div style={{ fontWeight: 500 }}>{entry.description}</div>}</Cell>
+                <Cell emphasis title={entry.description || undefined}><PermanentCode code={entry.grade_code || "Grade unavailable"} />
+                  {entry.description && <span style={{ fontWeight: 500, marginLeft: 6 }}>{entry.description}</span>}</Cell>
                 <Cell>{value(entry.price, "/kg")}</Cell>
                 <Cell>{value(entry.discount, "/kg")}</Cell>
                 <Cell>{value(entry.freight, "/kg")}</Cell>
@@ -202,9 +208,9 @@ function FreightDrilldown({ freight }) {
         </div>
       ) : (
         <div style={{ overflowX: "auto", marginTop: 8 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 650 }}>
-            <thead><tr style={{ textAlign: "left", fontSize: 8.5, color: C.slateL }}>
-              <th>Origin plant</th><th>Destination Ship-to</th><th>Customer</th><th>Destination state</th><th>Rate / kg</th>
+          <table style={{ ...denseTable, minWidth: 650, border: `1px solid ${C.border}` }}>
+            <thead><tr>
+              <Head>Origin plant</Head><Head>Destination Ship-to</Head><Head>Customer</Head><Head>Destination state</Head><Head>Rate / kg</Head>
             </tr></thead>
             <tbody>{entries.map(entry => {
               const destination = entry.destination;
@@ -377,9 +383,9 @@ function SectorDefaultDrilldown({ sector, defaults }) {
               </div>
             </div>
             <div style={{ overflowX: "auto", marginTop: 8 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 420 }}>
-                <thead><tr style={{ textAlign: "left", fontSize: 8.5, color: C.slateL }}>
-                  <th>Customer payment term</th><th>Approved derivation</th><th>Effective customer interest</th>
+              <table style={{ ...denseTable, minWidth: 420, border: `1px solid ${C.border}` }}>
+                <thead><tr>
+                  <Head>Customer payment term</Head><Head>Approved derivation</Head><Head>Effective customer interest</Head>
                 </tr></thead>
                 <tbody>{interest.examples.map(example => <tr key={example.days}>
                   <Cell emphasis>{example.days} days</Cell>
