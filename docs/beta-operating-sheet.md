@@ -52,8 +52,12 @@ Complete once per beta day and after any deployment:
 
 ## Feedback channel and issue log
 
-Feedback channel: **Pending PO nomination.** Until nominated, record defects in the active Codex task
-and do not use informal messages as acceptance evidence.
+Feedback channel: **"NAG App Beta Tracker" Google Sheet** (Product Owner nomination, 2026-09-17).
+Every defect, difference and observation is recorded there; informal messages are not acceptance
+evidence. The table below mirrors the sheet's columns so an entry can be copied either way.
+
+Daily checker: **NikunjRL** (Product Owner nomination, 2026-09-17) — owns the daily operating check
+above and the alongside-week spreadsheet comparison for every issued beta Quote.
 
 | Date/time | Quote/Batch reference | Reporter | Classification | Summary | Owner | State |
 |---|---|---|---|---|---|---|
