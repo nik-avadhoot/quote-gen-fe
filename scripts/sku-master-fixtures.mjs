@@ -263,6 +263,9 @@ const sidebar = read("../src/ui/Sidebar.jsx");
 const shell = read("../src/QuotationApp.jsx");
 const app = read("../src/App.jsx");
 const flags = read("../src/lib/featureFlags.js");
+const icons = read("../src/ui/icons.jsx");
+const standards = read("../src/ui/screenStandards.js");
+const chrome = read("../src/ui/screenChrome.jsx");
 check(sidebar.includes('isFeatureEnabled("u2_sku_master")&&canOpenSkuMaster(profile)')
   && shell.includes('tab==="skus"&&isFeatureEnabled("u2_sku_master")&&canOpenSkuMaster(profile)&&<SkuMasterScreen/>'),
   "U2-SKU-FE-45 the same flag and capability gate the nav entry and the mount");
@@ -286,40 +289,38 @@ check(screen.includes('<ProvenanceTag kind="governed" />') && screen.includes('<
 check(screen.includes('verdict.kind === "access-denied"') && screen.includes("AccessDeniedState")
   && screen.includes("resp.status === 404"),
   "U2-SKU-FE-52 a denial renders as access denied and an invisible SKU as not visible, never as an empty list");
-check(screen.includes('role="separator"') && screen.includes("onPointerDown={startDrag}")
-  && screen.includes("onDoubleClick={() => setSplit(SPLIT_DEFAULT)}") && screen.includes("clampSplit(")
-  && screen.includes("onKeyDown={nudgeSplit}") && screen.includes("useState(SPLIT_DEFAULT)"),
+check(screen.includes('<PanelDivider label="Resize SKU list and SKU detail"') && screen.includes("onPointerDown={startDrag}")
+  && screen.includes("onReset={() => setSplit(SPLIT_DEFAULT)}") && screen.includes("onKeyDown={nudgeSplit}")
+  && screen.includes("useSplitPanels(SPLIT_DEFAULT)"),
   "U2-SKU-FE-53 the divider opens at 50 : 50, drags and moves by keyboard within the clamp, and resets on double-click");
 check(screen.includes("SKU_SPEC_GROUPS") && screen.includes("PRODUCTION_BACKLOG") && screen.includes("specFieldCell(c.key, row, ctx)")
   && screen.includes("specFieldCell(f.key, row, ctx)"),
   "U2-SKU-FE-54 grid and deep-dive both render from the registry through the one field rule");
 
-check(screen.includes('onClick={() => toggleFocus("list")}') && screen.includes('onClick={() => toggleFocus("detail")}')
-  && screen.includes('aria-pressed={focusPanel === "list"}') && screen.includes('aria-pressed={focusPanel === "detail"}')
+check(screen.includes('<PanelFocusToggle panel="list" noun="list" focused={focusPanel === "list"} onToggle={toggleFocus} />')
+  && screen.includes('<PanelFocusToggle panel="detail" noun="detail" focused={focusPanel === "detail"} onToggle={toggleFocus}')
   && screen.includes("layout.showList &&") && screen.includes("layout.showDetail &&") && screen.includes("layout.showDivider &&"),
   "U2-SKU-FE-58 each panel has its own focus toggle, and focus hides the other panel and the divider");
-check(screen.includes("setSidebarCollapsed(true)") && screen.includes("setSidebarCollapsed(sidebarBeforeFocus.current)")
-  && (screen.match(/setSidebarCollapsed\(sidebarBeforeFocus\.current\)/g) || []).length === 2,
+check(screen.includes("usePanelFocus()") && standards.includes("setSidebarCollapsed(true)")
+  && standards.includes("setSidebarCollapsed(sidebarBeforeFocus.current)"),
   "U2-SKU-FE-59 focus collapses the app navigation and restores it on exit and when the screen unmounts");
-check(screen.includes('e.key === "Escape" && focusRef.current') && screen.includes("onKeyDown={exitFocusOnEscape}")
+check(standards.includes('e.key === "Escape" && focusRef.current') && screen.includes("onKeyDown={exitFocusOnEscape}")
   && !/requestFullscreen|fullscreenElement|window\.addEventListener\("keydown"/.test(screen),
   "U2-SKU-FE-60 Escape exits focus through a screen-scoped handler; the browser Fullscreen API is never used");
-check(screen.includes('disabled={selectedId == null && focusPanel !== "detail"}')
+check(screen.includes('disabled={selectedId == null} disabledTitle="Select a SKU first"')
   && screen.includes('focusPanel === "detail" ? 3'),
   "U2-SKU-FE-61 detail focus needs a selected SKU and spreads fields across three columns");
 check(app.includes("<AppStateProvider>\n      <SkuMasterScreen fixtureOnly"),
   "U2-SKU-FE-62 the fixture preview mounts inside the app state provider like the other previews");
 
 // ───────────────────────────────────────────── expand icons and header density
-const icons = read("../src/ui/icons.jsx");
-const standards = read("../src/ui/screenStandards.js");
 check(icons.includes("export const ExpandIcon") && icons.includes("export const CollapseIcon")
   && icons.includes('"aria-hidden": true') && icons.includes('stroke: "currentColor"'),
   "U2-SKU-FE-63 expand and collapse are decorative stroke icons that take the button colour");
-check(screen.includes('aria-label={focusPanel === "list" ? "Collapse list" : "Expand list"}')
-  && screen.includes('aria-label={focusPanel === "detail" ? "Collapse detail" : "Expand detail"}')
-  && (screen.match(/<ExpandIcon size=\{14\} \/>/g) || []).length === 2
-  && (screen.match(/<CollapseIcon size=\{14\} \/>/g) || []).length === 2
+check(screen.includes('<PanelFocusToggle panel="list" noun="list"')
+  && screen.includes('<PanelFocusToggle panel="detail" noun="detail"')
+  && chrome.includes('aria-label={focused ? `Collapse ${noun}` : `Expand ${noun}`}')
+  && chrome.includes('focused ? <CollapseIcon size={14} /> : <ExpandIcon size={14} />')
   && !/>\s*(Focus list|Focus detail|Exit focus)\s*</.test(screen),
   "U2-SKU-FE-64 each panel's focus toggle is an expand / collapse icon with an accessible name, not a text button");
 check(!screen.includes("<h2") && !screen.includes("<h1") && (screen.match(/role="toolbar"/g) || []).length === 2

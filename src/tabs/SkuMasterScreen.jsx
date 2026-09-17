@@ -71,7 +71,7 @@ import {
 import {
   APPLICABILITY_SCOPE_LABELS, PENDING, PRICING_PORTFOLIO_NOTE, REFERENCE_KIND_LABELS, SKU_STATUSES, SPLIT_DEFAULT,
   adoptionLabel,
-  applicabilityLocationLabel, clampSplit, constructionLabel, customerLabel, familyLabel, gridCellText,
+  applicabilityLocationLabel, constructionLabel, customerLabel, familyLabel, gridCellText,
   normaliseSkuCatalogue, panelLayout, plantItemCodeLabel, plantLabel, replacementLabel, schemaPendingNotice,
   searchCoverageNotice, searchScanNotice, searchScopeHint, skuCatalogueQuery, skuEmptyState, skuPlantScope,
   skuSearchValidation, skuSetGroups, skuSetView, specFieldCell,
@@ -85,8 +85,11 @@ import { skuOpsAuthority, skuOpsMode, skuProposalPlants } from "../lib/skuGovern
 import { SkuActionsMenu, SkuProposeForm, SkuReferenceControls, SkuVersionEditor } from "./sku/SkuGovernedActions.jsx";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag, SummaryRow } from "../ui/dataDisplay.jsx";
-import { CollapseIcon, ExpandIcon, RefreshIcon } from "../ui/icons.jsx";
-import { control, iconButton, menuPanel, menuSummary, segment, toolbar } from "../ui/screenStandards.js";
+import { RefreshIcon } from "../ui/icons.jsx";
+import { PanelDivider, PanelFocusToggle } from "../ui/screenChrome.jsx";
+import {
+  control, iconButton, menuPanel, menuSummary, segment, toolbar, usePanelFocus, useSplitPanels,
+} from "../ui/screenStandards.js";
 import { C, T, mono, sans } from "../theme.js";
 
 const EMPTY_FILTERS = { plant: "", status: "", q: "", portfolio: "", familyId: "", partyId: "", columns: {} };
@@ -137,34 +140,14 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   // read is issued and no option names a record the caller has not been shown.
   const [knownFamilies, setKnownFamilies] = useState({});
   const [knownCustomers, setKnownCustomers] = useState({});
-  const [split, setSplit] = useState(SPLIT_DEFAULT);
-  const [dragging, setDragging] = useState(false);
   const [hiddenGroups, setHiddenGroups] = useState([]);
   const [groupBySet, setGroupBySet] = useState(false);
   const [openFilter, setOpenFilter] = useState(null); // { key, anchor } | null
-  const bodyRef = useRef(null);
-  const { setSidebarCollapsed, sidebarCollapsed, showToast } = useAppState();
+  const { showToast } = useAppState();
   const [editPlan, setEditPlan] = useState(null);   // the version editor's plan, or null
   const [proposing, setProposing] = useState(false);
-  const [focusPanel, setFocusPanel] = useState(null); // null · "list" · "detail"
-  const focusRef = useRef(null);
-  const sidebarBeforeFocus = useRef(sidebarCollapsed);
-
-  const setFocus = next => {
-    const was = focusRef.current;
-    if (next && !was) {
-      sidebarBeforeFocus.current = sidebarCollapsed;
-      setSidebarCollapsed(true);
-    }
-    if (!next && was) setSidebarCollapsed(sidebarBeforeFocus.current);
-    focusRef.current = next;
-    setFocusPanel(next);
-  };
-  const toggleFocus = panel => setFocus(focusRef.current === panel ? null : panel);
-  // Leaving the screen while focused must not strand the navigation collapsed.
-  useEffect(() => () => {
-    if (focusRef.current) setSidebarCollapsed(sidebarBeforeFocus.current);
-  }, [setSidebarCollapsed]);
+  const { focusPanel, toggleFocus, exitFocusOnEscape } = usePanelFocus();
+  const { split, setSplit, dragging, startDrag, nudgeSplit, bodyRef } = useSplitPanels(SPLIT_DEFAULT);
 
   const scope = fixtureOnly ? ["NAG", "PUN"] : skuPlantScope(profile);
   const query = skuCatalogueQuery(filters);
@@ -258,29 +241,6 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   const columnLimitReached = Object.keys(filters.columns).length
     + [filters.status, filters.portfolio].filter(v => (v || "").includes("|")).length >= COLUMN_FILTER_MAX;
   const toggleGroup = id => setHiddenGroups(h => h.includes(id) ? h.filter(x => x !== id) : [...h, id]);
-
-  const startDrag = e => {
-    if (!bodyRef.current) return;
-    e.preventDefault();
-    const rect = bodyRef.current.getBoundingClientRect();
-    const move = ev => setSplit(clampSplit(((ev.clientX - rect.left) / rect.width) * 100));
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      setDragging(false);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    setDragging(true);
-  };
-  const nudgeSplit = e => {
-    if (e.key === "ArrowLeft") { e.preventDefault(); setSplit(s => clampSplit(s - 5)); }
-    if (e.key === "ArrowRight") { e.preventDefault(); setSplit(s => clampSplit(s + 5)); }
-  };
-  // Scoped to this screen, and only while a panel is focused.
-  const exitFocusOnEscape = e => {
-    if (e.key === "Escape" && focusRef.current) { e.preventDefault(); setFocus(null); }
-  };
 
   const fixtureBanner = fixtureOnly && (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 12px", background: C.amberL,
@@ -435,11 +395,7 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
             <button type="button" onClick={() => setReloadKey(k => k + 1)} aria-label="Refresh SKU list"
               title={`Refresh · read at ${readAt ? readAt.toLocaleTimeString() : "—"}`} style={iconButton(false)}>
               <RefreshIcon size={14} /></button>
-            <button type="button" aria-pressed={focusPanel === "list"} onClick={() => toggleFocus("list")}
-              aria-label={focusPanel === "list" ? "Collapse list" : "Expand list"}
-              title={focusPanel === "list" ? "Collapse list · show both panels (Esc)" : "Expand list to fill the SKU Master area"}
-              style={iconButton(focusPanel === "list")}>
-              {focusPanel === "list" ? <CollapseIcon size={14} /> : <ExpandIcon size={14} />}</button>
+            <PanelFocusToggle panel="list" noun="list" focused={focusPanel === "list"} onToggle={toggleFocus} />
           </div>
 
           {filterScan && (
@@ -492,15 +448,8 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
           </div>
         </div>}
 
-        {layout.showDivider && <div role="separator" aria-orientation="vertical" aria-label="Resize SKU list and SKU detail"
-          aria-valuemin={25} aria-valuemax={75} aria-valuenow={split} tabIndex={0}
-          onPointerDown={startDrag} onDoubleClick={() => setSplit(SPLIT_DEFAULT)} onKeyDown={nudgeSplit}
-          title="Drag to resize · double-click for 50 : 50"
-          style={{ width: 7, flex: "0 0 7px", cursor: "col-resize", background: dragging ? "#F3E3D2" : "#FBF8F3",
-            borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center", gap: 3, touchAction: "none", userSelect: "none" }}>
-          {[0, 1, 2].map(i => <span key={i} style={{ width: 3, height: 3, borderRadius: "50%", background: "#B5A898" }} />)}
-        </div>}
+        {layout.showDivider && <PanelDivider label="Resize SKU list and SKU detail" split={split} dragging={dragging}
+          onPointerDown={startDrag} onReset={() => setSplit(SPLIT_DEFAULT)} onKeyDown={nudgeSplit} />}
 
         {layout.showDetail && <div aria-label="SKU detail" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: C.cream }}>
           <div role="toolbar" aria-label="SKU detail controls" style={{ ...toolbar, flexWrap: "nowrap" }}>
@@ -520,14 +469,8 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
               </div>
             )}
             {focusPanel === "detail" && <span style={{ fontSize: T.label, color: C.slateL, whiteSpace: "nowrap" }}>Esc to restore</span>}
-            <button type="button" aria-pressed={focusPanel === "detail"} onClick={() => toggleFocus("detail")}
-              disabled={selectedId == null && focusPanel !== "detail"}
-              aria-label={focusPanel === "detail" ? "Collapse detail" : "Expand detail"}
-              title={focusPanel === "detail" ? "Collapse detail · show both panels (Esc)"
-                : selectedId == null ? "Select a SKU first" : "Expand detail to fill the SKU Master area"}
-              style={{ ...iconButton(focusPanel === "detail"), opacity: selectedId == null && focusPanel !== "detail" ? 0.45 : 1,
-                cursor: selectedId == null && focusPanel !== "detail" ? "default" : "pointer" }}>
-              {focusPanel === "detail" ? <CollapseIcon size={14} /> : <ExpandIcon size={14} />}</button>
+            <PanelFocusToggle panel="detail" noun="detail" focused={focusPanel === "detail"} onToggle={toggleFocus}
+              disabled={selectedId == null} disabledTitle="Select a SKU first" />
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 14px 56px" }}>
             {selectedId == null && <EmptyState title="Select a SKU" hint="Its identity, quote and costing fields, SKU Set, versions, references and Location applicability open here." />}
