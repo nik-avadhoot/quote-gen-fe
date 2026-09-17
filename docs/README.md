@@ -65,6 +65,8 @@ without explicit Product Owner scope.
   standing instruction to expand an unrelated increment.
 - [`u1-party-merge-decision-packet.md`](u1-party-merge-decision-packet.md) — unresolved Party-merge
   product decision.
+- [`u2-location-applicability-decision-packet.md`](u2-location-applicability-decision-packet.md) —
+  proposed governed lifecycle for SKU Master Location applicability; Product Owner ruling required.
 
 ## Active S9 material — do not archive
 
