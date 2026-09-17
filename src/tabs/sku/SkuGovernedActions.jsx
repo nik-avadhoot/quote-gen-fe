@@ -38,6 +38,60 @@ function DisabledNote({ reason }) {
   return reason ? <span role="note" style={{ fontSize: T.label, color: C.amberD, lineHeight: 1.35 }}>{reason}</span> : null;
 }
 
+// ── Canonical Amendment 05: master Location applicability only ─────────────
+export function SkuApplicabilityControls({ data, authority, mode, showToast, onChanged }) {
+  const { sku, location_applicability: rows = [], location_options: options = [] } = data;
+  const [locationId, setLocationId] = useState("");
+  const [reasonById, setReasonById] = useState({});
+  const [busy, setBusy] = useState(false);
+  if (!authority?.manage || mode.state === "none") return null;
+  const live = mode.state === "live";
+  const masterRows = rows.filter(row => row.scope === "master");
+  const used = new Set(masterRows.map(row => row.location_id));
+  const choices = options.filter(row => row.status === "active" && !used.has(row.id));
+
+  const run = async (path, body, successMessage) => {
+    if (!live || busy) return;
+    setBusy(true);
+    const result = await runMutation(path, body, { showToast, successMessage });
+    setBusy(false);
+    if (result !== null) { setLocationId(""); setReasonById({}); onChanged(); }
+  };
+
+  return <div style={{ display: "grid", gap: 7, marginTop: 9, paddingTop: 9, borderTop: `1px solid ${C.border}` }}>
+    <strong style={{ fontSize: T.body, color: C.slate }}>Govern master applicability</strong>
+    {!live && <DisabledNote reason={mode.reason} />}
+    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <select aria-label="Active Customer Location" value={locationId} disabled={!live || busy || !choices.length}
+        onChange={e => setLocationId(e.target.value)} style={{ ...control, minWidth: 210 }}>
+        <option value="">{choices.length ? "Choose active Location…" : "No eligible active Location"}</option>
+        {choices.map(row => <option key={row.id} value={row.id}>{row.location_code || `Location #${row.id}`}</option>)}
+      </select>
+      <button type="button" disabled={!live || busy || !locationId} style={primary(!live || busy || !locationId)}
+        onClick={() => run(`/masters/skus/${sku.id}/location-applicabilities`,
+          skuOpsBody(sku.content_version, { location_id: Number(locationId) }), "Location applicability proposed.")}>Propose master</button>
+    </div>
+    {masterRows.map(row => {
+      const needsReason = row.status === "approved" || row.status === "withdrawn";
+      const reason = reasonById[row.id] || "";
+      const action = row.status === "proposed" ? "approve" : row.status === "approved" ? "withdraw" : "reactivate";
+      const disabled = !live || busy || row.content_version == null || (needsReason && !reason.trim());
+      return <div key={row.id} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ fontFamily: mono, fontSize: T.label, color: C.slateM }}>{row.location?.location_code || `Location #${row.location_id}`}</span>
+        {needsReason && <input aria-label={`${action} reason for Location ${row.location_id}`} value={reason} maxLength={500}
+          disabled={!live || busy} placeholder={`${action === "withdraw" ? "Withdrawal" : "Reactivation"} reason`}
+          onChange={e => setReasonById(prev => ({ ...prev, [row.id]: e.target.value }))} style={{ ...control, minWidth: 220 }} />}
+        <button type="button" disabled={disabled} style={{ ...control, fontWeight: 700, cursor: disabled ? "not-allowed" : "pointer" }}
+          onClick={() => run(`/masters/sku-location-applicabilities/${row.id}/${action}`,
+            skuOpsBody(row.content_version, needsReason ? { reason: reason.trim() } : {}),
+            `Location applicability ${action === "approve" ? "approved" : action === "withdraw" ? "withdrawn" : "reactivated"}.`)}>
+          {action === "approve" ? "Approve" : action === "withdraw" ? "Withdraw" : "Reactivate"}</button>
+      </div>;
+    })}
+    <span style={{ fontSize: T.label, color: C.slateL }}>Quote-specific batch_only rows remain read-only here.</span>
+  </div>;
+}
+
 // ── Actions ▾ in the detail toolbar ─────────────────────────────────────────
 export function SkuActionsMenu({ data, rows, authority, mode, showToast, onChanged, onEditVersion }) {
   const { sku, versions = [] } = data;

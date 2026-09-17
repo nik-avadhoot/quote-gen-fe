@@ -104,7 +104,8 @@ const ROWS = [
 ];
 
 const VISIBLE = { customer: "visible", construction: "visible", plant_adoption: "visible", locations: "visible", sets: "visible" };
-const PENDING_NONE = { quote_fields: false, sku_sets: false, pricing_portfolio: false };
+const PENDING_NONE = { quote_fields: false, sku_sets: false, pricing_portfolio: false,
+  governed_operations: false, location_applicability_operations: false };
 const common = { schema_pending: PENDING_NONE, mode: "governed_read_only", authority: "caller_token_rls_only", mutations: "none" };
 const header = row => ({ id: row.id, plant_item_code: row.plant_item_code, status: row.status,
   pricing_portfolio: row.pricing_portfolio,
@@ -126,15 +127,19 @@ export const SKU_FIXTURE_DETAILS = {
       { id: 3, reference_kind: "softcomp_code", reference_value: "FIX-011145", status: "active" },
     ],
     location_applicability: [
-      { id: 11, location_id: 601, scope: "master", status: "approved", approved: true,
+      { id: 11, location_id: 601, scope: "master", status: "approved", approved: true, content_version: 2,
         location: { location_code: "FIX-LOC-601", status: "active", bill_to_eligible: true, ship_to_eligible: true } },
-      { id: 12, location_id: 602, scope: "batch_only", status: "proposed", approved: false, location: null },
+      { id: 12, location_id: 602, scope: "batch_only", status: "proposed", approved: false, content_version: 1, location: null },
+    ],
+    location_options: [
+      { id: 601, location_code: "FIX-LOC-601", status: "active", bill_to_eligible: true, ship_to_eligible: true },
+      { id: 604, location_code: "FIX-LOC-604", status: "active", bill_to_eligible: false, ship_to_eligible: true },
     ],
     lineage: { replaced_by: null, replacement_visible: true,
       replaces: [{ id: 9103, plant_item_code: "__U2_FIXTURE_ONLY__/NAG/0003", status: "discontinued" }] },
     sets: setFor(9101) },
   9102: { ...common, sku: header(ROWS[1]), detail_visibility: VISIBLE, versions: [], external_references: [],
-    location_applicability: [], lineage: { replaced_by: null, replacement_visible: true, replaces: [] }, sets: [] },
+    location_applicability: [], location_options: [], lineage: { replaced_by: null, replacement_visible: true, replaces: [] }, sets: [] },
   9103: { ...common, sku: header(ROWS[2]),
     detail_visibility: { customer: "visible", construction: "not_visible_to_caller", plant_adoption: "unavailable",
       locations: "not_visible_to_caller", sets: "visible" },

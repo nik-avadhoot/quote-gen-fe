@@ -66,7 +66,7 @@ without explicit Product Owner scope.
 - [`u1-party-merge-decision-packet.md`](u1-party-merge-decision-packet.md) — unresolved Party-merge
   product decision.
 - [`u2-location-applicability-decision-packet.md`](u2-location-applicability-decision-packet.md) —
-  proposed governed lifecycle for SKU Master Location applicability; Product Owner ruling required.
+  accepted decision packet for governed SKU Master Location applicability (Amendment 05).
 
 ## Active S9 material — do not archive
 
@@ -121,6 +121,7 @@ These documents may contain status tables that were true at a particular checkpo
 - [`data-model-canonical-amendment-03.md`](data-model-canonical-amendment-03.md) — the SKU pricing
   portfolio (CDM-45), including why it is NOT NULL rather than a publication gate.
 - [`data-model-canonical-amendment-04.md`](data-model-canonical-amendment-04.md) — SKU Master editing by due authority (CDM-46): rulings D-01 to D-12, slice 1, and the open settled-customer questions.
+- [`data-model-canonical-amendment-05.md`](data-model-canonical-amendment-05.md) — master-only SKU Location applicability lifecycle and quote-exception boundary (CDM-47).
 - [`archive/data-model-design/data-model-design-for-approval.md`](archive/data-model-design/data-model-design-for-approval.md)
 - [`archive/data-model-design/data-model-sr-dev-proposal.md`](archive/data-model-design/data-model-sr-dev-proposal.md)
 - [`archive/data-model-design/data-model-sr-dev-review.md`](archive/data-model-design/data-model-sr-dev-review.md)

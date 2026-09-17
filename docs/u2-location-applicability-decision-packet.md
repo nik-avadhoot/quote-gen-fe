@@ -1,7 +1,7 @@
 # U2 SKU Location applicability — decision packet
 
 Date: 2026-09-17  
-Status: Product Owner ruling required; **not implementation authority**
+Status: **Accepted by Product Owner on 2026-09-17**; canonicalised as Amendment 05 / CDM-47
 
 ## Outcome needed
 
@@ -74,6 +74,5 @@ Accept the following as the slice-3 contract:
 
 ## Product Owner decision
 
-Approve the seven-point recommended ruling bundle as the canonical Location-applicability contract,
-or identify the numbered point that should change. Until then, the current read-only presentation
-remains the truthful boundary.
+Approved without change on 2026-09-17. The prepared implementation remains activation-gated; no
+remote migration or live mutation was authorised by this ruling.

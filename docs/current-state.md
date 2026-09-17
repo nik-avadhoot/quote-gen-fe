@@ -69,7 +69,8 @@ record—not another documentation reorganisation.
   lifecycle, portfolio, references and append-only history. All five SKU migrations were applied
   live on 2026-09-17; local gates are SKU frontend 126/0, route 195/0 and Amendment 04 static contract
   85/0. Authenticated-live browser mutation proof and Product Owner validation remain outstanding.
-  SKU Sets write support and Location applicability writes are not implemented.
+  SKU Sets write support is not implemented. Master Location applicability writes are prepared
+  locally under Amendment 05 but not remotely applied; controls remain activation-gated.
 - U2 Plant Construction Adoption is now a read-only matrix inside the governed Construction surface
   (`2de4c15`): approved versions of published Constructions are shown against only the caller's exact
   `plant_access` scope, with Adopted, Withdrawn, Not adopted and Unavailable kept distinct. Focused

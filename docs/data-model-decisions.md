@@ -477,6 +477,17 @@ to Customer with a permanent Customer Code. A Proposed SKU and an unapproved ver
 quoted exactly as a Prospect is admitted incomplete; only a withdrawn SKU is refused. Detail and slices in
 [`data-model-canonical-amendment-04.md`](data-model-canonical-amendment-04.md).
 
+## CDM-47 — SKU master Location applicability
+
+**Added by Amendment 05 (Product Owner, 2026-09-17).**
+
+SKU Master governs published `master` applicability only, using `manage_sku_master` at the SKU's
+plant. The retained lifecycle is Proposed → Approved → Withdrawn and Withdrawn → Approved; withdrawal
+and reactivation require reasons. Binding is immutable, writes use compare-and-swap and append SKU
+history, and proposal/approval/reactivation require a currently active Location of the SKU's Customer.
+`batch_only` remains read-only here until a separate quotation slice gives it an exact Family F/G
+binding. See [`data-model-canonical-amendment-05.md`](data-model-canonical-amendment-05.md).
+
 ---
 
 ## Approval handoff

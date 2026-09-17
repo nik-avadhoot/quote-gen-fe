@@ -32,8 +32,9 @@ import {
 } from "../src/lib/skuMasterModel.js";
 import { SKU_FIXTURE_DETAILS, fixtureSkuCatalogue } from "../src/lib/skuMasterFixture.js";
 import {
-  SKU_EDIT_FIELDS, SKU_FIELD_CLASS, SKU_OPS_FIXTURE, SKU_OPS_PENDING, SKU_OP_CONFIRM, buildFieldChanges, fieldEditability,
-  parseFieldInput, replacementCandidates, skuLifecycleActions, skuOpsAuthority, skuOpsMode, skuProposalPlants,
+  SKU_APPLICABILITY_PENDING, SKU_EDIT_FIELDS, SKU_FIELD_CLASS, SKU_OPS_FIXTURE, SKU_OPS_PENDING, SKU_OP_CONFIRM,
+  buildFieldChanges, fieldEditability, parseFieldInput, replacementCandidates, skuApplicabilityMode,
+  skuLifecycleActions, skuOpsAuthority, skuOpsMode, skuProposalPlants,
   versionChangeVerdict, versionEditPlan, versionFieldValues,
 } from "../src/lib/skuGovernedOps.js";
 import {
@@ -277,9 +278,11 @@ const apiCalls = screen.match(/apiFetch\(([^)]*)\)/g) || [];
 check(apiCalls.length === 2 && apiCalls.every(call => !call.includes("method"))
   && !/runMutation|method:\s*"(POST|PATCH|PUT|DELETE)"/.test(screen),
   "U2-SKU-FE-48 the screen itself issues exactly two GET reads; every governed write lives in SkuGovernedActions (Amendment 04)");
-check(!/>\s*(Create|New SKU|Edit|Approve|Publish|Discontinue|Reactivate|Add reference|Add to set|Withdraw)\s*</.test(screen)
-  && !/(Add to set|set membership|applicability)\s*</i.test(actionsUi) && !/sku-sets|location-applicab/.test(actionsUi),
-  "U2-SKU-FE-49 no control exists for an operation that does not: SKU Set membership and Location applicability (repointed for Amendment 04)");
+check(!/sku-sets|Add to set/.test(actionsUi)
+  && actionsUi.includes("SkuApplicabilityControls")
+  && actionsUi.includes("Quote-specific batch_only rows remain read-only here.")
+  && actionsUi.includes("/location-applicabilities"),
+  "U2-SKU-FE-49 SKU Sets remain read-only; Amendment 05 governs master applicability only and never batch_only");
 check(screen.indexOf("if (fixtureOnly)") !== -1 && screen.indexOf("if (fixtureOnly)") < screen.indexOf("apiFetch(query)")
   && screen.includes("U2 · FIXTURE ONLY"),
   "U2-SKU-FE-50 fixture mode is labelled and short-circuits before any request");
@@ -561,6 +564,11 @@ check(skuOpsMode({ authority: { propose: false } }).state === "none"
   && skuOpsMode({ schemaPending: { governed_operations: true }, authority: { propose: true } }).reason === SKU_OPS_PENDING
   && skuOpsMode({ authority: { propose: true } }).state === "live" && /Schema activation pending/.test(SKU_OPS_PENDING),
   "U2-SKU-FE-116 no authority shows nothing; pending activation and the fixture show controls DISABLED with the reason (D11)");
+check(skuApplicabilityMode({ authority: { manage: false } }).state === "none"
+  && skuApplicabilityMode({ fixtureOnly: true, authority: { manage: true } }).reason === SKU_OPS_FIXTURE
+  && skuApplicabilityMode({ schemaPending: { location_applicability_operations: true }, authority: { manage: true } }).reason === SKU_APPLICABILITY_PENDING
+  && skuApplicabilityMode({ authority: { manage: true } }).state === "live",
+  "U2-SKU-FE-116a only manage_sku_master receives master-applicability controls; fixture and pending modes disable them visibly");
 const opsMaker = skuLifecycleActions({ id: 5, status: "proposed", plant_item_code: null, pricing_portfolio: "Strategic" },
   [{ id: 50, version_no: 1, approved: false }], { propose: true, manage: false }).map(a => a.id);
 const opsNpdProposed = skuLifecycleActions({ id: 5, status: "proposed", plant_item_code: null, pricing_portfolio: "Strategic" },
@@ -620,6 +628,11 @@ check(actionsUi.includes("expected_content_version: plan.version.content_version
   && (actionsUi.match(/runMutation\(/g) || []).length >= 4 && !/\.rpc\(|service_role|supabase/.test(actionsUi)
   && actionsUi.includes("if (!live || busy) return;") && actionsUi.includes("{!live && <DisabledNote reason={mode.reason} />}"),
   "U2-SKU-FE-123 every write carries the token it read, goes through a governed route, and does nothing unless live (D8, D11)");
+check(actionsUi.includes("skuOpsBody(sku.content_version, { location_id: Number(locationId) })")
+  && actionsUi.includes("skuOpsBody(row.content_version, needsReason ? { reason: reason.trim() } : {})")
+  && actionsUi.includes('row.status === "proposed" ? "approve"')
+  && actionsUi.includes('row.status === "approved" ? "withdraw" : "reactivate"'),
+  "U2-SKU-FE-123a applicability proposal uses the SKU token; every existing-row transition uses its own token and ruled lifecycle");
 check(screen.includes("skuOpsAuthority(profile, detailData?.sku?.plant?.plant_code)")
   && screen.includes('detailMode.state === "live" && <SkuVersionEditor')
   && screen.includes('title="History"') && screen.includes("It arrives with the governed SKU operations."),
