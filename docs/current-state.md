@@ -1,6 +1,6 @@
 # Current state handoff
 
-Updated: 2026-09-15. This is a concise working snapshot, not a closure award. Verify the source,
+Updated: 2026-09-17. This is a concise working snapshot, not a closure award. Verify the source,
 repository status, and deployed state before relying on any time-sensitive claim.
 
 ## Product and repository shape
@@ -64,11 +64,18 @@ record—not another documentation reorganisation.
   and Product Owner validation remain deferred. The Customer Family/Sector migrations are activated
   as `20260915100440` and `20260915100521` (catalogue gate 7/7); the governed Sector master still
   has zero rows, which blocks Family/Prospect/Batch creation until governed Sectors exist.
-- U2 has a read-only, caller-scoped SKU Master behind `u2_sku_master`, rebuilt on Canonical
-  Amendment 02 (CDM-43/44): a split view with the 39 quote and costing SPEC fields row by row, a
-  single-SKU deep-dive, SKU Sets with quantity per member, and the production-data backlog listed
-  only. Its migration is prepared but not applied, so those new fields read as pending on the live
-  project. Fixture-browser verified only.
+- U2's caller-scoped SKU Master now includes the Amendment 02/03 field model and Amendment 04 slice-1
+  governed actions: proposal, draft/version work, approval, Plant Item Code assignment, publication,
+  lifecycle, portfolio, references and append-only history. All five SKU migrations were applied
+  live on 2026-09-17; local gates are SKU frontend 126/0, route 195/0 and Amendment 04 static contract
+  85/0. Authenticated-live browser mutation proof and Product Owner validation remain outstanding.
+  SKU Sets write support and Location applicability writes are not implemented.
+- U2 Plant Construction Adoption is now a read-only matrix inside the governed Construction surface
+  (`2de4c15`): approved versions of published Constructions are shown against only the caller's exact
+  `plant_access` scope, with Adopted, Withdrawn, Not adopted and Unavailable kept distinct. Focused
+  fixtures are 10/0 and the existing Construction route gate is 38/0. Browser evidence is a labelled
+  developer fixture only; adoption proposal/approval/withdrawal and authenticated-live qualification
+  remain later work. See [`u2-plant-construction-adoption-increment.md`](u2-plant-construction-adoption-increment.md).
 - A Family G authenticated-read correction is committed but not applied; until it is, caller-token
   Quote History and Approval Inbox reads that reach a Family G row are refused.
 - U5 read-only Quote workflow presentation is implemented and automated-test verified locally:

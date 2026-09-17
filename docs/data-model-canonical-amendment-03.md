@@ -40,10 +40,9 @@ A SKU's portfolio is a commercial classification, not a specification fact, so r
 is **not** a new SKU and **not** a new SKU specification version (CDM-10 is untouched). An
 administrator may change it through a governed operation.
 
-**No such governed write path exists today.** The SKU Master has no create, edit, approve or
-discontinue operation at all, so the administrator change is a recorded follow-up, not a control on
-the screen. No edit affordance is added: a control that cannot work would promise an operation that
-does not exist.
+At the time of this ruling no governed write path existed, so no non-functional affordance was
+added. Amendment 04 subsequently supplied the governed, CAS-protected reclassification operation and
+the `manage_sku_master` screen control; the field remains an in-place commercial classification.
 
 ## C-04 — It creates NO pricing rule
 
@@ -127,8 +126,8 @@ infer or apply pricing from it until an approved rate mechanism consumes it (Ame
 | Static contract | `quote-gen-be/tests/test_sku_pricing_portfolio_schema_contract.py` |
 | Route | `GET /masters/skus` returns `pricing_portfolio` and accepts a `portfolio` filter; both degrade to `schema_pending` until the migration is applied |
 | Registry | `quote-gen-fe/src/lib/skuSpecRegistry.js` field `PF`, app origin, Status & Governance group |
-| Screen | shown as a field and as a catalogue filter. **No edit control** |
+| Screen | shown as a field and catalogue filter; Amendment 04 adds the governed `manage_sku_master` edit control |
 | Tests | `test:sku-master`, `tests/test_sku_master_route.py` |
 
-Applying the migration to the live Supabase project remains a separate, explicit step that needs the
-Product Owner's go-ahead.
+The migration was applied live on 2026-09-17 in the ordered five-migration SKU activation recorded
+by Canonical Amendment 04. Authenticated-live mutation verification remains separate and outstanding.

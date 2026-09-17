@@ -2,14 +2,14 @@
 
 Status: **ruled 2026-09-16** — recorded as [Canonical Amendment 04](data-model-canonical-amendment-04.md)
 (D1 same-person approval allowed initially, as a canonical speed-first principle; D6 second approval
-only for settled quotes; every other recommendation approved). Slice 1 is implemented and prepared,
-not applied — see the amendment.
+only for settled quotes; every other recommendation approved). Slice 1 is implemented and its five
+SKU migrations were applied live on 2026-09-17; see the amendment for current evidence.
 
-## 1. What exists today (verified against source and the live migration list)
+## 1. What existed when this packet was ruled (2026-09-16)
 
 | Area | Truth |
 |---|---|
-| Live schema | S4-2 `20260905142733_s4_2_family_c_sku_master` and S4-3 `20260905182113_s4_3_product_definition_workflow_rpcs` are **applied**. Amendment 02 (`20260916100000`) and Amendment 03 (`20260916170000`) are **prepared, not applied**. |
+| Live schema at ruling time | S4-2 `20260905142733_s4_2_family_c_sku_master` and S4-3 `20260905182113_s4_3_product_definition_workflow_rpcs` were applied. Amendments 02 and 03 were then prepared but unapplied; both and Amendment 04 are now applied under their recorded 2026-09-17 versions. |
 | Tables | `skus` (plant, party, `plant_item_code`, `status`, `replacement_sku_id`, `content_version`), `sku_versions` (Construction version, dimensions, box type, ups, BS/BCT/ECT, `is_price_driving`, approval pair), `sku_external_references`, `sku_location_applicabilities`. Amendment 02 adds the 15 quote fields, the `softcomp_code` kind, `sku_sets` and `sku_set_members`; Amendment 03 adds `skus.pricing_portfolio`. |
 | Read authority | RLS `has_plant_cap(plant_id, 'plant_access')` on every SKU table. |
 | **Write authority today** | `authenticated` holds **INSERT and UPDATE grants** on the four S4-2 tables, with UPDATE policies for `manage_sku_master` and INSERT policies for `manage_sku_master` or a narrow Maker proposal branch (`make_quote`). **A direct table write is possible today** without any governed operation — the same bypass class UA-3 closed for user grants. No DELETE policy exists (CDM-31). Amendment 02/03 add no write grant or policy. |
@@ -20,9 +20,10 @@ not applied — see the amendment.
 | Callers | **No backend route calls any SKU write function.** Nobody holds `manage_sku_master` except accounts given it by direct database writes during setup (U1 packet §2). |
 | S9 | SKU tables are **Family C**. Editing a SKU writes no Family G (Quote) table, so it neither enables nor relies on production Quote mutations. The one S9-adjacent rule is CDM-09's "plant and party immutable once on an issued Quote", which needs a Family G read; this packet proposes plant and party are never editable at all, so it is not reached. |
 
-## 2. Decisions needed
+## 2. Decisions considered (all ruled in Amendment 04)
 
-Each has a recommendation; none is modelled until ruled.
+The wording below preserves the choices presented for the ruling. The approved outcomes, not these
+pre-ruling recommendations, are authoritative in Canonical Amendment 04.
 
 **D1 — Due authority.** `manage_sku_master` at the SKU's plant is the existing, RLS-enforced
 capability. CDM-31 PM-2: calculation-driving changes need second-person approval; routine

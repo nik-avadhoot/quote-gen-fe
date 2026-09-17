@@ -53,6 +53,8 @@ without explicit Product Owner scope.
   S9 record. It truthfully records that S9 is not technically or Product Owner closed.
 - [`u4-my-batches-catalogue-increment.md`](u4-my-batches-catalogue-increment.md) — current U4
   read-only increment record.
+- [`u2-plant-construction-adoption-increment.md`](u2-plant-construction-adoption-increment.md) —
+  read-only Plant Construction Adoption matrix and local verification.
 
 ## Current open work
 

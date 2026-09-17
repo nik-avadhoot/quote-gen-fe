@@ -452,9 +452,9 @@ ruled, and such SKUs take no set role until they are.
 Every SKU records a pricing portfolio, exactly `Transactional` or `Strategic`. It is mandatory and
 has no default: import must assign one, so no imported SKU is unclassified. It is a commercial
 classification of the SKU, held on the SKU itself rather than on a specification version, and an
-administrator may change it through a governed operation — no such operation exists yet, so no edit
-control is offered. It creates **no pricing rule**: nothing may infer or apply pricing from it until
-an approved rate mechanism consumes it, the same boundary Amendment 01 A-06 set for colour count.
+administrator may change it through the governed, CAS-protected Amendment 04 operation. It creates
+**no pricing rule**: nothing may infer or apply pricing from it until an approved rate mechanism
+consumes it, the same boundary Amendment 01 A-06 set for colour count.
 The reasoning, including why the column is `NOT NULL` rather than a publication gate, is in
 [`data-model-canonical-amendment-03.md`](data-model-canonical-amendment-03.md).
 
