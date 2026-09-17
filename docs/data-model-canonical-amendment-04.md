@@ -119,7 +119,7 @@ SKU (`s9b`), and the Batch row picker offered only approved versions. Now a Prop
 unapproved version are calculated, sent and offered (labelled); only a **withdrawn** SKU is refused
 (`sku_withdrawn`). The calculation provenance already records the SKU status, so the Checker sees a
 Proposed SKU in the evidence — the Maker/Checker workflow is where approval for a settled customer is
-exercised. Migration `20260916210000_u2_proposed_skus_are_quotable`.
+exercised. Migration `20260917030435_u2_proposed_skus_are_quotable` (authored as `20260916210000`).
 
 ## Wording added to `data-model-decisions.md`
 
@@ -128,15 +128,19 @@ one-line amendment notes under CDM-11 and CDM-31.
 
 ## Implementation, 2026-09-16 (slice 1)
 
-- Backend `863e652`: migration `20260916200000_u2_sku_master_governed_operations` — **prepared, NOT
-  applied**; it requires Amendments 02 and 03 first. Static contract 85/0. Its pgTAP suite
-  `tests.sku_governed_operations` is registered in `run_all`; database-runtime verification is owed at
-  activation.
+- Backend `863e652`: migration `20260917030403_u2_sku_master_governed_operations` (authored as
+  `20260916200000`); it requires Amendments 02 and 03 first. Static contract 85/0. Its pgTAP suite
+  `tests.sku_governed_operations` is registered in `run_all`.
 - Backend `c515108`, `4e4cbde`: twelve governed routes and the activation signal; route gate 195/0.
 - Frontend `603af76`: Actions, version editor, references, Propose and History in the SKU Master;
   `test:sku-master` 126/0. Fixture-browser verified only.
 - Known activation risk, pre-existing: Amendment 03's `NOT NULL` portfolio breaks every existing
-  database fixture that inserts a SKU without one. Migration `20260916170500` repoints the nineteen
-  fixture inserts.
-- Activation, 2026-09-17: Amendments 02 and 03 applied live (`20260917024849`, `20260917024903`).
-  `20260916170500`, `20260916200000` and `20260916210000` are **prepared, NOT applied**.
+  database fixture that inserts a SKU without one. Migration `20260917025921` (authored as `20260916170500`)
+  repoints the nineteen fixture inserts.
+- Activation, 2026-09-17: all five SKU migrations applied live in order — 02 (`20260917024849`), 03
+  (`20260917024903`), fixtures (`20260917025921`), 04 (`20260917030403`), quotability
+  (`20260917030435`). Live pgTAP, each suite run alone and rolled back: `sku_governed_operations`
+  67/0, `product_workflow` 68/0, `sku_master` 47/0, `family_c_authority` 23/0. The Batch-creating
+  suites (`batch_sets`, `batch_workspace`, `family_f_security`, `calculation_writer`,
+  `calculation_persistence`) still abort on the pre-existing empty Sector master, so they are not
+  verified. No governed write has been exercised through the authenticated live app.
