@@ -11,8 +11,8 @@ Go-live authority: Product Owner
 | Item | Beta value |
 |---|---|
 | Producing Plant | `NAG` / Nagpur only — PO confirmed 2026-09-17 |
-| Maker | `sales.01@avadhootpacks.in` — invitation required; no capabilities granted |
-| Checker | `marketing@avadhootpacks.in` — invitation required; no capabilities granted |
+| Maker | `sales.01@avadhootpacks.in` — Auth invitation sent 2026-09-18; activation pending; no capabilities granted |
+| Checker | `marketing@avadhootpacks.in` — Auth invitation sent 2026-09-18; activation pending; no capabilities granted |
 | Admin | `nikunj@avadhootpacks.in` / NikunjRL — active login; no beta fence change yet |
 | Alongside period | First week; every system result compared with the existing spreadsheet |
 | Production build flag | `limited_beta` plus only the approved destination flags |
@@ -106,7 +106,8 @@ document, a repository file, a command transcript or chat. Confirm only that bot
 - Wave A is live and verified as migrations `20260917182121` and `20260917182138`.
 - Wave B content is approved, but eight approved freight destinations lack exact governed Customer
   Location identities; the seed remains unapplied and must fail closed rather than guess.
-- Maker and Checker do not yet have Auth logins; invite them before any capability grant.
+- Maker and Checker Auth invitations were sent on 2026-09-18; both must activate their logins before
+  any capability grant.
 - Edge secret names are confirmed provisioned; the function is not deployed because Wave B must
   complete first.
 - Workflow HTTP/UI activation is committed; deployed-role and state-transition smoke proof remains a
