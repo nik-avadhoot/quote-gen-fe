@@ -91,11 +91,13 @@ export const exportAllPDF=(items,meta={})=>{
     td{border-bottom:1px solid #DDD4C7}
     tr:nth-child(even){background:#FAF7F2}
     .terms{font-size:10px;color:#4A647D;line-height:1.8;border-top:2px solid #D97B2E;padding-top:12px;margin-top:24px}
+    .beta{display:inline-block;padding:3px 9px;border:2px solid #B42318;color:#B42318;font-size:14px;font-weight:900;letter-spacing:.12em}
     @media print{body{margin:16px}}
   </style></head><body>
     <div style="display:flex;align-items:center;gap:16px;margin-bottom:6px">
     <img src="${LOGO_WIDE_B64}" style="height:36px;object-fit:contain"/>
     <span style="font-size:26px;font-weight:900;letter-spacing:0.05em;color:#1C2B3A">QUOTATION</span>
+    ${meta.beta?'<span class="beta">BETA</span>':''}
     </div>
     <div style="color:#4A647D;font-size:11px;margin-bottom:2px">Avadhoot Packaging Solutions</div>
     <div class="meta">

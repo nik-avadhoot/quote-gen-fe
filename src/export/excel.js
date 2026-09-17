@@ -39,14 +39,14 @@ import { applyAddOns, isPPType } from "../engine/rowType.js";
 import { apiFetch } from "../lib/apiClient.js";
 import { getItem } from "../lib/persist.js";
 
-const exportExcelFull=(items,rates,freight)=>{
+const exportExcelFull=(items,rates,freight,beta=false)=>{
   const wb=XLSX.utils.book_new();
   const today=new Date().toLocaleDateString("en-IN");
   const firstSpec=items[0]?.spec||{};
 
   // ── CBB+PP sheet ──────────────────────────────────────────────────────────
   const cbbRows=[
-    ["AVADHOOT PACKS — COSTING SHEET (CBB + PLATES & PARTITIONS)"],
+    [`${beta?"BETA — ":""}AVADHOOT PACKS — COSTING SHEET (CBB + PLATES & PARTITIONS)`],
     ["Client / Party:",firstSpec.client||"","","","Plant / Location:",firstSpec.plant||"","","","Date:",today,"","Ref:",items.map(i=>i.spec.material_code).filter(Boolean).join(", ")],
     ["Sector:",firstSpec.sector||"","","","Producing Plant:",firstSpec.plant||"","","","Default Freight Loc:",firstSpec.delivery||""],
     ["Conv Rate Rs/kg (Box):",firstSpec.convRate||7,"","Conv Rate Rs/kg (Board):",10.5,"","Waste% (Box):",(firstSpec.waste||5)+"%","","Margin%:",(firstSpec.margin||8)+"%","","Customer Interest%:",
@@ -113,7 +113,7 @@ const exportExcelFull=(items,rates,freight)=>{
 
   // ── OFFER sheet ───────────────────────────────────────────────────────────
   const offerRows=[
-    ["QUOTATION"],[""],
+    [beta?"BETA — QUOTATION":"QUOTATION"],[""],
     ["To:",firstSpec.client||"—","","Date:",today],
     ["Sector:",firstSpec.sector||"—","","Producing Plant:",firstSpec.plant||"—"],[""],
     ["Sr No","Mat Code","SKU Description","Dims L×W×H (mm)","Ply","Flute","Std BS","Std BCT","MOQ (boxes)","Landed Rate (Rs excl GST)"],
@@ -176,7 +176,7 @@ const exportExcelFull=(items,rates,freight)=>{
   ];
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(defRows),"DEFAULTS");
 
-  const _dx=new Date();const fname=`AvadhootPacks_Quote_${(firstSpec.client||"New").replace(/\s/g,"_")}_${_dx.getFullYear()}${String(_dx.getMonth()+1).padStart(2,"0")}${String(_dx.getDate()).padStart(2,"0")}.xlsx`;
+  const _dx=new Date();const fname=`${beta?"BETA_":""}AvadhootPacks_Quote_${(firstSpec.client||"New").replace(/\s/g,"_")}_${_dx.getFullYear()}${String(_dx.getMonth()+1).padStart(2,"0")}${String(_dx.getDate()).padStart(2,"0")}.xlsx`;
   XLSX.writeFile(wb,fname);
 };
 
@@ -192,7 +192,7 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
   const _dX=new Date();
   const _dtStr=`${_dX.getFullYear()}${String(_dX.getMonth()+1).padStart(2,'0')}${String(_dX.getDate()).padStart(2,'0')}`;
   const f0exp=items[0]?.spec||{};
-  const fnameExp=`AvadhootPacks_Quote_${(f0exp.client||'New').replace(/\s/g,'_')}_${_dtStr}.xlsx`;
+  const fnameExp=`${meta.beta?'BETA_':''}AvadhootPacks_Quote_${(f0exp.client||'New').replace(/\s/g,'_')}_${_dtStr}.xlsx`;
 
   // Try Python export server first (full openpyxl formatting preserved)
   try{
@@ -201,7 +201,8 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
       body:JSON.stringify({items,rates,freight,
         marginPP:meta.marginPP??8,           // PP margin — separate from Box margin in items[0].spec.margin
         filename:fnameExp,quoteRef:meta.quoteRef||'',makerName:meta.makerName||'',
-        quoteDate:meta.quoteDate||'',effectiveFrom:meta.effectiveFrom||'',effectiveTo:meta.effectiveTo||''}),
+        quoteDate:meta.quoteDate||'',effectiveFrom:meta.effectiveFrom||'',effectiveTo:meta.effectiveTo||'',
+        beta:meta.beta===true}),
       signal:(()=>{const c=new AbortController();setTimeout(()=>c.abort(),30000);return c.signal;})()
     });
     if(resp.ok){
@@ -217,7 +218,7 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
   // Fallback: xlsx-js-style template clone
   let tmplB64=templateB64Arg;
   if(!tmplB64){try{tmplB64=getItem('cbb_template');}catch(e){}}
-  if(!tmplB64){exportExcelFull(items,rates,freight);return;}
+  if(!tmplB64){exportExcelFull(items,rates,freight,meta.beta===true);return;}
 
   // Decode to ArrayBuffer
   const binStr=atob(tmplB64);
@@ -227,7 +228,7 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
   const ws_rm=wb.Sheets['RATE MASTER'];
   const ws_def=wb.Sheets['DEFAULTS'];
   const ws_cbb=wb.Sheets['CBB+PP'];
-  if(!ws_cbb){exportExcelFull(items,rates,freight);return;}
+  if(!ws_cbb){exportExcelFull(items,rates,freight,meta.beta===true);return;}
 
   // Helper: update cell value in-place — preserves style, removes formula
   const sc=(ws,addr,val)=>{
@@ -279,7 +280,7 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
   sc(ws_cbb,'B4',meta.quoteDate?new Date(meta.quoteDate):new Date());
   // A1 fix: removed dead/crashing line that used bare `effectiveFrom`/`quoteRef` variables not in scope.
   // The correct write below uses meta.quoteRef (always present via the meta object).
-  sc(ws_cbb,'D4',(meta.quoteRef?meta.quoteRef+' | ':'')+items.map(i=>i.spec.material_code).filter(Boolean).join(', '));
+  sc(ws_cbb,'D4',(meta.beta?'BETA | ':'')+(meta.quoteRef?meta.quoteRef+' | ':'')+items.map(i=>i.spec.material_code).filter(Boolean).join(', '));
 
   // Rate parameters — column addresses verified against v7 CBB+PP row 3/4/6
   const _nv=(v,d)=>(v!==null&&v!==undefined&&v!==''?+v:d);

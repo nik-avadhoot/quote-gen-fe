@@ -46,6 +46,7 @@ import { Fragment } from "react";
 import { exportFromTemplate } from "../export/excel.js";
 import { exportAllPDF } from "../export/pdf.js";
 import { normSetCode, sameSetCode, isPPType } from "../engine/rowType.js";
+import { isFeatureEnabled } from "../lib/featureFlags.js";
 import { findDivergence } from "../lib/overrideDivergence.js";
 import { useAppState } from "../state/AppStateContext.js";
 import { ProvenanceTag } from "../ui/dataDisplay.jsx";
@@ -122,6 +123,7 @@ export default function QuoteItemsTab({ toolbarLead = null }){
     rates, freight, batchProfile, removeItem, setTab,
   } = useAppState();
   const { focusPanel, toggleFocus, exitFocusOnEscape } = usePanelFocus();
+  const betaExport=isFeatureEnabled("limited_beta");
 
   const canExport=quoteRef.trim()&&makerName.trim();
   const exportTip=!quoteRef.trim()?"Quote Ref is required before export":!makerName.trim()?"Your account has no display name set — contact an Admin":"";
@@ -197,8 +199,8 @@ export default function QuoteItemsTab({ toolbarLead = null }){
     return true;
   };
 
-  const exportExcel=()=>{if(checkSETCompleteness()){warnDivergence();exportFromTemplate(items,rates,freight,templateB64,{quoteRef,makerName,quoteDate,effectiveFrom,effectiveTo,marginPP:batchProfile.marginPP??8},msg=>showToast(msg,'error',8000));}};
-  const exportPdf=()=>{if(checkSETCompleteness())exportAllPDF(items,{quoteRef,makerName,paymentDisc:batchProfile.paymentDisc||"30",effectiveTo});};
+  const exportExcel=()=>{if(checkSETCompleteness()){warnDivergence();exportFromTemplate(items,rates,freight,templateB64,{quoteRef,makerName,quoteDate,effectiveFrom,effectiveTo,marginPP:batchProfile.marginPP??8,beta:betaExport},msg=>showToast(msg,'error',8000));}};
+  const exportPdf=()=>{if(checkSETCompleteness())exportAllPDF(items,{quoteRef,makerName,paymentDisc:batchProfile.paymentDisc||"30",effectiveTo,beta:betaExport});};
 
   const setMap={};const standalone=[];
   items.forEach(item=>{
