@@ -10,10 +10,10 @@ Go-live authority: Product Owner
 
 | Item | Beta value |
 |---|---|
-| Producing Plant | Pending PO confirmation (`NAG` / Nagpur proposed) |
-| Maker | Pending PO name/email |
-| Checker | Pending PO name/email |
-| Admin | Pending PO name/email |
+| Producing Plant | `NAG` / Nagpur only — PO confirmed 2026-09-17 |
+| Maker | `sales.01@avadhootpacks.in` — invitation required; no capabilities granted |
+| Checker | `marketing@avadhootpacks.in` — invitation required; no capabilities granted |
+| Admin | `nikunj@avadhootpacks.in` / NikunjRL — active login; no beta fence change yet |
 | Alongside period | First week; every system result compared with the existing spreadsheet |
 | Production build flag | `limited_beta` plus only the approved destination flags |
 | Customer issue | Not permitted until the PO declares go-live |
@@ -21,6 +21,16 @@ Go-live authority: Product Owner
 Authorization is server-enforced. The beta build flag controls visibility and BETA export marking;
 it is not an access-control substitute. Trial users receive only the capabilities required at the
 confirmed beta plant. Wrong-plant and ungranted users must remain refused.
+
+The fence remains closed until Wave C is complete. This is the readiness control for Calculate and
+Send: no named beta capability is granted while attestation/Edge activation is pending.
+
+## Approved commercial source exception
+
+The first governed Nagpur Rate Set and Freight Set use the application's **current defaults**, not
+workbook-derived masters. This exception was explicitly approved by the Product Owner on 2026-09-17.
+During the alongside week, spreadsheet comparisons must label that source difference rather than
+misdescribe the values as imported from `APSPL NAGPUR Master_20260720.xlsx`.
 
 ## Daily operating check
 
@@ -82,18 +92,19 @@ capabilities. Do not claim recovery readiness from configuration alone.
 
 ## Edge secret handoff
 
-The Product Owner provisions exactly `QCA_KEY_ID` and `QCA_KEY_HEX` in Supabase Dashboard → Edge
-Functions → Secrets Management. `QCA_KEY_HEX` must be 64 lower-case hexadecimal characters (256
+The Product Owner confirmed on 2026-09-17 that exactly `QCA_KEY_ID` and `QCA_KEY_HEX` are provisioned
+in Supabase Dashboard → Edge Functions → Secrets Management. `QCA_KEY_HEX` must be 64 lower-case hexadecimal characters (256
 bits); `QCA_KEY_ID` must match the database keyring identifier. Never paste either value into this
 document, a repository file, a command transcript or chat. Confirm only that both names are present.
 
 ## Known issues before entry
 
-- Family G authenticated-read correction is locally prepared but the live migration tool rejected
-  the write pending direct user confirmation.
-- Wave A suite-registration migration is committed locally but not live.
-- Wave B seed awaits the single Product Owner content approval.
-- Edge secrets are not yet confirmed and the function is not deployed.
+- Wave A is live and verified as migrations `20260917182121` and `20260917182138`.
+- Wave B content is approved, but eight approved freight destinations lack exact governed Customer
+  Location identities; the seed remains unapplied and must fail closed rather than guess.
+- Maker and Checker do not yet have Auth logins; invite them before any capability grant.
+- Edge secret names are confirmed provisioned; the function is not deployed because Wave B must
+  complete first.
 - Workflow HTTP/UI activation is committed; deployed-role and state-transition smoke proof remains a
   beta-entry check after Wave A–C are live.
 - Supabase Auth leaked-password protection warning and five unindexed foreign keys are follow-up
@@ -101,16 +112,16 @@ document, a repository file, a command transcript or chat. Confirm only that bot
 
 ## Go-live checklist
 
-- [ ] Direct confirmation received for the two Wave A live migrations; applied ledger entries and
+- [x] Direct confirmation received for the two Wave A live migrations; applied ledger entries and
       authenticated/anon proof recorded.
 - [ ] Single Wave B content approval recorded; idempotent seed applied and inspected.
 - [ ] Named users and beta plant recorded; wrong-plant and ungranted checks pass.
-- [ ] `QCA_KEY_ID` and `QCA_KEY_HEX` confirmed present without reading their values.
+- [x] `QCA_KEY_ID` and `QCA_KEY_HEX` confirmed present without reading their values.
 - [ ] CP-108 passes; Edge Function deployed with JWT verification; deployed version recorded.
 - [ ] Maker Calculate → Send → Checker Approve → Maker Issue smoke passes with persistent evidence.
 - [ ] Backend-reported workflow activation drives enabled UI actions; unavailable actions remain
       disabled with a reason.
 - [ ] Production build contains only approved beta flags; Excel and PDF exports visibly say BETA.
 - [ ] Backup/restore point recorded above.
-- [ ] Feedback channel named; daily checker assigned.
+- [x] Feedback channel named; daily checker assigned.
 - [ ] Product Owner explicitly declares the limited beta live.

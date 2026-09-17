@@ -26,8 +26,8 @@ limited beta, and that forward work beyond S9 and its U dependents does not stop
 | `app_private` attestation keys | 0 | Governed Calculate cannot be attested |
 | `plants` / `parties` / `customer_locations` / `customer_families` / active users | 3 / 4 / 3 / 5 / 3 | Enough identity foundation to start |
 
-Migration ledger ends at `20260917154140_u2_sku_set_governed_operations`. The only prepared backend
-migration not applied is `20260915180000_s9_1_fix_family_g_read_helper_execute.sql`.
+The live ledger now includes Wave A as `20260917182121_s9_1_fix_family_g_read_helper_execute` and
+`20260917182138_register_gsm_and_customer_family_sector_suites`.
 
 **The critical path is master seed plus S9 activation, not further S9 proof.**
 
@@ -93,7 +93,9 @@ validation input for the Formal Data Cutover decision (still a separate Product 
 S10 full export compatibility and multi-part export history; S11 formal pre-cutover reset and seed
 rehearsal; S13 monitoring beyond the beta operating sheet; U6 audit timeline; Plant Construction
 Adoption governed lifecycle; SPEC import (CDM-37/38) including pricing-portfolio assignment; Party
-merge/deactivation; remaining UX batches.
+merge/deactivation; remaining UX batches. **Amend and Reprice are deliberately post-beta:** their
+limited-beta controls remain disabled with `not_available_in_limited_beta`; this is Product Owner
+ruling BR-8, not an inferred implementation limitation.
 
 ## 4. Protections that stay in force during beta
 
@@ -112,11 +114,12 @@ merge/deactivation; remaining UX batches.
 |---|---|---|
 | BR-1 | S9 remaining proof and U2–U5 live qualification are beta-exit, not beta-entry | **Approved** 2026-09-17 |
 | BR-2 | Seed governed Sectors using current Sector Defaults values as their first version; how governed Sectors formally relate to legacy Sector Defaults stays parked | **Approved** with the plan (recommended option); PO may override |
-| BR-3 | Beta runs alongside the existing spreadsheet for the first week before quotes go to customers from the system | Approved with the plan (recommended option). **Open:** beta plant (Nagpur proposed) and named users |
-| BR-4 | Beta plant masters are drafted from `APSPL NAGPUR Master_20260720.xlsx` | **Open:** PO to confirm that workbook is current before Wave B |
+| BR-3 | Beta runs alongside the existing spreadsheet for the first week before quotes go to customers from the system | **Approved** 2026-09-17 for `NAG` / Nagpur only with Maker `sales.01@avadhootpacks.in`, Checker `marketing@avadhootpacks.in`, and Admin `nikunj@avadhootpacks.in` |
+| BR-4 | Beta plant masters are drafted from `APSPL NAGPUR Master_20260720.xlsx` | **Approved** 2026-09-17 with the explicit exception that the first governed Rate and Freight Sets use application-current defaults, not workbook-derived values |
 | BR-5 | Beta exports use the current Excel template, visibly marked BETA | **Approved** with the plan (recommended option) |
 | BR-6 | SKU Sets slice 2 | **Superseded:** applied live 2026-09-17 by a concurrent thread; available in beta as-is |
-| BR-7 | Constructions: a starter set is seeded published and directly `adopted` at the beta plant, and trial users may also propose Constructions on the row | Recommended. **Open:** PO approves the starter list together with the Wave B seed content. Direct adoption rows are seed data only; no UI exposes direct adoption writes |
+| BR-7 | Constructions: a starter set is seeded published and directly `adopted` at the beta plant, and trial users may also propose Constructions on the row | **Approved** 2026-09-17, including five starters and `INT Flute 2 = NA` → `NULL`. Direct adoption rows are seed data only; no UI exposes direct adoption writes |
+| BR-8 | Amend and Reprice are unavailable in limited beta and are delivered post-beta | **Approved** 2026-09-17 |
 
 Wave B seed content (Sectors, rates, freight, Pricing Basis composition, starter Constructions) is
 presented to the Product Owner as **one** batch for approval, not item by item.
@@ -125,10 +128,10 @@ presented to the Product Owner as **one** batch for approval, not item by item.
 
 | Wave | State | Evidence / next gate |
 |---|---|---|
-| A | In progress | Suite-registration migration and contract gate committed as backend `ca4021a`; backend build identity committed as `5a4132d`. Live Family G correction was announced but the live-write safety reviewer rejected the call pending direct user confirmation; no workaround was attempted. Both Wave A migrations remain unapplied live. |
-| B | Blocked on PO | Read-only workbook analysis complete. The single approval batch is `beta-seed-approval.md`; it includes all 19 Sector versions, the top five Running Construction signatures, and an explicit disclosure that Rate/Freight proposals come from current app mirrors because the workbook has no usable governed tables for them. |
-| C | Blocked on PO | CP-108 drift was found and fixed in backend `6d11bed`; six files now hash-match engine `engine/qe1-600adcbe1a85be59`, executor fixtures pass. Awaiting confirmation that both `QCA_KEY_ID` and `QCA_KEY_HEX` are provisioned before deploy. |
-| D | In progress | Build-flag-driven visible BETA marking for template, fallback workbook and PDF committed as frontend `5b2ea5f` plus backend `5a4132d`; production `limited_beta` remains unset. Backend-governed workflow availability and caller-token mutation routes are committed as backend `0bd1f06` and frontend `40cd682`; 55 backend and 80 frontend assertions pass, as does the production build. Operating sheet and kill switch are prepared. The named-user/plant fence and pre-go-live backup remain. |
+| A | Done | Family G correction applied live as `20260917182121`; authenticated has helper EXECUTE while anon/public remain denied. Catalogue-suite registration applied live as `20260917182138`; both suites are present in stored `tests.run_all()`. Backend build identity is committed as `5a4132d`. |
+| B | In progress — data blocker | PO approved the single seed batch on 2026-09-17. Live preflight found no exact governed Customer Location identity for eight of nine approved freight destinations and no approved Rate Set entry for starter grade `18J`; the migration must fail closed rather than invent identities, reinterpret the grade as `18`, or write a partial governed release. |
+| C | Waiting on Wave B | CP-108 drift was fixed in backend `6d11bed`; six files hash-match engine `engine/qe1-600adcbe1a85be59`, executor fixtures pass. PO confirmed `QCA_KEY_ID` and `QCA_KEY_HEX` are provisioned, names only. Deploy and smoke follow the completed Wave B seed. |
+| D | In progress | Build-flag-driven visible BETA marking is committed as frontend `5b2ea5f` plus backend `5a4132d`; production `limited_beta` remains unset. Backend-governed workflow availability and caller-token mutation routes are committed as backend `0bd1f06` and frontend `40cd682`. By PO ruling, the named-user fence remains closed until Wave C deploy and smoke are complete; the pre-go-live backup also remains. |
 
 ## 6. Authority granted by this plan
 

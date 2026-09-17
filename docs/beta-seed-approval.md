@@ -2,7 +2,7 @@
 
 Prepared: 2026-09-17
 
-Status: **Awaiting one Product Owner decision**
+Status: **Approved by Product Owner on 2026-09-17; live application blocked by destination and grade identities**
 
 Source workbook: `APSPL NAGPUR Master_20260720.xlsx`
 
@@ -135,5 +135,17 @@ directly adopted at Nagpur as authorised seed data.
 
 ## Product Owner response
 
-Use one response such as: `Approved as written; workbook current; INR/₹kg confirmed; beta users are
-Maker <email>, Checker <email>, Admin <email>.` Or list all amendments together.
+Approved on 2026-09-17 with `NAG` / Nagpur, INR and ₹/kg confirmed. The Product Owner explicitly
+approved the application-current-default Rate and Freight values as non-workbook-derived sources,
+the `FMCG-FOOD` Release, all 19 Sectors, the five starter Constructions, and `NA` → `NULL` for the
+second flute/layer pair. Named users are Maker `sales.01@avadhootpacks.in`, Checker
+`marketing@avadhootpacks.in`, and Admin `nikunj@avadhootpacks.in`.
+
+Live preflight found that only Nagpur appears in current Customer Location address evidence; eight
+approved Freight destinations have no exact governed Customer Location identity. The seed must not
+guess, create pseudo-customer locations, or publish a partial approved Freight Set, so application
+is blocked pending a canonical destination-identity resolution.
+
+Preflight also found that starter Construction 5 uses grade code `18J`, while the approved Rate Set
+contains `18` but no `18J`. The seed must not silently reinterpret `18J` as `18`; application is
+blocked pending an explicit governed `18J` rate or a Product Owner-approved construction change.
