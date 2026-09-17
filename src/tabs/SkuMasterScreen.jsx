@@ -2,9 +2,13 @@
 // src/tabs/SkuMasterScreen.jsx — governed SKU Master (U2, Canonical Amendment 02).
 //
 // Reads `/masters/skus` and `/masters/skus/<id>` as the authenticated caller.
-// There is deliberately NO create, edit, approve, discontinue, reference,
-// applicability or SKU Set control: no governed write operation is in scope,
-// and a dead control would promise one.
+// Governed editing (Canonical Amendment 04, slice 1) lives in
+// ./sku/SkuGovernedActions.jsx: Propose in the list toolbar, Actions ▾ in the
+// detail toolbar, a version editor, and reference controls. Each control is
+// offered only to a caller holding the capability at the SKU's plant, and stays
+// visible but DISABLED with its reason until the operations are activated (and
+// always in the fixture preview). Location applicability and SKU Set membership
+// have no control: their operations do not exist yet.
 //
 // ── LAYOUT ────────────────────────────────────────────────────────────────
 // The TopBar already names the screen, so there is no second page header.
@@ -77,6 +81,8 @@ import {
   COLUMN_FILTERS, COLUMN_FILTER_MAX, COLUMN_FILTER_OP_LABELS, columnFilterAvailability, columnFilterScanNotice,
   columnFilterSummary, columnFilterValidation, sharedFilterFromState, sharedStateFromFilter,
 } from "../lib/skuColumnFilters.js";
+import { skuOpsAuthority, skuOpsMode, skuProposalPlants } from "../lib/skuGovernedOps.js";
+import { SkuActionsMenu, SkuProposeForm, SkuReferenceControls, SkuVersionEditor } from "./sku/SkuGovernedActions.jsx";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag, SummaryRow } from "../ui/dataDisplay.jsx";
 import { CollapseIcon, ExpandIcon, RefreshIcon } from "../ui/icons.jsx";
@@ -137,7 +143,9 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   const [groupBySet, setGroupBySet] = useState(false);
   const [openFilter, setOpenFilter] = useState(null); // { key, anchor } | null
   const bodyRef = useRef(null);
-  const { setSidebarCollapsed, sidebarCollapsed } = useAppState();
+  const { setSidebarCollapsed, sidebarCollapsed, showToast } = useAppState();
+  const [editPlan, setEditPlan] = useState(null);   // the version editor's plan, or null
+  const [proposing, setProposing] = useState(false);
   const [focusPanel, setFocusPanel] = useState(null); // null · "list" · "detail"
   const focusRef = useRef(null);
   const sidebarBeforeFocus = useRef(sidebarCollapsed);
@@ -313,6 +321,16 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   const openColumn = openFilter && FIELD_BY_KEY[openFilter.key];
   const selectedCode = selectedId == null ? null
     : plantItemCodeLabel(gridRows.find(r => r.id === selectedId)?.plant_item_code ?? detail.data?.sku?.plant_item_code);
+  // Governed editing: the authority is read at the SKU's OWN plant. The fixture
+  // shows every control, disabled and labelled, and never writes.
+  const detailData = detail.status === "ready" ? detail.data : null;
+  const detailAuthority = fixtureOnly ? { manage: true, propose: true }
+    : skuOpsAuthority(profile, detailData?.sku?.plant?.plant_code);
+  const detailMode = skuOpsMode({ fixtureOnly, schemaPending: detailData?.schema_pending || {}, authority: detailAuthority });
+  const proposalPlants = fixtureOnly ? scope : skuProposalPlants(profile, scope);
+  const proposalMode = skuOpsMode({ fixtureOnly, schemaPending: catalogue.schemaPending || {},
+    authority: { propose: proposalPlants.length > 0 } });
+  const refreshAfterWrite = () => { setEditPlan(null); setReloadKey(k => k + 1); };
   const skuCount = catalogue.status === "ready"
     ? `${gridRows.length} SKU${gridRows.length === 1 ? "" : "s"}${catalogue.truncated ? ` · first ${catalogue.limit}` : ""}` : "—";
 
@@ -409,6 +427,9 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
                 </label>
               </div>
             </details>
+            {proposalMode.state !== "none" && <button type="button" onClick={() => setProposing(true)}
+              title={proposalMode.state === "live" ? "Propose a SKU at a plant you may propose at" : proposalMode.reason}
+              style={{ ...control, fontWeight: 700, color: C.green, cursor: "pointer", whiteSpace: "nowrap" }}>+ Propose</button>}
             <span style={{ flex: "1 1 auto" }} />
             <span style={{ fontSize: T.label, color: C.slateL, whiteSpace: "nowrap" }}>{skuCount}</span>
             <button type="button" onClick={() => setReloadKey(k => k + 1)} aria-label="Refresh SKU list"
@@ -487,6 +508,8 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
             <span style={{ fontFamily: mono, fontSize: T.body, fontWeight: 700, color: selectedCode ? C.slate : C.slateL,
               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
               {selectedCode || "No SKU selected"}</span>
+            {detailData && <SkuActionsMenu data={detailData} rows={catalogue.skus || []} authority={detailAuthority}
+              mode={detailMode} showToast={showToast} onChanged={refreshAfterWrite} onEditVersion={setEditPlan} />}
             <span style={{ flex: "1 1 auto" }} />
             {!focusPanel && (
               <div role="group" aria-label="Split" title="Split between list and detail · or drag the divider"
@@ -519,10 +542,16 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
               </div>
             )}
             {selectedId != null && detail.status === "ready" &&
-              <SkuDeepDive data={detail.data} fieldCols={fieldCols} onSelectSku={setSelectedId} />}
+              <SkuDeepDive data={detail.data} fieldCols={fieldCols} onSelectSku={setSelectedId}
+                authority={detailAuthority} mode={detailMode} showToast={showToast} onChanged={refreshAfterWrite} />}
           </div>
         </div>}
       </div>
+      {editPlan && detailData && detailMode.state === "live" && <SkuVersionEditor data={detailData} plan={editPlan}
+        showToast={showToast} onClose={() => setEditPlan(null)} onSaved={refreshAfterWrite} />}
+      {proposing && <SkuProposeForm plants={proposalPlants} profile={profile} mode={proposalMode} showToast={showToast}
+        onClose={() => setProposing(false)}
+        onSaved={id => { setProposing(false); setSelectedId(id); setReloadKey(k => k + 1); }} />}
     </div>
   );
 }
@@ -698,7 +727,7 @@ function SpecGrid({ rows, ctx, groups, selectedId, onSelect, groupBySet, filterO
   );
 }
 
-function SkuDeepDive({ data, fieldCols, onSelectSku }) {
+function SkuDeepDive({ data, fieldCols, onSelectSku, authority, mode, showToast, onChanged }) {
   const [focus, setFocus] = useState("all");
   const row = specRowFromDetail(data);
   const visibility = data.detail_visibility || {};
@@ -876,6 +905,31 @@ function SkuDeepDive({ data, fieldCols, onSelectSku }) {
                   <td style={{ padding: "4px 6px", color: C.slateM }}>{REFERENCE_KIND_LABELS[r.reference_kind] || r.reference_kind}</td>
                   <td style={{ padding: "4px 6px", fontFamily: mono, color: C.slate }}>{r.reference_value}</td>
                   <td style={{ padding: "4px 6px" }}><LifecycleBadge status={r.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <SkuReferenceControls data={data} references={references} authority={authority} mode={mode}
+          showToast={showToast} onChanged={onChanged} />
+      </SummaryRow>
+
+      <SummaryRow title="History" facts={data.history == null
+        ? [visibility.history === undefined ? "Not recorded in this preview" : visibilityText(visibility.history)]
+        : [`${data.history.length} governed change${data.history.length === 1 ? "" : "s"}`, "append-only"]}>
+        {data.history == null && <Notice tone="warn">History: {visibility.history === undefined
+          ? "not recorded in this preview" : visibilityText(visibility.history)}. It arrives with the governed SKU operations.</Notice>}
+        {data.history != null && data.history.length === 0 && <Notice>No governed change has been recorded for this SKU yet.</Notice>}
+        {data.history != null && data.history.length > 0 && (
+          <table style={{ borderCollapse: "collapse", fontSize: T.body, width: "100%" }}>
+            <tbody>
+              {data.history.map(e => (
+                <tr key={e.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td style={{ padding: "4px 6px", fontFamily: mono, color: C.slateL, whiteSpace: "nowrap" }}>
+                    {e.occurred_at ? new Date(e.occurred_at).toLocaleString() : "—"}</td>
+                  <td style={{ padding: "4px 6px", color: C.slate, fontWeight: 700 }}>{String(e.operation).replaceAll("_", " ")}</td>
+                  <td style={{ padding: "4px 6px", color: C.slateM }}>User #{e.actor}</td>
+                  <td style={{ padding: "4px 6px", color: C.slateL }}>{e.reason || ""}</td>
                 </tr>
               ))}
             </tbody>

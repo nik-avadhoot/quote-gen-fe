@@ -32,6 +32,11 @@ import {
 } from "../src/lib/skuMasterModel.js";
 import { SKU_FIXTURE_DETAILS, fixtureSkuCatalogue } from "../src/lib/skuMasterFixture.js";
 import {
+  SKU_EDIT_FIELDS, SKU_FIELD_CLASS, SKU_OPS_FIXTURE, SKU_OPS_PENDING, SKU_OP_CONFIRM, buildFieldChanges, fieldEditability,
+  parseFieldInput, replacementCandidates, skuLifecycleActions, skuOpsAuthority, skuOpsMode, skuProposalPlants,
+  versionChangeVerdict, versionEditPlan, versionFieldValues,
+} from "../src/lib/skuGovernedOps.js";
+import {
   COLUMN_FILTERS, FILTERABLE_COLUMN_COUNT, columnFilterAvailability, columnFilterParam, columnFilterScanNotice,
   columnFilterSummary, columnFilterValidation, fixtureCellMatches, sharedFilterFromState, sharedStateFromFilter,
 } from "../src/lib/skuColumnFilters.js";
@@ -253,6 +258,7 @@ check(PANEL_FOCUS.join() === "list,detail",
 
 // ──────────────────────────────────────────────────── gating and read-only
 const screen = read("../src/tabs/SkuMasterScreen.jsx");
+const actionsUi = read("../src/tabs/sku/SkuGovernedActions.jsx");
 const sidebar = read("../src/ui/Sidebar.jsx");
 const shell = read("../src/QuotationApp.jsx");
 const app = read("../src/App.jsx");
@@ -267,9 +273,10 @@ check(app.includes("import.meta.env.DEV && fixtureIllustration === \"u2-skus\"")
 const apiCalls = screen.match(/apiFetch\(([^)]*)\)/g) || [];
 check(apiCalls.length === 2 && apiCalls.every(call => !call.includes("method"))
   && !/runMutation|method:\s*"(POST|PATCH|PUT|DELETE)"/.test(screen),
-  "U2-SKU-FE-48 the screen issues exactly two GET reads and no mutation");
-check(!/>\s*(Create|New SKU|Edit|Approve|Publish|Discontinue|Reactivate|Add reference|Add to set|Withdraw)\s*</.test(screen),
-  "U2-SKU-FE-49 no dead create, edit, approve, discontinue or set-membership control is rendered");
+  "U2-SKU-FE-48 the screen itself issues exactly two GET reads; every governed write lives in SkuGovernedActions (Amendment 04)");
+check(!/>\s*(Create|New SKU|Edit|Approve|Publish|Discontinue|Reactivate|Add reference|Add to set|Withdraw)\s*</.test(screen)
+  && !/(Add to set|set membership|applicability)\s*</i.test(actionsUi) && !/sku-sets|location-applicab/.test(actionsUi),
+  "U2-SKU-FE-49 no control exists for an operation that does not: SKU Set membership and Location applicability (repointed for Amendment 04)");
 check(screen.indexOf("if (fixtureOnly)") !== -1 && screen.indexOf("if (fixtureOnly)") < screen.indexOf("apiFetch(query)")
   && screen.includes("U2 · FIXTURE ONLY"),
   "U2-SKU-FE-50 fixture mode is labelled and short-circuits before any request");
@@ -464,9 +471,12 @@ check(!/portfolio/i.test(read("../src/engine/costing.js")),
   "U2-SKU-FE-98 the costing engine does not read the portfolio at all");
 check(screen.includes('aria-label="Pricing Portfolio"') && screen.includes("disabled={portfolioPending}"),
   "U2-SKU-FE-99 the screen filters by portfolio and disables that filter while its storage is pending");
-check(!/(Save|Edit|Change|Reclassify|Set)s+portfolio/i.test(screen) && !/portfolio.{0,40}onSubmit/i.test(screen)
-  && !screen.includes("apiFetch(`/masters/skus`, { method"),
-  "U2-SKU-FE-100 there is NO edit affordance for the portfolio - the SKU Master has no governed write path to promise");
+check(!screen.includes("apiFetch(`/masters/skus`, { method")
+  && actionsUi.includes("`/masters/skus/${sku.id}/pricing-portfolio`")
+  && actionsUi.includes("Recorded only — no price is set from it (CDM-45).")
+  && skuLifecycleActions({ id: 1, status: "active", pricing_portfolio: "Strategic" }, [], { propose: true, manage: false })
+       .every(a => a.id !== "set_portfolio"),
+  "U2-SKU-FE-100 the portfolio changes only through its governed operation, offered only to manage_sku_master, and sets no price (repointed for Amendment 04)");
 // ──────────────────────── column-header filters (rulings 2026-09-16)
 const registryKeys = SKU_SPEC_GROUPS.flatMap(g => g.fields.map(f => f.key));
 check(registryKeys.every(key => COLUMN_FILTERS[key]) && Object.keys(COLUMN_FILTERS).length === registryKeys.length
@@ -529,6 +539,90 @@ check(skuEmptyState({ plantScope: ["NAG"], anyFilter: true, columnSummaries: ["L
 check(JSON.stringify(SKU_SEARCH_FIELDS) === JSON.stringify(["plant_item_code", "item_name", "item_short_name",
   "customer_item_code", "softcomp_code", "legacy_plant_item_code", "customer_name"]),
   "U2-SKU-FE-113 the identity search box is unchanged by the header filters - still identity only");
+// ──────────────────────── governed editing by due authority (Amendment 04)
+const opsByClass = cls => Object.entries(SKU_FIELD_CLASS).filter(([, c]) => c === cls).map(([f]) => f).sort().join();
+check(opsByClass("new_sku") === ["box_type", "construction_version_id", "height_mm", "length_mm", "spec_bct", "spec_bs", "spec_ect",
+  "stated_bs", "stated_cs", "stated_ect", "stated_item_gsm", "width_mm"].join()
+  && opsByClass("price_driving_version") === "cobb_value,item_weight_kg,ups"
+  && opsByClass("version") === ["colour_detail", "customer_spec_version", "item_family", "item_group", "item_name",
+    "item_short_name", "number_of_colours", "print_quality", "print_technology"].join()
+  && SKU_EDIT_FIELDS.every(d => SKU_FIELD_CLASS[d.field]) && !SKU_EDIT_FIELDS.some(d => /plant|party|customer$/.test(d.field)),
+  "U2-SKU-FE-114 the field classes mirror D2 exactly, and plant and Customer are no editable field at all");
+const opsProfileAt = caps => ({ plant_capabilities: { NAG: caps } });
+check(JSON.stringify(skuOpsAuthority(opsProfileAt(["plant_access", "make_quote"]), "NAG")) === JSON.stringify({ manage: false, propose: true })
+  && JSON.stringify(skuOpsAuthority(opsProfileAt(["plant_access", "manage_sku_master"]), "NAG")) === JSON.stringify({ manage: true, propose: true })
+  && JSON.stringify(skuOpsAuthority(opsProfileAt(["plant_access"]), "NAG")) === JSON.stringify({ manage: false, propose: false })
+  && !skuOpsAuthority(opsProfileAt(["manage_sku_master"]), "PUN").manage
+  && JSON.stringify(skuProposalPlants({ plant_capabilities: { NAG: ["make_quote"], PUN: ["plant_access"] } }, ["NAG", "PUN"])) === '["NAG"]',
+  "U2-SKU-FE-115 authority is read at the SKU's own plant: a Maker may propose, only manage_sku_master manages (D1)");
+check(skuOpsMode({ authority: { propose: false } }).state === "none"
+  && skuOpsMode({ fixtureOnly: true, authority: { propose: true } }).reason === SKU_OPS_FIXTURE
+  && skuOpsMode({ schemaPending: { governed_operations: true }, authority: { propose: true } }).reason === SKU_OPS_PENDING
+  && skuOpsMode({ authority: { propose: true } }).state === "live" && /Schema activation pending/.test(SKU_OPS_PENDING),
+  "U2-SKU-FE-116 no authority shows nothing; pending activation and the fixture show controls DISABLED with the reason (D11)");
+const opsMaker = skuLifecycleActions({ id: 5, status: "proposed", plant_item_code: null, pricing_portfolio: "Strategic" },
+  [{ id: 50, version_no: 1, approved: false }], { propose: true, manage: false }).map(a => a.id);
+const opsNpdProposed = skuLifecycleActions({ id: 5, status: "proposed", plant_item_code: null, pricing_portfolio: "Strategic" },
+  [{ id: 50, version_no: 1, approved: false }], { propose: true, manage: true });
+check(opsMaker.join() === "edit_version"
+  && opsNpdProposed.map(a => a.id).join() === "edit_version,approve_version,assign_code,publish,withdraw,set_portfolio"
+  && opsNpdProposed.find(a => a.id === "publish").enabled === false
+  && opsNpdProposed.find(a => a.id === "publish").reason === "Assign the Plant Item Code first.",
+  "U2-SKU-FE-117 a Maker is offered only the draft; a manager is offered approve, code, publish (blocked with its reason), withdraw and portfolio (D1, D3)");
+const opsNpdActive = skuLifecycleActions({ id: 5, status: "active", plant_item_code: "N-1", pricing_portfolio: "Strategic" },
+  [{ id: 50, version_no: 1, approved: true }], { propose: true, manage: true }).map(a => a.id);
+const opsNpdDisc = skuLifecycleActions({ id: 5, status: "discontinued", plant_item_code: "N-1", pricing_portfolio: "Strategic" },
+  [{ id: 50, version_no: 1, approved: true }], { propose: true, manage: true });
+check(opsNpdActive.join() === "edit_version,discontinue,set_portfolio" && !opsNpdActive.includes("assign_code")
+  && opsNpdDisc.map(a => a.id).join() === "edit_version,reactivate,set_portfolio"
+  && opsNpdDisc.find(a => a.id === "edit_version").enabled === false,
+  "U2-SKU-FE-118 the lifecycle offers exactly the ruled transitions for each state; a discontinued SKU takes no version (D4)");
+const opsPlan1 = versionEditPlan([{ id: 1, version_no: 1, approved: false }]);
+const opsPlan2 = versionEditPlan([{ id: 1, version_no: 1, approved: true }, { id: 2, version_no: 2, approved: false }]);
+const opsPlanNew = versionEditPlan([{ id: 1, version_no: 1, approved: true }]);
+check(opsPlan1.mode === "edit_draft" && opsPlan2.mode === "edit_draft" && opsPlan2.base.id === 1 && opsPlanNew.mode === "new_version"
+  && fieldEditability("length_mm", opsPlan1).editable && !fieldEditability("length_mm", opsPlan2).editable
+  && !fieldEditability("construction_version_id", opsPlanNew).editable && fieldEditability("item_name", opsPlanNew).editable
+  && /NEW SKU/.test(fieldEditability("box_type", opsPlanNew).reason),
+  "U2-SKU-FE-119 a never-approved first draft edits any field in place; afterwards a new-SKU field is locked with its reason (D2)");
+const opsBase = versionFieldValues({ construction_version_id: 41, specification: { length_mm: 300, ups: 1, height_mm: 0 },
+  quote_fields: { item_name: "A", cobb_value: null } });
+check(opsBase.height_mm === 0 && opsBase.cobb_value === null && opsBase.construction_version_id === 41
+  && !versionChangeVerdict(opsPlanNew, opsBase, { width_mm: 210 }, false).ok
+  && /price-driving/.test(versionChangeVerdict(opsPlanNew, opsBase, { cobb_value: "32" }, false).message)
+  && versionChangeVerdict(opsPlanNew, opsBase, { cobb_value: "32" }, true).ok
+  && versionChangeVerdict(opsPlanNew, opsBase, { item_name: "B" }, false).ok
+  && !versionChangeVerdict(opsPlanNew, opsBase, {}, false).ok,
+  "U2-SKU-FE-120 the editor says before sending whether a change is a new SKU, needs price-driving, or is a version (D2)");
+const opsLenDef = SKU_EDIT_FIELDS.find(d => d.field === "length_mm");
+const opsNameDef = SKU_EDIT_FIELDS.find(d => d.field === "item_name");
+const opsUpsDef = SKU_EDIT_FIELDS.find(d => d.field === "ups");
+check(parseFieldInput(opsLenDef, "0").value === 0 && parseFieldInput(opsLenDef, "").value === null && parseFieldInput(opsLenDef, "-1").error
+  && parseFieldInput(opsNameDef, "  ").value === null && parseFieldInput(opsNameDef, " A ").value === "A"
+  && parseFieldInput(opsUpsDef, "0").error && parseFieldInput(opsUpsDef, "").error
+  && JSON.stringify(buildFieldChanges({ height_mm: "0", item_name: "" }, { height_mm: null, item_name: null }).fields) === '{"height_mm":0}',
+  "U2-SKU-FE-121 blank is not recorded and zero is a value; unchanged fields are never sent");
+const opsSku = { id: 1, status: "active", plant: { plant_code: "NAG" }, party_id: 501 };
+check(replacementCandidates(opsSku, [
+  { id: 1, status: "active", plant: { plant_code: "NAG" }, party_id: 501 },
+  { id: 2, status: "active", plant: { plant_code: "NAG" }, party_id: 501 },
+  { id: 3, status: "active", plant: { plant_code: "PUN" }, party_id: 501 },
+  { id: 4, status: "active", plant: { plant_code: "NAG" }, party_id: 777 },
+  { id: 5, status: "proposed", plant: { plant_code: "NAG" }, party_id: 501 }]).map(r => r.id).join() === "2"
+  && /never be changed, released or reissued/.test(SKU_OP_CONFIRM.assign_code("N-9"))
+  && /stays Proposed until it is published/.test(SKU_OP_CONFIRM.assign_code("N-9"))
+  && /linked, never substituted/.test(SKU_OP_CONFIRM.discontinue("N-9"))
+  && /sets no price/.test(SKU_OP_CONFIRM.set_portfolio("N-9", "Strategic")),
+  "U2-SKU-FE-122 a replacement is only a different active SKU of the same plant and Customer; confirms state the consequence (D3, D4)");
+check(actionsUi.includes("expected_content_version: plan.version.content_version")
+  && actionsUi.includes("expected_content_version: data.sku.content_version")
+  && (actionsUi.match(/runMutation\(/g) || []).length >= 4 && !/\.rpc\(|service_role|supabase/.test(actionsUi)
+  && actionsUi.includes("if (!live || busy) return;") && actionsUi.includes("{!live && <DisabledNote reason={mode.reason} />}"),
+  "U2-SKU-FE-123 every write carries the token it read, goes through a governed route, and does nothing unless live (D8, D11)");
+check(screen.includes("skuOpsAuthority(profile, detailData?.sku?.plant?.plant_code)")
+  && screen.includes('detailMode.state === "live" && <SkuVersionEditor')
+  && screen.includes('title="History"') && screen.includes("It arrives with the governed SKU operations."),
+  "U2-SKU-FE-124 the screen reads authority at the SKU's plant, opens the editor only when live, and shows the append-only history (D9)");
 console.log(`\n${passes} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);
 console.log("U2 SKU Master frontend fixture gate PASS");
