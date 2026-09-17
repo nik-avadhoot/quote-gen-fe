@@ -118,7 +118,7 @@ ruling BR-8, not an inferred implementation limitation.
 | BR-4 | Beta plant masters are drafted from `APSPL NAGPUR Master_20260720.xlsx` | **Approved** 2026-09-17 with the explicit exception that the first governed Rate and Freight Sets use application-current defaults, not workbook-derived values |
 | BR-5 | Beta exports use the current Excel template, visibly marked BETA | **Approved** with the plan (recommended option) |
 | BR-6 | SKU Sets slice 2 | **Superseded:** applied live 2026-09-17 by a concurrent thread; available in beta as-is |
-| BR-7 | Constructions: a starter set is seeded published and directly `adopted` at the beta plant, and trial users may also propose Constructions on the row | **Approved** 2026-09-17, including five starters and `INT Flute 2 = NA` → `NULL`. Direct adoption rows are seed data only; no UI exposes direct adoption writes |
+| BR-7 | Constructions: a starter set is seeded published and directly `adopted` at the beta plant, and trial users may also propose Constructions on the row | **Amended** 2026-09-18 to four non-job-work starters; `18J` removed and job work excluded from beta. `INT Flute 2 = NA` → `NULL` remains approved. Direct adoption rows are seed data only; no UI exposes direct adoption writes |
 | BR-8 | Amend and Reprice are unavailable in limited beta and are delivered post-beta | **Approved** 2026-09-17 |
 
 Wave B seed content (Sectors, rates, freight, Pricing Basis composition, starter Constructions) is
@@ -129,7 +129,7 @@ presented to the Product Owner as **one** batch for approval, not item by item.
 | Wave | State | Evidence / next gate |
 |---|---|---|
 | A | Done | Family G correction applied live as `20260917182121`; authenticated has helper EXECUTE while anon/public remain denied. Catalogue-suite registration applied live as `20260917182138`; both suites are present in stored `tests.run_all()`. Backend build identity is committed as `5a4132d`. |
-| B | In progress — data blocker | PO approved the single seed batch on 2026-09-17. Live preflight found no exact governed Customer Location identity for eight of nine approved freight destinations and no approved Rate Set entry for starter grade `18J`; the migration must fail closed rather than invent identities, reinterpret the grade as `18`, or write a partial governed release. |
+| B | In progress — one exact-grade blocker | PO amended freight on 2026-09-18: seed the single matched destination city and use explicit manual Pricing Group freight for the other eight; no destination master or pseudo-locations. `18J` was removed with job work out of scope. Preflight then found Construction 2 uses exact grade `25`, absent from the approved Rate Set; the migration must not reinterpret it as `25WTL`. |
 | C | Waiting on Wave B | CP-108 drift was fixed in backend `6d11bed`; six files hash-match engine `engine/qe1-600adcbe1a85be59`, executor fixtures pass. PO confirmed `QCA_KEY_ID` and `QCA_KEY_HEX` are provisioned, names only. Deploy and smoke follow the completed Wave B seed. |
 | D | In progress | Build-flag-driven visible BETA marking is committed as frontend `5b2ea5f` plus backend `5a4132d`; production `limited_beta` remains unset. Backend-governed workflow availability and caller-token mutation routes are committed as backend `0bd1f06` and frontend `40cd682`. By PO ruling, the named-user fence remains closed until Wave C deploy and smoke are complete; the pre-go-live backup also remains. |
 

@@ -17,6 +17,7 @@ Go-live authority: Product Owner
 | Alongside period | First week; every system result compared with the existing spreadsheet |
 | Production build flag | `limited_beta` plus only the approved destination flags |
 | Customer issue | Not permitted until the PO declares go-live |
+| Job work | **OUT OF SCOPE** — keep every job-work enquiry on the spreadsheet |
 
 Authorization is server-enforced. The beta build flag controls visibility and BETA export marking;
 it is not an access-control substitute. Trial users receive only the capabilities required at the
@@ -25,12 +26,24 @@ confirmed beta plant. Wrong-plant and ungranted users must remain refused.
 The fence remains closed until Wave C is complete. This is the readiness control for Calculate and
 Send: no named beta capability is granted while attestation/Edge activation is pending.
 
+**JOB-WORK ENQUIRIES ARE OUT OF SCOPE FOR LIMITED BETA.** `J` denotes client-owned Kraft paper and
+the application has no governed job-work pricing or stock model. A Maker must not approximate job
+work by selecting a non-`J` grade or by using a zero material rate; a governed immutable Quote must
+never carry a fabricated paper price. Keep those enquiries on the spreadsheet.
+
 ## Approved commercial source exception
 
 The first governed Nagpur Rate Set and Freight Set use the application's **current defaults**, not
 workbook-derived masters. This exception was explicitly approved by the Product Owner on 2026-09-17.
 During the alongside week, spreadsheet comparisons must label that source difference rather than
 misdescribe the values as imported from `APSPL NAGPUR Master_20260720.xlsx`.
+
+The initial Freight Set contains only exact existing governed Customer Location matches: **1 of 9
+approved destination cities (Nagpur)**, represented by two ship-to-eligible location identities.
+For Pune, Kolkata, Haldia, Howrah, Guwahati, Delhi, Ahmedabad and Hyderabad—or any other location
+without an entry in the approved Freight Set—the Maker must set the Pricing Group to
+`freight_mode = 'manual'` and enter an explicit ₹/kg value. Label the tracker entry **Maker-entered
+freight**, not governed-master freight. A destination master remains a post-beta evidence-led decision.
 
 ## Daily operating check
 
@@ -46,6 +59,8 @@ Complete once per beta day and after any deployment:
   codes, never tokens, attestations or secret values.
 - For every issued beta Quote, compare final rate and inputs with the spreadsheet and record the
   explanation for every difference.
+- Label freight in the tracker as either `governed-master` or `Maker-entered`; for manual mode,
+  record the explicit ₹/kg value used.
 - Inspect persistent calculation provenance, snapshot identities, workflow actor/time and the
   permanent Quote reference.
 - Triage defects as Speedbreaker, Fix in this increment, Follow-up debt or Observation.
@@ -104,8 +119,12 @@ document, a repository file, a command transcript or chat. Confirm only that bot
 ## Known issues before entry
 
 - Wave A is live and verified as migrations `20260917182121` and `20260917182138`.
-- Wave B content is approved, but eight approved freight destinations lack exact governed Customer
-  Location identities; the seed remains unapplied and must fail closed rather than guess.
+- Wave B freight handling is approved: one of nine destination cities matches existing governed
+  locations; every unmatched destination uses explicit Maker-entered manual freight. Both matched
+  Nagpur ship-to identities are still `proposed`, so they cannot be selected until activated.
+- Construction 2 still names exact grade `25`, absent from the approved Rate Set. It is not silently
+  mapped to `25WTL`; Wave B remains unapplied pending that final exact-grade ruling.
+- Job-work enquiries are excluded from limited beta and stay on the spreadsheet.
 - Maker and Checker Auth invitations were sent on 2026-09-18; both must activate their logins before
   any capability grant.
 - Edge secret names are confirmed provisioned; the function is not deployed because Wave B must

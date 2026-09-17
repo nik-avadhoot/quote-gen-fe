@@ -2,7 +2,7 @@
 
 Prepared: 2026-09-17
 
-Status: **Approved by Product Owner on 2026-09-17; live application blocked by destination and grade identities**
+Status: **Approved and amended by Product Owner; live application blocked by one remaining exact-grade identity**
 
 Source workbook: `APSPL NAGPUR Master_20260720.xlsx`
 
@@ -26,7 +26,7 @@ Approve all of the following together, or reply with amendments in one message:
 5. **Pricing Basis:** approve `FMCG-FOOD` as the sector version pinned by the first automatic Nagpur
    Pricing Basis Release, effective 2026-09-17. All 19 Sectors are still seeded and available;
    alternative sector releases can follow without changing this seed.
-6. **Starter Constructions:** approve the five exact, most frequent `Running` signatures below and
+6. **Starter Constructions:** approve the four exact, most frequent non-job-work `Running` signatures below and
    the explicit mapping `INT Flute 2 = NA` to database `NULL` for 3-ply boards.
 
 ## Governed Sectors — approved BR-2 values
@@ -84,8 +84,15 @@ Source: current application `DEFAULT_RATES`, **not the workbook**. Supplier inte
 
 Source: current application Nagpur freight mirror, **not the workbook**. The workbook's `Customer
 Master!Y` values are customer/location-specific and cannot be safely reinterpreted as one governed
-plant-to-destination matrix. Only live governed Customer Location identities that exactly match a
-destination below will be inserted; any unmatched destination is reported and blocks application.
+plant-to-destination matrix. Only existing governed, ship-to-eligible Customer Location identities
+whose current address exactly evidences a destination below are inserted. An unmatched destination
+does not block this amended seed: its Pricing Group must use `freight_mode = 'manual'` with an
+explicit Maker-entered value, and the tracker must label that quote's freight as Maker-entered.
+
+Live preflight on 2026-09-18 found **1 of 9 destination cities** matched: Nagpur. It maps to two
+ship-to-eligible Customer Location identities, both currently `proposed`. The other eight cities
+(Pune, Kolkata, Haldia, Howrah, Guwahati, Delhi, Ahmedabad and Hyderabad) have no exact governed
+Customer Location match and therefore use manual Pricing Group freight during limited beta.
 
 | Origin | Destination | ₹/kg |
 |---|---|---:|
@@ -113,8 +120,9 @@ destination below will be inserted; any unmatched destination is reported and bl
 
 Source population: 826 workbook `SPEC` rows whose Item Status is exactly `Running`. Frequency is the
 count of the complete internal signature. BF values become layer grade codes as text; blank F2/L2
-layers stay `NULL`. Each Construction receives version 1, is published, and that exact version is
-directly adopted at Nagpur as authorised seed data.
+layers stay `NULL`. Each listed Construction receives version 1, is published, and that exact
+version is directly adopted at Nagpur as authorised seed data. The former fifth candidate,
+`Beta 3-ply E 18J/120`, is excluded: `J` denotes client-owned job-work paper and is not a paper grade.
 
 | # | Frequency | Name | Ply | Flutes | TOP | F1 | L1 | F2 | L2 | Board GSM |
 |---:|---:|---|---:|---|---|---|---|---|---|---:|
@@ -122,14 +130,13 @@ directly adopted at Nagpur as authorised seed data.
 | 2 | 57 | Beta 3-ply C 25-16-18 | 3 | C / NULL | 25/150 | 16/120 | 18/150 | NULL | NULL | 474 |
 | 3 | 48 | Beta 3-ply C 16/170 | 3 | C / NULL | 16/170 | 16/170 | 16/170 | NULL | NULL | 586.5 |
 | 4 | 38 | Beta 3-ply C 16/120 | 3 | C / NULL | 16/120 | 16/120 | 16/120 | NULL | NULL | 414 |
-| 5 | 23 | Beta 3-ply E 18J/120 | 3 | E / NULL | 18J/120 | 18J/120 | 18J/120 | NULL | NULL | 397.2 |
 
 ## Application invariants
 
 - The migration resolves plant, user and component identities by stable codes/attributes; it never
   hard-codes generated IDs.
-- It fails before writing if Nagpur, an approved named actor, a destination, or an expected empty
-  seed target is missing/ambiguous.
+- It fails before writing if Nagpur, an approved named actor, a purported matched destination, or an
+  expected empty seed target is missing/ambiguous. Unmatched freight cities are deliberately absent.
 - Every version is attributed and approved; no secret appears in SQL or logs.
 - Once referenced, corrections are new versions or withdrawals—never destructive deletes.
 
@@ -137,15 +144,16 @@ directly adopted at Nagpur as authorised seed data.
 
 Approved on 2026-09-17 with `NAG` / Nagpur, INR and ₹/kg confirmed. The Product Owner explicitly
 approved the application-current-default Rate and Freight values as non-workbook-derived sources,
-the `FMCG-FOOD` Release, all 19 Sectors, the five starter Constructions, and `NA` → `NULL` for the
+the `FMCG-FOOD` Release, all 19 Sectors, the four non-job-work starter Constructions, and `NA` → `NULL` for the
 second flute/layer pair. Named users are Maker `sales.01@avadhootpacks.in`, Checker
 `marketing@avadhootpacks.in`, and Admin `nikunj@avadhootpacks.in`.
 
-Live preflight found that only Nagpur appears in current Customer Location address evidence; eight
-approved Freight destinations have no exact governed Customer Location identity. The seed must not
-guess, create pseudo-customer locations, or publish a partial approved Freight Set, so application
-is blocked pending a canonical destination-identity resolution.
+On 2026-09-18 the Product Owner amended freight handling: seed only exact existing matches, create no
+generic destination master or pseudo Customer Locations, and require explicit manual Pricing Group
+freight for every unmatched destination. The same amendment removed the `18J` Construction and
+placed all job-work enquiries outside limited beta; no `18J` rate or `18J` → `18` mapping is allowed.
 
-Preflight also found that starter Construction 5 uses grade code `18J`, while the approved Rate Set
-contains `18` but no `18J`. The seed must not silently reinterpret `18J` as `18`; application is
-blocked pending an explicit governed `18J` rate or a Product Owner-approved construction change.
+The amended preflight found one remaining contradiction before live application: Construction 2
+uses exact layer grade code `25`, while the approved Rate Set has no `25` entry (`25WTL` is a distinct
+code). Exact Rate Set lookup would leave that layer without a governed material rate. The seed must
+not reinterpret `25` as `25WTL` without an explicit Product Owner ruling.
