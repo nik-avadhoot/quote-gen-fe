@@ -2,7 +2,7 @@ import { useState } from "react";
 import { C, mono, sans } from "./theme.js";
 import { useAuth } from "./AuthContext.jsx";
 
-export default function LoginScreen({ onU2SkuIllustration, onU3Illustration, onU4CatalogueIllustration, onU5Illustration }) {
+export default function LoginScreen({ onU2ConstructionIllustration, onU2SkuIllustration, onU3Illustration, onU4CatalogueIllustration, onU5Illustration }) {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,13 +56,14 @@ export default function LoginScreen({ onU2SkuIllustration, onU3Illustration, onU
         {/* Development-only fixture previews (App.jsx passes these handlers only
             in a DEV build). Demoted below a divider as plain text links so they
             never compete with Sign in (UX policy §3). */}
-        {(onU2SkuIllustration || onU3Illustration || onU5Illustration || onU4CatalogueIllustration) && (
+        {(onU2ConstructionIllustration || onU2SkuIllustration || onU3Illustration || onU5Illustration || onU4CatalogueIllustration) && (
           <div style={{ marginTop: 18, paddingTop: 10, borderTop: `1px dashed ${C.border}` }}>
             <div style={{ fontSize: 8.5, color: C.slateL, fontWeight: 700, textTransform: "uppercase",
               letterSpacing: "0.06em", marginBottom: 4 }}>Developer previews · fixture data only</div>
             {[[onU3Illustration, "U3–U4 Pricing Basis"],
               [onU5Illustration, "U5 Quote evidence"],
               [onU4CatalogueIllustration, "My Batches"],
+              [onU2ConstructionIllustration, "U2 Plant Construction Adoption"],
               [onU2SkuIllustration, "U2 SKU Master"]].filter(([handler]) => handler).map(([handler, label]) => (
               <button key={label} type="button" onClick={handler}
                 style={{ display: "block", padding: "2px 0", border: 0, background: "transparent",

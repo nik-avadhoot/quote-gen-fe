@@ -48,7 +48,11 @@ export default function Sidebar(){
         ?[item("conlib","CL","Construction Library",constructionLib.length)]
         :[pending("CL","Construction Library",
           isFeatureEnabled("u2_construction_library") ? "Capability required" : "U2 destination not enabled")]),
-      pending("PA","Plant Construction Adoption","In Construction Library"),
+      ...(isFeatureEnabled("u2_construction_library")&&hasCapability(profile,"read_construction_library")
+        ?[item("conadoption","PA","Plant Construction Adoption",undefined,
+          "Read-only published Construction versions by accessible Producing Plant")]
+        :[pending("PA","Plant Construction Adoption",
+          isFeatureEnabled("u2_construction_library") ? "Capability required" : "U2 destination not enabled")]),
       // SKU read scope is plant_access at any plant — the skus SELECT policy.
       ...(isFeatureEnabled("u2_sku_master")&&canOpenSkuMaster(profile)
         ?[item("skus","SK","SKU Master",undefined,"Read-only governed SKUs, versions, specifications and Location applicability")]

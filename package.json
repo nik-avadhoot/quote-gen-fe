@@ -25,6 +25,7 @@
     "test:pricing-group": "node scripts/pricing-group-fixtures.mjs",
     "test:governed-calculate-send": "node scripts/governed-calculate-send-fixtures.mjs",
     "test:construction-safety": "node scripts/construction-safety-fixtures.mjs",
+    "test:construction-adoption": "node scripts/construction-adoption-fixtures.mjs",
     "test:printing-spec": "node scripts/printing-spec-fixtures.mjs",
     "test:pinned-addons": "node scripts/pinned-addons-fixtures.mjs",
     "test:gsm-master": "node scripts/gsm-master-fixtures.mjs",

@@ -550,7 +550,7 @@ check(sidebar.includes("openSections")
 const productMastersMenu = sidebar.slice(
   sidebar.indexOf('["Product Masters"'), sidebar.indexOf('["Commercial Masters"'));
 check(productMastersMenu.includes(':[pending("CL","Construction Library"')
-  && productMastersMenu.includes('pending("PA","Plant Construction Adoption"')
+  && productMastersMenu.includes('item("conadoption","PA","Plant Construction Adoption"')
   && productMastersMenu.includes('item("skus","SK","SKU Master"')
   && productMastersMenu.includes(':[pending("SK","SKU Master"')
   && productMastersMenu.includes('Read-only governed SKUs, versions, specifications and Location applicability')

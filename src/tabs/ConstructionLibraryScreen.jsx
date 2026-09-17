@@ -47,26 +47,102 @@ import { useAuth } from "../AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
 import { hasCapability } from "../lib/capabilities.js";
+import { CONSTRUCTION_ADOPTION_FIXTURE } from "../lib/constructionAdoptionFixture.js";
+import {
+  ADOPTION_STATUS,
+  adoptionStatusForPlant,
+  callerAccessiblePlants,
+  constructionVersionSummary,
+  publishedApprovedConstructionVersions,
+} from "../lib/constructionAdoptionModel.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode } from "../ui/dataDisplay.jsx";
 import { C, mono, sans } from "../theme.js";
 
 const LAYER_ORDER = ["TOP", "F1", "L1", "F2", "L2"];
 
-export default function ConstructionLibraryScreen() {
+const ADOPTION_TONE = {
+  [ADOPTION_STATUS.adopted]: { label: "Adopted", color: C.green, background: "#EDF8F1" },
+  [ADOPTION_STATUS.withdrawn]: { label: "Withdrawn", color: C.slateM, background: C.paper },
+  [ADOPTION_STATUS.notAdopted]: { label: "Not adopted", color: C.amberD, background: "#FFF8ED" },
+  [ADOPTION_STATUS.unavailable]: { label: "Unavailable", color: C.red, background: "#FFF1F0" },
+};
+
+function AdoptionMatrix({ constructions, plantState, profile, partial }) {
+  if (plantState.status === "loading") return <LoadingState label="Loading producing plants…" />;
+  if (plantState.status !== "ready") {
+    return <div role="status" style={{ padding: 14, border: `1px solid ${C.amber}55`, borderRadius: 7,
+      color: C.amberD, background: "#FFF8ED", fontSize: 11 }}>
+      Producing Plant identities could not be read, so the adoption matrix is unavailable. The Construction Library remains readable.
+    </div>;
+  }
+
+  const plants = callerAccessiblePlants(plantState.rows, profile);
+  const rows = publishedApprovedConstructionVersions(constructions);
+  if (plants.length === 0) {
+    return <EmptyState title="No Producing Plant access is assigned to this caller."
+      hint="Plant adoption is plant-owned. Reading the global Construction Library does not grant a plant scope." />;
+  }
+  if (rows.length === 0) {
+    return <EmptyState title="No published, approved Construction versions are available."
+      hint="Only an approved version of a published Construction can be adopted for formal use." />;
+  }
+
+  return <div style={{ overflowX: "auto", border: `1px solid ${C.border}`, borderRadius: 7, background: C.white }}>
+    <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620, fontSize: 10.5 }}>
+      <thead>
+        <tr style={{ background: C.paper, color: C.slateM, textAlign: "left" }}>
+          <th style={{ padding: "7px 9px", borderBottom: `1px solid ${C.border}` }}>Construction version</th>
+          <th style={{ padding: "7px 9px", borderBottom: `1px solid ${C.border}` }}>Technical identity</th>
+          {plants.map(plant => <th key={plant.id} title={plant.name}
+            style={{ padding: "7px 9px", borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
+            {plant.code}<div style={{ fontSize: 8.5, fontWeight: 400, color: C.slateL }}>{plant.name}</div>
+          </th>)}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(({ construction, version }) => <tr key={version.id}>
+          <td style={{ padding: "8px 9px", borderBottom: `1px solid ${C.border}` }}>
+            <PermanentCode code={construction.construction_code} />
+            <div style={{ marginTop: 3, color: C.slate, fontWeight: 600 }}>{construction.name} · v{version.version_no}</div>
+          </td>
+          <td style={{ padding: "8px 9px", borderBottom: `1px solid ${C.border}`, color: C.slateM }}>
+            {constructionVersionSummary(version)}
+          </td>
+          {plants.map(plant => {
+            const status = adoptionStatusForPlant(version, plant.id, partial);
+            const tone = ADOPTION_TONE[status];
+            return <td key={plant.id} style={{ padding: "8px 9px", borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
+              <span style={{ display: "inline-block", minWidth: 70, padding: "3px 7px", borderRadius: 10,
+                color: tone.color, background: tone.background, fontSize: 9, fontWeight: 700 }}>
+                {tone.label}
+              </span>
+            </td>;
+          })}
+        </tr>)}
+      </tbody>
+    </table>
+  </div>;
+}
+
+export default function ConstructionLibraryScreen({ initialView = "library", fixtureOnly = false, onExitFixture }) {
   const { isActive, profile } = useAuth();
-  const [state, setState] = useState({ status: "loading", constructions: [], partial: false });
-  // null = the plants read did not answer. Deliberately distinct from {} ("no
-  // plants visible"), so a missing name is never presented as a known absence.
-  const [plantNames, setPlantNames] = useState(null);
-  const [readAt, setReadAt] = useState(null);
+  const effectiveProfile = fixtureOnly ? CONSTRUCTION_ADOPTION_FIXTURE.profile : profile;
+  const [view, setView] = useState(initialView === "adoption" ? "adoption" : "library");
+  const [state, setState] = useState(() => fixtureOnly
+    ? { status: "ready", constructions: CONSTRUCTION_ADOPTION_FIXTURE.constructions, partial: false }
+    : { status: "loading", constructions: [], partial: false });
+  const [plantState, setPlantState] = useState(() => fixtureOnly
+    ? { status: "ready", rows: CONSTRUCTION_ADOPTION_FIXTURE.plants }
+    : { status: "loading", rows: [] });
+  const [readAt, setReadAt] = useState(() => fixtureOnly ? new Date("2026-09-17T10:00:00+05:30") : null);
   const [expanded, setExpanded] = useState({});
   const [reloadKey, setReloadKey] = useState(0);
 
-  const mayRead = hasCapability(profile, "read_construction_library");
+  const mayRead = hasCapability(effectiveProfile, "read_construction_library");
 
   useEffect(() => {
-    if (!isActive) return; // an inactive session never issues the request
+    if (fixtureOnly || !isActive) return; // fixture mode never issues a request
     let cancelled = false;
 
     (async () => {
@@ -92,23 +168,26 @@ export default function ConstructionLibraryScreen() {
     })();
 
     return () => { cancelled = true; };
-  }, [isActive, reloadKey]);
+  }, [fixtureOnly, isActive, reloadKey]);
 
   // Plant identity, from the governed Plants route — the honest source. Its
   // failure is not this screen's failure: adoption degrades to ids.
   useEffect(() => {
-    if (!isActive || !mayRead) return;
+    if (fixtureOnly || !isActive || !mayRead) return;
     let cancelled = false;
     (async () => {
+      setPlantState({ status: "loading", rows: [] });
       const resp = await apiFetch("/masters/plants");
       if (cancelled) return;
-      if (classifyResponse(resp).kind !== "ok") { setPlantNames(null); return; }
-      const map = {};
-      for (const p of resp.data?.plants || []) map[p.id] = p.plant_code || p.name;
-      setPlantNames(map);
+      if (classifyResponse(resp).kind !== "ok") { setPlantState({ status: "unavailable", rows: [] }); return; }
+      setPlantState({ status: "ready", rows: resp.data?.plants || [] });
     })();
     return () => { cancelled = true; };
-  }, [isActive, mayRead, reloadKey]);
+  }, [fixtureOnly, isActive, mayRead, reloadKey]);
+
+  const plantNames = plantState.status === "ready"
+    ? Object.fromEntries(plantState.rows.map(plant => [plant.id, plant.plant_code || plant.name]))
+    : null;
 
   const plantLabel = (id) => {
     if (plantNames && plantNames[id]) return plantNames[id];
@@ -147,7 +226,14 @@ export default function ConstructionLibraryScreen() {
   const { constructions, partial } = state;
 
   return (
-    <div style={{ padding: 16, fontFamily: sans, overflowY: "auto", height: "100%" }}>
+    <div style={{ padding: 16, fontFamily: sans, overflowY: "auto", height: "100%",
+      boxSizing: "border-box", background: C.cream }}>
+      {fixtureOnly && <div role="status" style={{ marginBottom: 10, padding: "7px 10px", border: `1px solid ${C.amber}`,
+        borderRadius: 6, background: "#FFF8ED", color: C.amberD, fontSize: 10 }}>
+        <strong>U2 · FIXTURE ONLY</strong> · illustrative read-only data; no authoritative read or write.
+        <button type="button" onClick={onExitFixture} style={{ marginLeft: 10, border: 0, background: "transparent",
+          color: C.amberD, textDecoration: "underline", cursor: "pointer", fontSize: 10 }}>Exit preview</button>
+      </div>}
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4 }}>
         <h2 style={{ fontSize: 15, fontWeight: 700, color: C.slate, margin: 0 }}>
           Construction Library
@@ -163,11 +249,20 @@ export default function ConstructionLibraryScreen() {
         <span style={{ fontSize: 10, color: C.slateL }}>
           Read at {readAt ? readAt.toLocaleTimeString() : "—"}
         </span>
-        <button onClick={() => setReloadKey(k => k + 1)}
+        <button disabled={fixtureOnly} onClick={() => setReloadKey(k => k + 1)}
           style={{ fontSize: 10, padding: "3px 9px", borderRadius: 4,
-            border: `1px solid ${C.border}`, background: C.white, cursor: "pointer" }}>
-          Refresh
+            border: `1px solid ${C.border}`, background: C.white, cursor: fixtureOnly ? "not-allowed" : "pointer",
+            opacity: fixtureOnly ? 0.55 : 1 }}>
+          {fixtureOnly ? "Fixture snapshot" : "Refresh"}
         </button>
+      </div>
+
+      <div role="tablist" aria-label="Construction master views" style={{ display: "flex", gap: 4, marginBottom: 12 }}>
+        {[["library", "Construction Library"], ["adoption", "Plant Construction Adoption"]].map(([id, label]) =>
+          <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
+            style={{ padding: "5px 10px", borderRadius: 5, border: `1px solid ${view === id ? C.amber : C.border}`,
+              background: view === id ? "#FFF8ED" : C.white, color: view === id ? C.amberD : C.slateM,
+              fontWeight: view === id ? 700 : 500, fontSize: 10, cursor: "pointer" }}>{label}</button>)}
       </div>
 
       {/* Adoption scope is stated in BOTH cases, so completeness is never implied. */}
@@ -180,7 +275,13 @@ export default function ConstructionLibraryScreen() {
           : "Plant adoption is shown for your accessible plants only."}
       </div>
 
-      {constructions.length === 0
+      {view === "adoption" ? <>
+        <div style={{ marginBottom: 10, color: C.slateM, fontSize: 10.5 }}>
+          Published, approved Construction versions by the caller's exact Producing Plant scope. This is selection evidence only;
+          proposing, approving and withdrawing adoption remain outside this slice.
+        </div>
+        <AdoptionMatrix constructions={constructions} plantState={plantState} profile={effectiveProfile} partial={partial} />
+      </> : constructions.length === 0
         ? <EmptyState title="No constructions have been created yet."
             hint="Constructions are proposed from Batch Entry and published by the Construction Library owner." />
         : (

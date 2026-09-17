@@ -18,7 +18,7 @@ import { C, T, mono, sans } from "../theme.js";
 const TAB_LABELS = {
   costing: "Start Costing", batch: "Batch Builder", mybatches: "My Batches",
   approvalinbox: "Approval Inbox", items: "Quotes", families: "Customer Families",
-  conlib: "Construction Library", constrlib: "Construction Library", gsm: "GSM Master", skus: "SKU Master",
+  conlib: "Construction Library", conadoption: "Plant Construction Adoption", constrlib: "Construction Library", gsm: "GSM Master", skus: "SKU Master",
   defaults: "Commercial Policies", rates: "Rate Masters", freight: "Freight Masters",
   pricingbasis: "Pricing Basis Releases", users: "Users & Access", plants: "Producing Plants",
 };

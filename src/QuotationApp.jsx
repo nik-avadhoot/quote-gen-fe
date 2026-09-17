@@ -77,6 +77,7 @@ function QuotationApp(){
           {tab==="plants"&&isFeatureEnabled("u1_producing_plants")&&<ProducingPlantsScreen/>}
           {tab==="families"&&isFeatureEnabled("u1_customer_families")&&hasCapability(profile,"read_party_master")&&<CustomerFamiliesScreen showToast={showToast}/>}
           {tab==="conlib"&&isFeatureEnabled("u2_construction_library")&&hasCapability(profile,"read_construction_library")&&<ConstructionLibraryScreen/>}
+          {tab==="conadoption"&&isFeatureEnabled("u2_construction_library")&&hasCapability(profile,"read_construction_library")&&<ConstructionLibraryScreen initialView="adoption"/>}
           {tab==="pricingbasis"&&isFeatureEnabled("u3_pricing_basis")&&<PricingBasisScreen/>}
           {tab==="gsm"&&isFeatureEnabled("u2_gsm_master")&&<GsmMasterScreen/>}
           {tab==="skus"&&isFeatureEnabled("u2_sku_master")&&canOpenSkuMaster(profile)&&<SkuMasterScreen/>}
