@@ -1,7 +1,9 @@
 # U2 SKU Master — governed editing by due authority: design packet
 
-Status: **design only, awaiting Product Owner rulings (2026-09-16).** Nothing in this packet is
-implemented. No control is added before its operation exists.
+Status: **ruled 2026-09-16** — recorded as [Canonical Amendment 04](data-model-canonical-amendment-04.md)
+(D1 same-person approval allowed initially, as a canonical speed-first principle; D6 second approval
+only for settled quotes; every other recommendation approved). Slice 1 is implemented and prepared,
+not applied — see the amendment.
 
 ## 1. What exists today (verified against source and the live migration list)
 

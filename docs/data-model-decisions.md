@@ -135,6 +135,10 @@ silently substituted.
 Discontinued, where Active is the published state. The SPEC sheet's five Item Status values and its
 Discontinued Date are not carried, and SKUs loaded from the spreadsheet arrive Proposed.
 
+*Amendment 04, D-03 and D-04 (Product Owner, 2026-09-16):* Plant Item Code assignment and publication
+are separate; discontinuing needs a reason; a replacement is at the same plant and Customer; a
+Proposed SKU may be withdrawn. See CDM-46.
+
 ## CDM-12 — Construction Library
 
 Construction is globally shareable. It has a neutral permanent sequence code such as `CON-000125`,
@@ -321,6 +325,9 @@ Calculation-driving changes require second-person approval; routine descriptive 
 directly (PM-2). Published history is immutable and rollback creates a corrective version (PM-3).
 Saved proposals are Withdrawn, not hard-deleted.
 
+*Amendment 04, D-01 (Product Owner, 2026-09-16):* for the SKU Master, second-person approval is not
+required initially — the same person may propose and approve (CDM-46).
+
 ## CDM-32 — Ownership, collaboration and locks
 
 Each Batch has one current owner plus authorised collaborators. Transfers and collaboration changes
@@ -450,6 +457,24 @@ control is offered. It creates **no pricing rule**: nothing may infer or apply p
 an approved rate mechanism consumes it, the same boundary Amendment 01 A-06 set for colour count.
 The reasoning, including why the column is `NOT NULL` rather than a publication gate, is in
 [`data-model-canonical-amendment-03.md`](data-model-canonical-amendment-03.md).
+
+## CDM-46 — SKU Master editing by due authority
+
+**Added by Amendment 04, D-01 to D-12 (Product Owner, 2026-09-16).**
+
+Principle: speed for new SKUs, new customers and changes is critical in quotation, so approvals cannot
+hold the SKU record back from quotation; for settled customers, approval is critical. Due authority is
+`manage_sku_master` at the SKU's plant, and the same person may propose and approve, initially; a Maker
+may propose. Plant and Customer are never edited; dimensional, Construction, box type and strength
+changes are a new SKU; Cobb value, weight and ups make a price-driving version; naming and printing
+make a version; a draft edits in place. Plant Item Code assignment is separate from publication, which
+needs a code, an approved version and a portfolio. Discontinuation needs a reason and links, never
+substitutes, a same-plant same-Customer replacement; a proposal may be withdrawn. References are added
+and withdrawn, never edited. Every write is a governed operation with compare-and-swap and an
+append-only history; controls stay visible and disabled until the operations are activated. SKU Set
+second approval applies only to settled quotes. What makes a customer settled, and how quotation use is
+gated for them, are open. Detail and slices in
+[`data-model-canonical-amendment-04.md`](data-model-canonical-amendment-04.md).
 
 ---
 

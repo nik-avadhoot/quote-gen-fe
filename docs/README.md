@@ -116,6 +116,7 @@ These documents may contain status tables that were true at a particular checkpo
   scope (CDM-43), SKU Sets (CDM-44), lifecycle and printing vocabulary.
 - [`data-model-canonical-amendment-03.md`](data-model-canonical-amendment-03.md) — the SKU pricing
   portfolio (CDM-45), including why it is NOT NULL rather than a publication gate.
+- [`data-model-canonical-amendment-04.md`](data-model-canonical-amendment-04.md) — SKU Master editing by due authority (CDM-46): rulings D-01 to D-12, slice 1, and the open settled-customer questions.
 - [`archive/data-model-design/data-model-design-for-approval.md`](archive/data-model-design/data-model-design-for-approval.md)
 - [`archive/data-model-design/data-model-sr-dev-proposal.md`](archive/data-model-design/data-model-sr-dev-proposal.md)
 - [`archive/data-model-design/data-model-sr-dev-review.md`](archive/data-model-design/data-model-sr-dev-review.md)
