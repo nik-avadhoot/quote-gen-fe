@@ -94,7 +94,8 @@ document, a repository file, a command transcript or chat. Confirm only that bot
 - Wave A suite-registration migration is committed locally but not live.
 - Wave B seed awaits the single Product Owner content approval.
 - Edge secrets are not yet confirmed and the function is not deployed.
-- Workflow HTTP/UI activation remains in progress; hard-coded disabled controls are not yet cleared.
+- Workflow HTTP/UI activation is committed; deployed-role and state-transition smoke proof remains a
+  beta-entry check after Wave A–C are live.
 - Supabase Auth leaked-password protection warning and five unindexed foreign keys are follow-up
   debt; neither was introduced by beta readiness work.
 
