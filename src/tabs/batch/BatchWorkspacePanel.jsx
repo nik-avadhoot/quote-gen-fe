@@ -364,9 +364,10 @@ function BatchRowEditor({ row, groups, skus, loading, disabled, fixtureOnly, ini
     </label>
     <label>SKU Version · Construction
       <select value={versionId} disabled={disabled || loading} onChange={event => setVersionId(event.target.value)}>
-        <option value="">Select approved version</option>
+        <option value="">Select SKU version</option>
+        {/* Amendment 04 D-01: an unapproved version is quotable, as a Prospect is - labelled, never hidden. */}
         {versions.map(version => <option key={version.id} value={version.id}>
-          v{version.version_no} · #{version.id} · {version.construction?.construction_code || `Construction #${version.construction_version_id}`} · Cv#{version.construction_version_id}
+          v{version.version_no} · #{version.id} · {version.construction?.construction_code || `Construction #${version.construction_version_id}`} · Cv#{version.construction_version_id}{version.approved === false ? " · unapproved" : ""}
         </option>)}
       </select>
     </label>

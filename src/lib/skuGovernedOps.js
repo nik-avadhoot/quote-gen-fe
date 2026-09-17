@@ -186,7 +186,7 @@ export function versionChangeVerdict(plan, baseValues, nextFields, isPriceDrivin
   }
   return { ok: true, message: plan.mode === "edit_draft"
     ? `Saves the unapproved draft v${plan.version.version_no} in place.`
-    : `Creates unapproved version v${(plan.base?.version_no ?? 0) + 1}; it needs approval before it is used.` };
+    : `Creates unapproved version v${(plan.base?.version_no ?? 0) + 1}; it can be quoted now, as a Prospect can, and approved later.` };
 }
 
 // D1/D3/D4/D5: the lifecycle and record actions the screen offers for one SKU.
