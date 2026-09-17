@@ -31,8 +31,11 @@ Consequences ruled now:
 master changes. For the SKU Master, second-person approval is **not** required initially (see D-06
 for the one place it applies).
 
-**Not yet decided — see "Open" below:** what makes a customer *settled*, and how approval gates
-quotation use for settled customers without holding back new ones.
+**Settled customer (ruled, see D-13):** a Party that has graduated to Customer and holds a permanent
+Customer Code. A Prospect is not settled.
+
+**Quotation use (ruled, see D-14):** a Proposed SKU and an unapproved version are calculated and
+quoted exactly as a Prospect is admitted incomplete in the Customer Family Master.
 
 ## D-02 — Field classes
 
@@ -99,16 +102,24 @@ reason "Schema activation pending"**, the same visibility rule as S9.
 
 ---
 
-## Open — needs a Product Owner ruling before slice 2 and before quotation gating changes
+## D-13 — A settled customer (Product Owner, 2026-09-16)
 
-1. **What makes a customer "settled"?** For example: a Party that has graduated to Customer (holds a
-   permanent Customer Code); or a customer with at least one issued Quote; or an explicit flag.
-2. **Quotation gating conflicts with D-01 today.** The applied governed Calculate eligibility
-   (`app_private.assert_calculate_eligible`, migration `s7r_7`) refuses a **Proposed** SKU
-   (`sku_not_published`), and the Batch row picker offers only **approved** versions. So today a new
-   SKU cannot be quoted until it is published and approved — the opposite of "approvals cannot hold
-   the SKU record for quotation". CDM-11 already says a Maker may quote a Proposed SKU. Changing the
-   calculation path is S9-adjacent and was **not** changed in slice 1.
+A customer is **settled** when its Party has graduated to Customer and holds a permanent Customer Code.
+A Prospect is not settled. This is where D-06's SKU Set second approval applies (slice 2).
+
+## D-14 — Proposed SKUs are quotable, as Prospects are (Product Owner, 2026-09-16)
+
+> It should be allowed to be calculated just like prospects / new customers are allowed to be added
+> in an incomplete manner in the Customer Family Master, without holding back the quote per se.
+> Exactly the same behaviour.
+
+This replaces the applied gates that contradicted D-01 and CDM-11: governed Calculate refused a
+Proposed SKU (`sku_not_published`, `s7r_7`), Atomic Send refused an unapproved version and a Proposed
+SKU (`s9b`), and the Batch row picker offered only approved versions. Now a Proposed SKU and an
+unapproved version are calculated, sent and offered (labelled); only a **withdrawn** SKU is refused
+(`sku_withdrawn`). The calculation provenance already records the SKU status, so the Checker sees a
+Proposed SKU in the evidence — the Maker/Checker workflow is where approval for a settled customer is
+exercised. Migration `20260916210000_u2_proposed_skus_are_quotable`.
 
 ## Wording added to `data-model-decisions.md`
 
@@ -125,4 +136,7 @@ one-line amendment notes under CDM-11 and CDM-31.
 - Frontend `603af76`: Actions, version editor, references, Propose and History in the SKU Master;
   `test:sku-master` 126/0. Fixture-browser verified only.
 - Known activation risk, pre-existing: Amendment 03's `NOT NULL` portfolio breaks every existing
-  database fixture that inserts a SKU without one.
+  database fixture that inserts a SKU without one. Migration `20260916170500` repoints the nineteen
+  fixture inserts.
+- Activation, 2026-09-17: Amendments 02 and 03 applied live (`20260917024849`, `20260917024903`).
+  `20260916170500`, `20260916200000` and `20260916210000` are **prepared, NOT applied**.

@@ -472,8 +472,9 @@ needs a code, an approved version and a portfolio. Discontinuation needs a reaso
 substitutes, a same-plant same-Customer replacement; a proposal may be withdrawn. References are added
 and withdrawn, never edited. Every write is a governed operation with compare-and-swap and an
 append-only history; controls stay visible and disabled until the operations are activated. SKU Set
-second approval applies only to settled quotes. What makes a customer settled, and how quotation use is
-gated for them, are open. Detail and slices in
+second approval applies only to settled quotes, and a customer is settled when its Party has graduated
+to Customer with a permanent Customer Code. A Proposed SKU and an unapproved version are calculated and
+quoted exactly as a Prospect is admitted incomplete; only a withdrawn SKU is refused. Detail and slices in
 [`data-model-canonical-amendment-04.md`](data-model-canonical-amendment-04.md).
 
 ---

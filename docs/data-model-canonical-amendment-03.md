@@ -123,7 +123,7 @@ infer or apply pricing from it until an approved rate mechanism consumes it (Ame
 
 | | |
 |---|---|
-| Migration | `quote-gen-be/supabase/migrations/20260916170000_u2_sku_pricing_portfolio.sql` — **prepared, NOT applied** |
+| Migration | `quote-gen-be/supabase/migrations/20260917024903_u2_sku_pricing_portfolio.sql` — **applied live 2026-09-17** (authored as `20260916170000`) |
 | Static contract | `quote-gen-be/tests/test_sku_pricing_portfolio_schema_contract.py` |
 | Route | `GET /masters/skus` returns `pricing_portfolio` and accepts a `portfolio` filter; both degrade to `schema_pending` until the migration is applied |
 | Registry | `quote-gen-fe/src/lib/skuSpecRegistry.js` field `PF`, app origin, Status & Governance group |
