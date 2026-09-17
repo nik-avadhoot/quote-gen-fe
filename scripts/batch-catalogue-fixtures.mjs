@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { U4_BATCH_CATALOGUE_ILLUSTRATION, searchableBatchText } from "../src/lib/batchCatalogueModel.js";
+import {
+  batchActionsFromBackend, U4_BATCH_CATALOGUE_ILLUSTRATION, searchableBatchText,
+} from "../src/lib/batchCatalogueModel.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -35,8 +37,11 @@ check(searchableBatchText(first).includes("retail family")
   && searchableBatchText(first).includes("submitted"),
 "U4-CAT-FE-4 displayed-record search covers operational identities and status");
 check(Object.values(catalogue.actions).every(action => !action.enabled
-  && action.reason === "backend_activation_pending"),
-"U4-CAT-FE-5 Calculate, Send and workflow fixture actions remain activation-blocked");
+  && action.reason === "fixture_only"),
+"U4-CAT-FE-5 fixture actions remain disabled without inventing backend availability");
+const reportedBatchActions = batchActionsFromBackend({ calculate: { enabled: true } });
+check(reportedBatchActions.calculate.enabled && !reportedBatchActions.send.enabled,
+"U4-CAT-FE-5a only an exact backend-enabled Batch action becomes available");
 check(screen.includes('apiFetch("/batches/catalogue")')
   && !screen.includes(".rpc(") && !screen.includes("service_role") && !screen.includes("supabase"),
 "U4-CAT-FE-6 authenticated catalogue uses one backend read and no direct privileged path");
@@ -76,10 +81,10 @@ check((screen.match(/role="toolbar"/g) || []).length === 1
   && screen.includes('from "../ui/screenStandards.js"') && !/const toolbar = {/.test(screen)
   && standards.includes("export const TOOLBAR_MIN_HEIGHT = 43"),
 "U4-CAT-FE-16 exactly one toolbar, at the one shared height, declared in the shared module");
-check(screen.includes("<PendingActions actions={PENDING_WORKFLOW}")
-  && screen.includes('const PENDING_WORKFLOW = ["Submit", "Approve", "Return", "Issue"]')
+check(!screen.includes("<PendingActions") && !screen.includes("PENDING_WORKFLOW")
+  && screen.includes("openBatch") && screen.includes('setTab("batch")')
   && !screen.includes("quote-disabled-actions"),
-"U4-CAT-FE-17 the activation-blocked actions ride inside that toolbar, still visible and still disabled");
+"U4-CAT-FE-17 catalogue avoids fake workflow controls and reopens the governed Batch workspace");
 check(screen.includes('<details style={{ position: "relative" }}>')
   && screen.includes('menuSummary(owner !== "all")') && screen.includes("Clear all filters"),
 "U4-CAT-FE-18 secondary filters sit in a disclosure, not permanently on the toolbar");

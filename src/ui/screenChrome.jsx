@@ -19,10 +19,8 @@ export const ToolbarLabel = ({ children, title }) => (
 );
 
 // ── Actions that exist but cannot run yet ──────────────────────────────────
-// The S9 Speedbreaker requires every backend-dependent workflow action to stay
-// VISIBLY disabled with its reason. That is a visibility rule, so these ride
-// inside the one toolbar as a labelled disabled group - never behind a
-// disclosure, and never as a second full-width band.
+// Legacy disabled-action presentation retained for screens that deliberately
+// expose controls which cannot run yet.
 export function PendingActions({ actions, reason = "Backend activation pending", label }) {
   if (!actions?.length) return null;
   return (
@@ -42,6 +40,39 @@ export function PendingActions({ actions, reason = "Backend activation pending",
       ))}
     </span>
   );
+}
+
+const ACTION_LABEL = {
+  calculate: "Calculate", send: "Send", submit: "Submit", approve: "Approve",
+  return: "Return", withdraw: "Withdraw", issue: "Issue",
+  create_revision: "Create revision", amend: "Amend", reprice: "Reprice",
+};
+
+// Backend-reported workflow availability. A missing/malformed entry fails
+// closed; no frontend state transition or capability guess can enable it.
+export function GovernedActions({ actions, onAction, busy = false, label = "Governed workflow actions" }) {
+  const entries = Object.entries(actions || {}).filter(([name]) => ACTION_LABEL[name]);
+  if (!entries.length) return null;
+  return <span role="group" aria-label={label} style={{
+    display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0, height: 26,
+    padding: "0 6px", borderRadius: 5, border: `1px solid ${C.border}`, background: C.white,
+  }}>
+    <span style={{ fontSize: T.micro, fontWeight: 800, letterSpacing: "0.04em",
+      textTransform: "uppercase", color: C.slateL, whiteSpace: "nowrap" }}>Workflow</span>
+    {entries.map(([name, state]) => {
+      const enabled = state?.enabled === true && typeof onAction === "function" && !busy;
+      const reason = state?.reason || "backend_did_not_report_available";
+      return <button key={name} type="button" disabled={!enabled}
+        onClick={() => enabled && onAction(name)}
+        title={enabled ? ACTION_LABEL[name] : `${ACTION_LABEL[name]} — ${reason.replaceAll("_", " ")}`}
+        style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.border}`,
+          background: enabled ? C.amberL : C.white, color: enabled ? C.amberD : C.slateL,
+          fontFamily: sans, fontSize: T.label, fontWeight: 700, whiteSpace: "nowrap",
+          cursor: enabled ? "pointer" : "not-allowed" }}>
+        {ACTION_LABEL[name]}
+      </button>;
+    })}
+  </span>;
 }
 
 // ── The thin footer that carries provenance and legend once ────────────────

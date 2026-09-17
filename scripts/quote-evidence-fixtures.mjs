@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  orderedQuoteRevisions, quoteActor, quoteRevisionLabel, U5_QUOTE_CATALOGUE_ILLUSTRATIONS,
+  orderedQuoteRevisions, quoteActionsFromBackend, quoteActor, quoteRevisionLabel, U5_QUOTE_CATALOGUE_ILLUSTRATIONS,
   U5_QUOTE_ILLUSTRATION, U5_SUBMITTED_QUOTE_ILLUSTRATION,
 } from "../src/lib/quoteEvidenceModel.js";
 
@@ -50,13 +50,18 @@ check(snapshot.effective_inputs.material_rate_source === "governed_effective_mat
   && !("supplier_credit" in snapshot.effective_inputs),
   "U5-FE-6 frozen Batch inputs retain the effective material boundary without supplier-credit input");
 check(Object.values(U5_QUOTE_ILLUSTRATION.actions).every(action =>
-  action.enabled === false && action.reason === "backend_activation_pending"),
-  "U5-FE-7 every mutation remains disabled for deferred backend activation");
+  action.enabled === false && action.reason === "fixture_only"),
+  "U5-FE-7 fixture mutations remain disabled without inventing backend availability");
+const reportedQuoteActions = quoteActionsFromBackend({
+  approve: { enabled: true, reason: "available" }, issue: { enabled: false, reason: "state_not_approved" },
+});
+check(reportedQuoteActions.approve.enabled && !reportedQuoteActions.issue.enabled
+  && !reportedQuoteActions.submit.enabled,
+  "U5-FE-7b only an exact backend-enabled Quote action becomes available");
 check(Object.keys(U5_QUOTE_ILLUSTRATION.actions).join(",")
   === "calculate,send,submit,approve,return,withdraw,issue,create_revision,amend,reprice"
-  && screen.includes('"Calculate", "Send", "Submit"')
-  && screen.includes('"Create revision", "Amend", "Reprice"'),
-  "U5-FE-7a the complete accepted workflow stays visible and activation-blocked");
+  && catalogueScreen.includes("<GovernedActions") && screen.includes("<GovernedActions"),
+  "U5-FE-7a the complete accepted workflow vocabulary stays visible");
 check(screen.includes("/quotes/workspace?reference=") && screen.includes("encodeURIComponent"),
   "U5-FE-8 authenticated mode uses the read-only backend route by encoded permanent reference");
 check(!screen.includes(".rpc(") && !screen.includes("supabase") && !screen.includes("service_role"),
@@ -85,8 +90,8 @@ check(history.rows.map(row => row.revision_no).join(",") === "2,1"
   && history.rows.map(row => row.standing).join(",") === "current,superseded",
   "U5-FE-16 Quote History retains newest-first revision standing");
 check(Object.values(inbox.actions).every(action => !action.enabled
-  && action.reason === "backend_activation_pending"),
-  "U5-FE-17 catalogue fixture keeps all workflow mutations activation-blocked");
+  && action.reason === "fixture_only"),
+  "U5-FE-17 catalogue fixture keeps all workflow mutations fixture-blocked");
 check(catalogueScreen.includes("/quotes/catalogue?view=${mode}")
   && catalogueScreen.includes("/quotes/workspace?revision_id=${encodeURIComponent(revisionId)}"),
   "U5-FE-18 authenticated catalogues use caller-scoped summary and exact revision evidence routes");
@@ -192,11 +197,12 @@ check(workspace.includes("toolbarLead={viewSwitch}")
   && catalogueScreen.includes("{toolbarLead}") && screen.includes("{toolbarLead}") && quoteItems.includes("{toolbarLead}")
   && !workspace.includes('className="quotes-view-switch"'),
   "U5-FE-39 the Quotes view switch rides inside the active view's own toolbar, not in a band of its own");
-check(catalogueScreen.includes("<PendingActions actions={PENDING_WORKFLOW}")
-  && screen.includes("<PendingActions actions={ACTION_LABELS}")
-  && catalogueScreen.includes('"Approve", "Return", "Withdraw", "Issue", "Create revision"')
+check(catalogueScreen.includes("<GovernedActions actions={selectedActions}")
+  && screen.includes("<GovernedActions actions={selectedRevision?.actions || state.quote?.actions}")
+  && catalogueScreen.includes("/quotes/revisions/${encodeURIComponent(selectedRevision.id)}/${route}")
+  && screen.includes("/quotes/revisions/${encodeURIComponent(selectedRevision.id)}/${route}")
   && !catalogueScreen.includes("quote-disabled-actions") && !screen.includes("quote-disabled-actions"),
-  "U5-FE-40 the activation-blocked actions stay visible and disabled inside that toolbar, never hidden or rebanded");
+  "U5-FE-40 backend-reported actions stay visible in the toolbar and invoke caller-scoped workflow routes");
 check(catalogueScreen.includes("<PanelDivider") && catalogueScreen.includes("useSplitPanels()")
   && catalogueScreen.includes("panelLayout(split, focusPanel)")
   && catalogueScreen.includes("layout.showList &&") && catalogueScreen.includes("layout.showDetail &&")
@@ -223,7 +229,7 @@ check(catalogueScreen.includes('import { C, T, mono, sans } from "../theme.js"')
   && !/fontSize: (?!T.)[0-9]/.test(catalogueScreen) && !/fontSize: (?!T.)[0-9]/.test(workspace)
   && !/fontSize: ?(?!T.)[0-9]/.test(quoteItems.replace(/\{\/\* Fix 12:[\s\S]*?\*\/\}/, "")),
   "U5-FE-46 every type size on these views is a T token, never a hardcoded off-scale pixel value");
-check(catalogueScreen.indexOf("<PendingActions") > catalogueScreen.indexOf('aria-label="Quote evidence controls"')
+check(catalogueScreen.indexOf("<GovernedActions") > catalogueScreen.indexOf('aria-label="Quote evidence controls"')
   && catalogueScreen.includes('role="group" aria-label="Split"')
   && catalogueScreen.indexOf('role="group" aria-label="Split"') < catalogueScreen.indexOf('aria-label="Quote evidence controls"'),
   "U5-FE-47 workflow actions sit with the revision they act on, and the split presets in the list disclosure, so neither toolbar wraps at 50:50");

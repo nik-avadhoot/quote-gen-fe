@@ -1,6 +1,15 @@
-const BLOCKED_BATCH_ACTIONS = Object.fromEntries([
-  "calculate", "send", "submit", "approve", "return", "issue",
-].map(name => [name, { enabled: false, reason: "backend_activation_pending" }]));
+export const BATCH_ACTION_NAMES = ["calculate", "send", "submit", "approve", "return", "issue"];
+
+export function batchActionsFromBackend(reported = {}, fallbackReason = "backend_did_not_report_available") {
+  return Object.fromEntries(BATCH_ACTION_NAMES.map(name => {
+    const state = reported?.[name];
+    return [name, state?.enabled === true
+      ? { enabled: true, reason: "available" }
+      : { enabled: false, reason: state?.reason || fallbackReason }];
+  }));
+}
+
+const BLOCKED_BATCH_ACTIONS = batchActionsFromBackend({}, "fixture_only");
 
 export const U4_BATCH_CATALOGUE_ILLUSTRATION = Object.freeze({
   display_limit: 50,

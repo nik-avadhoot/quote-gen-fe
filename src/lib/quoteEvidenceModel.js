@@ -1,3 +1,17 @@
+export const QUOTE_ACTION_NAMES = [
+  "calculate", "send", "submit", "approve", "return", "withdraw", "issue",
+  "create_revision", "amend", "reprice",
+];
+
+export function quoteActionsFromBackend(reported = {}, fallbackReason = "backend_did_not_report_available") {
+  return Object.fromEntries(QUOTE_ACTION_NAMES.map(name => {
+    const state = reported?.[name];
+    return [name, state?.enabled === true
+      ? { enabled: true, reason: "available" }
+      : { enabled: false, reason: state?.reason || fallbackReason }];
+  }));
+}
+
 export const U5_QUOTE_ILLUSTRATION = {
   id: "fixture-family-9301",
   batch_id: "fixture-batch-9301",
@@ -15,10 +29,7 @@ export const U5_QUOTE_ILLUSTRATION = {
     plant: { id: "fixture-plant", plant_code: "NAG", name: "Nagpur" },
     customer_family: { id: "fixture-family", group_customer_code: "__U5_FIXTURE_ONLY__", name: "Fixture Customer Family" },
   },
-  actions: Object.fromEntries([
-    "calculate", "send", "submit", "approve", "return", "withdraw", "issue",
-    "create_revision", "amend", "reprice",
-  ].map(name => [name, { enabled: false, reason: "backend_activation_pending" }])),
+  actions: quoteActionsFromBackend({}, "fixture_only"),
   revisions: [
     {
       id: "fixture-revision-1", revision_no: 1, source_revision_id: null,
@@ -135,9 +146,7 @@ export const U5_SUBMITTED_QUOTE_ILLUSTRATION = {
   }],
 };
 
-const FIXTURE_CATALOGUE_ACTIONS = Object.fromEntries([
-  "approve", "return", "withdraw", "issue", "create_revision",
-].map(name => [name, { enabled: false, reason: "backend_activation_pending" }]));
+const FIXTURE_CATALOGUE_ACTIONS = quoteActionsFromBackend({}, "fixture_only");
 
 export const U5_QUOTE_CATALOGUE_ILLUSTRATIONS = {
   inbox: {

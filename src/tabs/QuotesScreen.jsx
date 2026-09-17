@@ -6,16 +6,9 @@ import {
 } from "../lib/quoteEvidenceModel.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag } from "../ui/dataDisplay.jsx";
-import { PendingActions, ScreenFooter } from "../ui/screenChrome.jsx";
+import { GovernedActions, ScreenFooter } from "../ui/screenChrome.jsx";
 import { control, toolbar } from "../ui/screenStandards.js";
 import { C, T, mono, sans } from "../theme.js";
-
-// S9 Speedbreaker: visible, disabled, and carrying their reason - inside the
-// screen's ONE toolbar rather than in a band of their own.
-const ACTION_LABELS = [
-  "Calculate", "Send", "Submit", "Approve", "Return", "Withdraw", "Issue",
-  "Create revision", "Amend", "Reprice",
-];
 
 function dateTime(value) {
   if (!value) return "Not recorded";
@@ -206,6 +199,7 @@ export default function QuotesScreen({
     ? { status: "ready", quote: U5_QUOTE_ILLUSTRATION }
     : { status: "idle", quote: null });
   const [selectedId, setSelectedId] = useState(null);
+  const [workflow, setWorkflow] = useState({ status: "idle", message: "" });
 
   const openQuote = async event => {
     event?.preventDefault();
@@ -224,9 +218,52 @@ export default function QuotesScreen({
     }
   };
 
+  const selectedRevision = orderedQuoteRevisions(state.quote?.revisions || [])
+    .find(row => String(row.id) === String(selectedId))
+    || orderedQuoteRevisions(state.quote?.revisions || [])[0];
+  const runWorkflow = async action => {
+    if (fixtureOnly || !selectedRevision) return;
+    const body = {};
+    if (action === "submit") {
+      const expected = state.quote?.batch?.content_version;
+      if (!Number.isInteger(expected) || expected < 1) return setWorkflow({ status: "error",
+        message: "Reload the source Batch before Submit; its content version is unavailable." });
+      body.expected_content_version = expected;
+    } else if (action === "return") {
+      const note = window.prompt("Return note (required)"); if (note == null) return; body.note = note;
+    } else if (action === "withdraw") {
+      const reason = window.prompt("Withdrawal reason (required)"); if (reason == null) return; body.reason = reason;
+    } else if (action === "issue") {
+      const addressee = window.prompt("Issue addressee name", selectedRevision.addressee_name || "");
+      if (addressee == null) return;
+      const quoteDate = window.prompt("Quote date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10));
+      if (quoteDate == null) return;
+      const validity = window.prompt("Offer valid to (YYYY-MM-DD, blank if not set)", selectedRevision.offer_validity_to || "");
+      if (validity == null) return;
+      Object.assign(body, { addressee_name: addressee, addressee_details: null,
+        quote_date: quoteDate || null, offer_validity_to: validity || null });
+    } else if (["approve", "create_revision"].includes(action)
+      && !window.confirm(`${action === "approve" ? "Approve" : "Create the next revision from"} this immutable revision?`)) return;
+    const route = action === "create_revision" ? "create-revision" : action;
+    setWorkflow({ status: "busy", message: `${action.replaceAll("_", " ")} in progress…` });
+    try {
+      const response = await apiFetch(`/quotes/revisions/${encodeURIComponent(selectedRevision.id)}/${route}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => ({}));
+      const result = classifyResponse({ ok: response.ok, status: response.status, data });
+      if (!response.ok) return setWorkflow({ status: "error", message: result.message });
+      setWorkflow({ status: "success", message: `${action.replaceAll("_", " ")} completed.` });
+      if (action === "create_revision") onOpenSourceBatch?.(state.quote.batch);
+      else await openQuote();
+    } catch {
+      setWorkflow({ status: "error", message: "The workflow service could not be reached. Refresh before retrying." });
+    }
+  };
+
   // The TopBar already says "Quotes", so there is no page header here: one
   // toolbar at the shared height carries the reference lookup and the
-  // activation-blocked actions, and the evidence takes the rest of the height.
+  // backend-reported governed actions, and the evidence takes the rest of the height.
   return <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0,
     fontFamily: sans, background: C.cream }}>
     {fixtureOnly && showFixtureBanner && <div className="quote-fixture-banner"><strong>U5 · FIXTURE ONLY</strong>
@@ -245,10 +282,14 @@ export default function QuotesScreen({
           style={{ ...control, fontSize: T.label, fontWeight: 700, cursor: "pointer",
             borderColor: C.amber, color: C.amberD }}>Open Quote</button>
       </form>
-      <PendingActions actions={ACTION_LABELS} label="Quote workflow actions awaiting backend activation" />
+      <GovernedActions actions={selectedRevision?.actions || state.quote?.actions} onAction={runWorkflow}
+        busy={workflow.status === "busy"} label="Backend-reported Quote workflow actions" />
       <span style={{ flex: "1 1 auto" }} />
     </div>
     <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "10px 12px 16px" }}>
+      {workflow.status !== "idle" && <div className="quote-error-state" role="status">
+        <strong>Workflow</strong><span>{workflow.message}</span>
+      </div>}
       {state.status === "idle" && <EmptyState title="Open a governed Quote" hint="Enter its permanent reference. No fixture is used in the authenticated workspace." />}
       {state.status === "loading" && <LoadingState label="Loading immutable Quote evidence…" />}
       {state.status === "denied" && <AccessDeniedState reason={state.message || "This Quote is not visible to your caller and plant authority."} />}

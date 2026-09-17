@@ -4,10 +4,8 @@
 // ── SCREEN SPACE ──────────────────────────────────────────────────────────
 // The TopBar already says "My Batches", so there is no page header here. One
 // toolbar at the shared height carries search, Batch state and plant; the
-// Owner filter and Clear all sit in a Filters disclosure; the workflow
-// actions that need S9 activation ride inside that same toolbar as a labelled
-// DISABLED group, visible with their reason rather than hidden behind a
-// disclosure or given a second full-width band.
+// Owner filter and Clear all sit in a Filters disclosure. Governed Calculate
+// and Send actions belong to the reopened Batch workspace, not this catalogue.
 //
 // Rows are 26px with the Batch reference frozen while the rest scrolls
 // sideways. Every secondary fact — record identities, content version,
@@ -26,16 +24,14 @@ import { classifyResponse } from "../lib/backendError.js";
 import { useAppState } from "../state/AppStateContext.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag } from "../ui/dataDisplay.jsx";
-import { PanelFocusToggle, PendingActions, RowDisclosure, ScreenFooter } from "../ui/screenChrome.jsx";
+import { PanelFocusToggle, RowDisclosure, ScreenFooter } from "../ui/screenChrome.jsx";
 import {
   control, denseCell, denseHead, denseTable, frozenCell, menuPanel, menuSummary, toolbar, usePanelFocus,
 } from "../ui/screenStandards.js";
 import { C, T, sans } from "../theme.js";
 
-// S9 Speedbreaker: these stay visible and disabled with their reason until
-// production Quote mutations are activated. Calculate and Send belong to the
-// open Batch, not to this catalogue, so they are not offered here at all.
-const PENDING_WORKFLOW = ["Submit", "Approve", "Return", "Issue"];
+// Calculate and Send belong to the open Batch, not to this catalogue, so they
+// are not offered here at all.
 
 const COLUMNS = ["Customer Family", "Plant", "Sector", "Pricing Basis", "State", "Owner", ""];
 
@@ -234,7 +230,6 @@ export default function MyBatchesScreen({ fixtureOnly = false, onExitFixture }) 
             style={{ ...control, fontSize: T.label, cursor: "pointer" }}>Clear all filters</button>
         </div>
       </details>
-      <PendingActions actions={PENDING_WORKFLOW} label="Batch workflow actions awaiting backend activation" />
       <span style={{ flex: "1 1 auto" }} />
       <span style={{ fontSize: T.label, color: C.slateL, whiteSpace: "nowrap" }}>{count}</span>
       <PanelFocusToggle panel="list" noun="Batch list" focused={focusPanel === "list"} onToggle={toggleFocus} />

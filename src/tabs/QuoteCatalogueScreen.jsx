@@ -15,8 +15,8 @@
 // Rows are dense with the Quote identity frozen while the rest scrolls
 // sideways; revision identities, batch state, standing and timestamps open in
 // the row's own disclosure so a compact row is never made taller by them. The
-// workflow actions that need S9 activation stay VISIBLE and disabled inside
-// the one toolbar with their reason.
+// workflow actions use only backend-reported availability inside the one
+// toolbar, and missing or malformed availability fails closed.
 //
 // ── HONEST STATES ─────────────────────────────────────────────────────────
 // Read-only. A bounded window says so, partial detail names what was denied
@@ -33,7 +33,7 @@ import {
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag } from "../ui/dataDisplay.jsx";
 import {
-  PanelDivider, PanelFocusToggle, PendingActions, RowDisclosure, ScreenFooter, ToolbarLabel,
+  GovernedActions, PanelDivider, PanelFocusToggle, RowDisclosure, ScreenFooter, ToolbarLabel,
 } from "../ui/screenChrome.jsx";
 import {
   control, denseCell, denseHead, denseTable, frozenCell, menuPanel, menuSummary, segment, toolbar,
@@ -43,8 +43,6 @@ import { C, T, mono, sans } from "../theme.js";
 import { QuoteEvidence } from "./QuotesScreen.jsx";
 
 const STATUS_OPTIONS = ["all", "draft", "submitted", "returned", "approved", "issued", "withdrawn"];
-// S9 Speedbreaker: visible, disabled, and carrying their reason.
-const PENDING_WORKFLOW = ["Approve", "Return", "Withdraw", "Issue", "Create revision"];
 const COLUMNS = ["Revision", "Batch", "Customer", "Plant", "State", "Maker", "Items"];
 
 function dateTime(value) {
@@ -107,6 +105,7 @@ export default function QuoteCatalogueScreen({
   const [selectedId, setSelectedId] = useState(null);
   const [expanded, setExpanded] = useState([]);
   const [detail, setDetail] = useState({ status: "idle", quote: null });
+  const [workflow, setWorkflow] = useState({ status: "idle", message: "" });
   const [openedBy, setOpenedBy] = useState(null);
   const openedRequestRef = useRef(null);
   const { focusPanel, toggleFocus, exitFocusOnEscape } = usePanelFocus();
@@ -217,9 +216,59 @@ export default function QuoteCatalogueScreen({
   const count = state.status === "ready"
     ? `${rows.length} row${rows.length === 1 ? "" : "s"}${rows.length !== allRows.length ? ` of ${allRows.length}` : ""}` : "—";
   const selectedRow = rows.find(row => String(row.id) === String(selectedId));
+  const selectedRevision = orderedQuoteRevisions(detail.quote?.revisions || [])
+    .find(row => String(row.id) === String(selectedId))
+    || orderedQuoteRevisions(detail.quote?.revisions || [])[0];
+  const selectedActions = selectedRevision?.actions || detail.quote?.actions;
   const selectedLabel = openedBy?.kind === "batch" ? `Batch #${openedBy.id}`
     : selectedRow ? (selectedRow.quote_reference || quoteRevisionLabel(selectedRow))
       : selectedId != null ? `Revision #${selectedId}` : null;
+
+  const runWorkflow = async action => {
+    if (fixtureOnly || !selectedRevision) return;
+    const body = {};
+    if (action === "submit") {
+      const expected = detail.quote?.batch?.content_version;
+      if (!Number.isInteger(expected) || expected < 1) {
+        return setWorkflow({ status: "error", message: "Reload the source Batch before Submit; its content version is unavailable." });
+      }
+      body.expected_content_version = expected;
+    } else if (action === "return") {
+      const note = window.prompt("Return note (required)");
+      if (note == null) return;
+      body.note = note;
+    } else if (action === "withdraw") {
+      const reason = window.prompt("Withdrawal reason (required)");
+      if (reason == null) return;
+      body.reason = reason;
+    } else if (action === "issue") {
+      const addressee = window.prompt("Issue addressee name", selectedRevision.addressee_name || "");
+      if (addressee == null) return;
+      const quoteDate = window.prompt("Quote date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10));
+      if (quoteDate == null) return;
+      const validity = window.prompt("Offer valid to (YYYY-MM-DD, blank if not set)", selectedRevision.offer_validity_to || "");
+      if (validity == null) return;
+      Object.assign(body, { addressee_name: addressee, addressee_details: null,
+        quote_date: quoteDate || null, offer_validity_to: validity || null });
+    } else if (["approve", "create_revision"].includes(action)
+      && !window.confirm(`${action === "approve" ? "Approve" : "Create the next revision from"} this immutable revision?`)) return;
+
+    const route = action === "create_revision" ? "create-revision" : action;
+    setWorkflow({ status: "busy", message: `${action.replaceAll("_", " ")} in progress…` });
+    try {
+      const response = await apiFetch(`/quotes/revisions/${encodeURIComponent(selectedRevision.id)}/${route}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => ({}));
+      const result = classifyResponse({ ok: response.ok, status: response.status, data });
+      if (!response.ok) return setWorkflow({ status: "error", message: result.message });
+      setWorkflow({ status: "success", message: `${action.replaceAll("_", " ")} completed.` });
+      if (action === "create_revision") onOpenSourceBatch?.(detail.quote.batch);
+      else await openRevision(selectedRevision.id);
+    } catch {
+      setWorkflow({ status: "error", message: "The workflow service could not be reached. Refresh before retrying." });
+    }
+  };
 
   return <div onKeyDown={exitFocusOnEscape} style={{ height: "100%", display: "flex",
     flexDirection: "column", fontFamily: sans, background: C.cream, minHeight: 0 }}>
@@ -378,7 +427,8 @@ export default function QuoteCatalogueScreen({
           <span style={{ fontFamily: mono, fontSize: T.body, fontWeight: 700,
             color: selectedLabel ? C.slate : C.slateL, overflow: "hidden", textOverflow: "ellipsis",
             whiteSpace: "nowrap", minWidth: 0 }}>{selectedLabel || "No revision selected"}</span>
-          <PendingActions actions={PENDING_WORKFLOW} label="Quote workflow actions awaiting backend activation" />
+          <GovernedActions actions={selectedActions} onAction={runWorkflow}
+            busy={workflow.status === "busy"} label="Backend-reported Quote workflow actions" />
           <span style={{ flex: "1 1 auto" }} />
           {focusPanel === "detail" && <span style={{ fontSize: T.label, color: C.slateL, whiteSpace: "nowrap" }}>
             Esc to restore</span>}
@@ -389,6 +439,9 @@ export default function QuoteCatalogueScreen({
         </div>
 
         <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: hasDetail ? "10px 12px 16px" : 0 }}>
+          {workflow.status !== "idle" && <Notice tone={workflow.status === "error" ? "error" : undefined}>
+            <strong>Workflow</strong><span>{workflow.message}</span>
+          </Notice>}
           {detail.status === "idle" && <EmptyState title="Select a revision"
             hint="Its frozen identity, workflow chronology, Quote Items and customer outcomes open here." />}
           {detail.status === "loading" && <LoadingState label="Loading immutable revision evidence…" />}
