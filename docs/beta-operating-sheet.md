@@ -11,8 +11,8 @@ Go-live authority: Product Owner
 | Item | Beta value |
 |---|---|
 | Producing Plant | `NAG` / Nagpur only — PO confirmed 2026-09-17 |
-| Maker | `sales.01@avadhootpacks.in` — dashboard invitation unusable (see onboarding below); no app identity; no capabilities granted |
-| Checker | `marketing@avadhootpacks.in` — dashboard invitation unusable (see onboarding below); no app identity; no capabilities granted |
+| Maker | `sales.01@avadhootpacks.in` — app user 3535 "Sonali", created 2026-09-18 by Admin 44 through Users/Access; exactly `plant_access` + `make_quote` at `NAG` |
+| Checker | `marketing@avadhootpacks.in` — app user 3536 "Snehal", created 2026-09-18 by Admin 44 through Users/Access; exactly `plant_access` + `check_quote` at `NAG` |
 | Beta URL | `https://quote-gen-fe.vercel.app` (backend `https://quote-gen-be.vercel.app`) — the only surface beta users can reach |
 | Admin | `nikunj@avadhootpacks.in` / NikunjRL — active login; no beta fence change yet |
 | Alongside period | First week; every system result compared with the existing spreadsheet |
@@ -200,6 +200,21 @@ Create user (`POST /admin/users`), which creates a confirmed Auth account, retur
 password and, through `admin_create_app_user`, grants exactly `plant_access` + `make_quote`
 (role `maker`) or `plant_access` + `check_quote` (role `checker`) at the named plant. Because
 creation and the NAG grant are one atomic step, creating the users opens the fence.
+
+### Beta users created — 2026-09-18 (read-only verification)
+
+The Product Owner deleted the two unconfirmed dashboard-invited Auth accounts, created both users
+through Users/Access on the Vercel application, and reported the Supabase Site URL updated to the
+Vercel frontend (Auth URL configuration is not readable from this session, so that is recorded as
+reported, not verified). Verified live:
+
+- Maker: app user 3535, Auth account confirmed, active; NAG `plant_access` + `make_quote` only.
+- Checker: app user 3536, Auth account confirmed, active; NAG `plant_access` + `check_quote` only.
+- Distinct application users; neither holds the other's quote capability; both granted by app user 44.
+- No unlinked Auth account remains. Neither user had signed in at verification time.
+- `app_private.attestation_keys` still has **0 rows**: live Calculate cannot verify until the
+  Product Owner provisions the matching database key, so the smoke cannot yet start.
+- Users 44 and 45 still hold `make_quote` + `check_quote` at `NAG`; ruling outstanding.
 
 ## Go-live checklist
 
