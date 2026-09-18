@@ -8,7 +8,8 @@
 // builds" (data-model-frontend-design-plan.md §2.9): flipping a flag needs a
 // rebuild/redeploy, same as VITE_API_BASE.
 //
-// ── DEV_DEFAULTS: development destinations ─────────────────────────────────
+// ── History: the former development-only floor (superseded 2026-09-18 by the
+//    localhost/Vercel parity ruling below; kept for its reasoning) ─────────
 // u1-users-access-authorization-packet.md §5 forbids removing Users/Access's
 // embedded Plant Master panel while the standalone Producing Plants screen
 // "can be hidden by configuration". It could be. The ONLY thing turning these
@@ -59,12 +60,25 @@
 // u2_sku_master joins for the read-only SKU Master increment (2026-09-15). It is
 // a destination, it issues only caller-token reads, and production stays
 // default-off until its rollout is a separate decision.
-const DEV_DEFAULTS = ["u1_producing_plants", "u1_customer_families", "u3_pricing_basis", "u2_gsm_master",
-  "u2_sku_master"];
+//
+// ── 2026-09-18: localhost/Vercel parity (Product Owner ruling) ──────────────
+// The Vercel application is where beta users work, and the Product Owner
+// ruled it must show exactly what localhost shows. BUILD_DEFAULTS is therefore
+// the complete set a localhost session had enabled (the development floor plus
+// the machine's .env.local), applied to EVERY build. That includes
+// u1_batch_party_link, which ends its localhost-only rollout by this ruling.
+// u2_construction_library and freight_authority_v2 were off on localhost and
+// stay off. The one production-only addition is limited_beta, the approved
+// beta-plan requirement that Quote exports visibly say BETA. VITE_FEATURE_FLAGS
+// still adds flags on top, and nothing here can remove one.
+const BUILD_DEFAULTS = ["u1_producing_plants", "u1_customer_families", "u3_pricing_basis", "u2_gsm_master",
+  "u2_sku_master", "u1_batch_party_link"];
+const PRODUCTION_DEFAULTS = ["limited_beta"];
 
 const RAW = import.meta.env.VITE_FEATURE_FLAGS || "";
 const ENABLED = new Set([
-  ...(import.meta.env.DEV ? DEV_DEFAULTS : []),
+  ...BUILD_DEFAULTS,
+  ...(import.meta.env.PROD ? PRODUCTION_DEFAULTS : []),
   ...RAW.split(",").map(s => s.trim()).filter(Boolean),
 ]);
 

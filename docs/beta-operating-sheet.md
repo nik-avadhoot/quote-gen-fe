@@ -16,7 +16,7 @@ Go-live authority: Product Owner
 | Beta URL | `https://quote-gen-fe.vercel.app` (backend `https://quote-gen-be.vercel.app`) — the only surface beta users can reach |
 | Admin | `nikunj@avadhootpacks.in` / NikunjRL — active login; no beta fence change yet |
 | Alongside period | First week; every system result compared with the existing spreadsheet |
-| Production build flag | `limited_beta` plus only the approved destination flags |
+| Production build flag | PO ruling 2026-09-18, Vercel = localhost: `src/lib/featureFlags.js` enables `u1_producing_plants`, `u1_customer_families`, `u3_pricing_basis`, `u2_gsm_master`, `u2_sku_master` and `u1_batch_party_link` in every build, plus `limited_beta` in production builds only. `u2_construction_library` and `freight_authority_v2` stay off, as on localhost. No environment file changed |
 | Customer issue | Not permitted until the PO declares go-live |
 | Job work | **OUT OF SCOPE** — keep every job-work enquiry on the spreadsheet |
 
