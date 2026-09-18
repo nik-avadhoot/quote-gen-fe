@@ -1,6 +1,7 @@
-# CFB Quotation Master — frontend
+# PKGCanvas · Quotation Module — frontend
 
-React 19 + Vite frontend for the CFB Quotation Operating System. The companion Flask/Supabase
+React 19 + Vite frontend for the PKGCanvas corrugated-packaging platform, currently focused on
+the Quotation Module. The companion Flask/Supabase
 repository is [`../quote-gen-be`](../quote-gen-be).
 
 For project status and authority, start with [`docs/README.md`](docs/README.md). In particular,

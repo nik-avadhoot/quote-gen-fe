@@ -18,6 +18,7 @@ import { hasCapability } from "../lib/capabilities.js";
 import { isFeatureEnabled } from "../lib/featureFlags.js";
 import { canOpenSkuMaster } from "../lib/skuMasterModel.js";
 import { useAppState } from "../state/AppStateContext.js";
+import { BrandMark, BrandWordmark } from "./BrandLogo.jsx";
 
 export default function Sidebar(){
   const { constructionLib, items, profile, setSidebarCollapsed, setTab,
@@ -105,9 +106,10 @@ export default function Sidebar(){
     <div className="sidebar-brand">
       {/* Platform brand first (the base for further modules), its positioning
           line, then the module in use. */}
-      <div className="sidebar-brand-mark" title="MFGCanvas · Quotation Module">MC</div>
-      {!sidebarCollapsed&&<div className="sidebar-brand-copy">
-        <strong>MFGCanvas</strong>
+      {sidebarCollapsed
+        ? <BrandMark className="sidebar-brand-mark" inverse />
+        : <div className="sidebar-brand-copy">
+        <BrandWordmark className="sidebar-brand-wordmark" inverse />
         <small>Built for Corrugated Packaging</small>
         <small className="sidebar-brand-module">Quotation Module</small>
       </div>}

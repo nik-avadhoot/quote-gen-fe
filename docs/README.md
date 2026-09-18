@@ -49,6 +49,8 @@ without explicit Product Owner scope.
 
 - [`session-start.md`](session-start.md) — short startup path.
 - [`current-state.md`](current-state.md) — implemented-state and repository handoff.
+- [`beta-readiness-plan.md`](beta-readiness-plan.md) — approved 2026-09-17: beta-entry versus
+  beta-exit gate split, the four waves to a limited beta, and the beta rulings (BR-1 to BR-7).
 - [`s9-technical-closure-and-u3-u6-handoff.md`](s9-technical-closure-and-u3-u6-handoff.md) — active
   S9 record. It truthfully records that S9 is not technically or Product Owner closed.
 - [`u4-my-batches-catalogue-increment.md`](u4-my-batches-catalogue-increment.md) — current U4

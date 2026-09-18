@@ -46,18 +46,18 @@ const QF_PLATE = { item_name: "__U2_FIXTURE_ONLY__ PLATE RS 375 ML", item_short_
 const QF_PARTITION = { ...QF_PLATE, item_name: "__U2_FIXTURE_ONLY__ PARTITION RS 375 ML", item_short_name: "PARTITION RS 375 ML DIE 1",
   item_family: "Partition" };
 
-const BOX_SET = { id: 51, label: "__U2_FIXTURE_ONLY__/NAG/0001", status: "confirmed",
+const BOX_SET = { id: 51, label: "__U2_FIXTURE_ONLY__/NAG/0001", status: "confirmed", content_version: 2,
   members: [
     { sku_id: 9101, plant_item_code: "__U2_FIXTURE_ONLY__/NAG/0001", sku_status: "active", sku_visible: true,
-      role: "box", qty_per_set: 1, status: "confirmed" },
+      role: "box", qty_per_set: 1, status: "confirmed", content_version: 2 },
     { sku_id: 9104, plant_item_code: "__U2_FIXTURE_ONLY__/NAG/0001P1", sku_status: "proposed", sku_visible: true,
-      role: "plate", qty_per_set: 2, status: "confirmed" },
+      role: "plate", qty_per_set: 2, status: "confirmed", content_version: 2 },
     { sku_id: 9105, plant_item_code: "__U2_FIXTURE_ONLY__/NAG/0001Q1", sku_status: "proposed", sku_visible: true,
-      role: "partition", qty_per_set: 1, status: "proposed" },
+      role: "partition", qty_per_set: 1, status: "proposed", content_version: 1 },
   ] };
 const setFor = (skuId) => {
   const me = BOX_SET.members.find(m => m.sku_id === skuId);
-  return me ? [{ id: BOX_SET.id, label: BOX_SET.label, status: BOX_SET.status, role: me.role,
+  return me ? [{ id: BOX_SET.id, label: BOX_SET.label, status: BOX_SET.status, content_version: BOX_SET.content_version, role: me.role,
     qty_per_set: me.qty_per_set, member_status: me.status, members: BOX_SET.members }] : [];
 };
 
@@ -105,7 +105,7 @@ const ROWS = [
 
 const VISIBLE = { customer: "visible", construction: "visible", plant_adoption: "visible", locations: "visible", sets: "visible" };
 const PENDING_NONE = { quote_fields: false, sku_sets: false, pricing_portfolio: false,
-  governed_operations: false, location_applicability_operations: false };
+  governed_operations: false, location_applicability_operations: false, sku_set_operations: false };
 const common = { schema_pending: PENDING_NONE, mode: "governed_read_only", authority: "caller_token_rls_only", mutations: "none" };
 const header = row => ({ id: row.id, plant_item_code: row.plant_item_code, status: row.status,
   pricing_portfolio: row.pricing_portfolio,

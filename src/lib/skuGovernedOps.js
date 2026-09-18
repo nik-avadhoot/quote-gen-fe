@@ -23,6 +23,7 @@ import { hasCapabilityAtPlant } from "./capabilities.js";
 export const SKU_OPS_PENDING = "Schema activation pending — the governed SKU operations are prepared but not applied in this environment.";
 export const SKU_OPS_FIXTURE = "Fixture preview — no governed write occurs here.";
 export const SKU_APPLICABILITY_PENDING = "Schema activation pending — governed master Location applicability is prepared but not applied in this environment.";
+export const SKU_SET_PENDING = "Schema activation pending — governed SKU Set membership is prepared but not applied in this environment.";
 
 // D2, mirroring app_private.sku_field_class exactly.
 export const SKU_FIELD_CLASS = {
@@ -98,6 +99,13 @@ export function skuApplicabilityMode({ fixtureOnly = false, schemaPending = {}, 
   if (!authority?.manage) return { state: "none", reason: null };
   if (fixtureOnly) return { state: "disabled", reason: SKU_OPS_FIXTURE };
   if (schemaPending.location_applicability_operations) return { state: "disabled", reason: SKU_APPLICABILITY_PENDING };
+  return { state: "live", reason: null };
+}
+
+export function skuSetMode({ fixtureOnly = false, schemaPending = {}, authority }) {
+  if (!authority?.manage) return { state: "none", reason: null };
+  if (fixtureOnly) return { state: "disabled", reason: SKU_OPS_FIXTURE };
+  if (schemaPending.sku_set_operations) return { state: "disabled", reason: SKU_SET_PENDING };
   return { state: "live", reason: null };
 }
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { C, mono, sans } from "./theme.js";
 import { useAuth } from "./AuthContext.jsx";
+import { BrandWordmark } from "./ui/BrandLogo.jsx";
 
 export default function LoginScreen({ onU2ConstructionIllustration, onU2SkuIllustration, onU3Illustration, onU4CatalogueIllustration, onU5Illustration }) {
   const { signIn } = useAuth();
@@ -25,16 +26,13 @@ export default function LoginScreen({ onU2ConstructionIllustration, onU2SkuIllus
   return (
     <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: C.paper, fontFamily: sans }}>
       <form onSubmit={submit} style={{ width: 320, background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: 28, boxShadow: "0 4px 24px rgba(0,0,0,.06)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
-          <div aria-hidden="true" style={{ width: 32, height: 32, background: C.amber, borderRadius: 6, display: "flex",
-            alignItems: "center", justifyContent: "center", color: C.white, fontSize: 11, fontWeight: 800,
-            letterSpacing: "0.04em" }}>MC</div>
-          <div style={{ fontWeight: 700, fontSize: 14, color: C.slate }}>
-            MFGCanvas
-            <div style={{ fontSize: 9, color: C.slateL, fontWeight: 400 }}>Built for Corrugated Packaging</div>
-            <div style={{ fontSize: 9, color: C.amberD, fontWeight: 700, textTransform: "uppercase",
-              letterSpacing: "0.05em", marginTop: 1 }}>Quotation Module</div>
+        <div style={{ marginBottom: 20 }}>
+          <BrandWordmark style={{ display: "block", width: 164, height: "auto" }} />
+          <div style={{ fontSize: 9, color: C.slateL, fontWeight: 500, letterSpacing: "0.045em", marginTop: 1 }}>
+            Built for Corrugated Packaging
           </div>
+          <div style={{ fontSize: 9, color: C.amberD, fontWeight: 700, textTransform: "uppercase",
+            letterSpacing: "0.07em", marginTop: 2 }}>Quotation Module</div>
         </div>
 
         <div style={{ fontSize: 9, color: C.slateL, fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>Email</div>

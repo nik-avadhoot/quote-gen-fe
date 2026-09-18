@@ -1877,33 +1877,32 @@ code {
 .sidebar-shell.is-collapsed { width: 58px; flex-basis: 58px; }
 .sidebar-brand {
   display: flex;
-  height: 56px;
-  flex: 0 0 56px;
+  min-height: 68px;
+  flex: 0 0 68px;
   align-items: center;
-  gap: 10px;
   box-sizing: border-box;
-  padding: 10px 14px;
+  padding: 8px 13px 9px;
   border-bottom: 1px solid rgb(255 255 255 / 9%);
 }
 .sidebar-brand-mark {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-  place-items: center;
+  display: block;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  object-fit: contain;
   border-radius: 7px;
-  background: #d97b2e;
-  color: #fff;
-  font-size: 9px;
-  font-weight: 850;
-  letter-spacing: .04em;
   box-shadow: 0 5px 13px rgb(0 0 0 / 16%);
 }
 .sidebar-shell.is-collapsed .sidebar-brand { justify-content: center; padding-inline: 0; }
-.sidebar-brand-copy { display: flex; min-width: 0; flex-direction: column; line-height: 1.15; }
-.sidebar-brand-copy strong { overflow: hidden; font-size: 13px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-brand-copy small { margin-top: 3px; color: rgb(255 255 255 / 68%); font-size: 8px; letter-spacing: .1em; }
-/* Three-line brand: MFGCanvas · positioning line · module in use. */
+.sidebar-brand-copy { display: flex; min-width: 0; flex-direction: column; line-height: 1.1; }
+.sidebar-brand-wordmark {
+  display: block;
+  width: 158px;
+  height: 30px;
+  overflow: hidden;
+}
+.sidebar-brand-copy small { margin-top: 2px; color: rgb(255 255 255 / 68%); font-size: 7.5px; letter-spacing: .075em; }
+/* Three-line brand: PKGCanvas · positioning line · module in use. */
 .sidebar-brand-copy small + small { margin-top: 1px; }
 .sidebar-brand-copy .sidebar-brand-module { color: #f3a35e; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .sidebar-nav {

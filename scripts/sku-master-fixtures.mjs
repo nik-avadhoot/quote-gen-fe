@@ -8,7 +8,7 @@
 // vs zero, hidden vs unavailable vs migration pending), that SKU Sets come from
 // governed membership with a quantity per member (CDM-44), that the split view
 // is clamped, that the destination is flag- and capability-gated at both the nav
-// entry and the mount, and that the screen is read-only.
+// entry and the mount, and that every write lives behind a named governed control.
 //
 // U2-SKU-FE-88+ guard the CDM-45 PRICING PORTFOLIO: a closed, mandatory
 // vocabulary that is RECORDED ONLY - shown and filterable, and reaching no
@@ -33,8 +33,9 @@ import {
 import { SKU_FIXTURE_DETAILS, fixtureSkuCatalogue } from "../src/lib/skuMasterFixture.js";
 import {
   SKU_APPLICABILITY_PENDING, SKU_EDIT_FIELDS, SKU_FIELD_CLASS, SKU_OPS_FIXTURE, SKU_OPS_PENDING, SKU_OP_CONFIRM,
+  SKU_SET_PENDING,
   buildFieldChanges, fieldEditability, parseFieldInput, replacementCandidates, skuApplicabilityMode,
-  skuLifecycleActions, skuOpsAuthority, skuOpsMode, skuProposalPlants,
+  skuLifecycleActions, skuOpsAuthority, skuOpsMode, skuProposalPlants, skuSetMode,
   versionChangeVerdict, versionEditPlan, versionFieldValues,
 } from "../src/lib/skuGovernedOps.js";
 import {
@@ -278,11 +279,12 @@ const apiCalls = screen.match(/apiFetch\(([^)]*)\)/g) || [];
 check(apiCalls.length === 2 && apiCalls.every(call => !call.includes("method"))
   && !/runMutation|method:\s*"(POST|PATCH|PUT|DELETE)"/.test(screen),
   "U2-SKU-FE-48 the screen itself issues exactly two GET reads; every governed write lives in SkuGovernedActions (Amendment 04)");
-check(!/sku-sets|Add to set/.test(actionsUi)
+check(actionsUi.includes("SkuSetControls") && actionsUi.includes("/masters/sku-sets")
+  && actionsUi.includes("internal SKU identity")
   && actionsUi.includes("SkuApplicabilityControls")
   && actionsUi.includes("Quote-specific batch_only rows remain read-only here.")
   && actionsUi.includes("/location-applicabilities"),
-  "U2-SKU-FE-49 SKU Sets remain read-only; Amendment 05 governs master applicability only and never batch_only");
+  "U2-SKU-FE-49 SKU Set and master-applicability writes are named governed controls; batch_only remains read-only here");
 check(screen.indexOf("if (fixtureOnly)") !== -1 && screen.indexOf("if (fixtureOnly)") < screen.indexOf("apiFetch(query)")
   && screen.includes("U2 · FIXTURE ONLY"),
   "U2-SKU-FE-50 fixture mode is labelled and short-circuits before any request");
@@ -569,6 +571,12 @@ check(skuApplicabilityMode({ authority: { manage: false } }).state === "none"
   && skuApplicabilityMode({ schemaPending: { location_applicability_operations: true }, authority: { manage: true } }).reason === SKU_APPLICABILITY_PENDING
   && skuApplicabilityMode({ authority: { manage: true } }).state === "live",
   "U2-SKU-FE-116a only manage_sku_master receives master-applicability controls; fixture and pending modes disable them visibly");
+check(skuSetMode({ authority: { manage: false } }).state === "none"
+  && skuSetMode({ fixtureOnly: true, authority: { manage: true } }).reason === SKU_OPS_FIXTURE
+  && skuSetMode({ schemaPending: { sku_set_operations: true }, authority: { manage: true } }).reason === SKU_SET_PENDING
+  && skuSetMode({ authority: { manage: true } }).state === "live"
+  && /Schema activation pending/.test(SKU_SET_PENDING),
+  "U2-SKU-FE-116b only manage_sku_master receives SKU Set controls; fixture and pending modes disable them visibly");
 const opsMaker = skuLifecycleActions({ id: 5, status: "proposed", plant_item_code: null, pricing_portfolio: "Strategic" },
   [{ id: 50, version_no: 1, approved: false }], { propose: true, manage: false }).map(a => a.id);
 const opsNpdProposed = skuLifecycleActions({ id: 5, status: "proposed", plant_item_code: null, pricing_portfolio: "Strategic" },

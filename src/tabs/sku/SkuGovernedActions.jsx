@@ -92,6 +92,106 @@ export function SkuApplicabilityControls({ data, authority, mode, showToast, onC
   </div>;
 }
 
+// ── Canonical Amendment 04, slice 2: explicit SKU Set membership ──────────
+export function SkuSetControls({ data, rows = [], authority, mode, showToast, onChanged }) {
+  const sku = data.sku;
+  const setsReadable = Array.isArray(data.sets);
+  const sets = data.sets || [];
+  const [label, setLabel] = useState("");
+  const [candidateId, setCandidateId] = useState("");
+  const [role, setRole] = useState("plate");
+  const [qty, setQty] = useState("1");
+  const [members, setMembers] = useState([]);
+  const [reasonBySet, setReasonBySet] = useState({});
+  const [busy, setBusy] = useState(false);
+  if (!authority?.manage || mode.state === "none") return null;
+  const live = mode.state === "live" && setsReadable;
+  const plantCode = sku.plant?.plant_code;
+  const used = new Set([sku.id, ...members.map(m => m.sku_id)]);
+  const candidates = rows.filter(row => row.id !== sku.id && row.plant?.plant_code === plantCode
+    && row.status !== "withdrawn" && !(row.sets || []).some(set => set.status !== "retired") && !used.has(row.id));
+
+  const run = async (path, body, successMessage, confirmText) => {
+    if (!live || busy) return;
+    if (confirmText && !window.confirm(confirmText)) return;
+    setBusy(true);
+    const result = await runMutation(path, body, { showToast, successMessage });
+    setBusy(false);
+    if (result !== null) {
+      setLabel(""); setCandidateId(""); setMembers([]); setReasonBySet({}); onChanged();
+    }
+  };
+  const addMember = () => {
+    const skuId = Number(candidateId);
+    const amount = Number(qty);
+    if (!skuId || !Number.isFinite(amount) || amount <= 0) return;
+    setMembers(prev => [...prev, { sku_id: skuId, role, qty_per_set: amount }]);
+    setCandidateId(""); setRole("plate"); setQty("1");
+  };
+  const proposalMembers = [{ sku_id: sku.id, role: "box", qty_per_set: 1 }, ...members];
+  const proposalDisabled = !live || busy || !label.trim();
+
+  return <div style={{ display: "grid", gap: 7, marginTop: 9, paddingTop: 9, borderTop: `1px solid ${C.border}` }}>
+    <strong style={{ fontSize: T.body, color: C.slate }}>Govern SKU Set membership</strong>
+    {!live && <DisabledNote reason={mode.reason || "SKU Set membership is unavailable — refresh before changing it."} />}
+    {!sets.length && <>
+      <span style={{ fontSize: T.label, color: C.slateL }}>
+        The selected SKU is explicitly recorded as the box. Add plate or partition SKUs by internal SKU identity; codes are never parsed.</span>
+      <input aria-label="SKU Set label" value={label} maxLength={200} disabled={!live || busy}
+        placeholder="SKU Set label" onChange={e => setLabel(e.target.value)} style={{ ...control, maxWidth: 320 }} />
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <select aria-label="SKU Set member" value={candidateId} disabled={!live || busy || !candidates.length}
+          onChange={e => setCandidateId(e.target.value)} style={{ ...control, minWidth: 220 }}>
+          <option value="">{candidates.length ? "Choose visible plant SKU…" : "No eligible SKU in this catalogue view"}</option>
+          {candidates.map(row => <option key={row.id} value={row.id}>{row.plant_item_code || `SKU #${row.id}`}</option>)}
+        </select>
+        <select aria-label="SKU Set member role" value={role} disabled={!live || busy}
+          onChange={e => setRole(e.target.value)} style={control}>
+          <option value="plate">Plate</option><option value="partition">Partition</option>
+        </select>
+        <input aria-label="Quantity per set" type="number" min="0.001" step="0.001" value={qty}
+          disabled={!live || busy} onChange={e => setQty(e.target.value)} style={{ ...control, width: 105 }} />
+        <button type="button" disabled={!live || busy || !candidateId || !(Number(qty) > 0)}
+          onClick={addMember} style={control}>Add member</button>
+      </div>
+      {!!members.length && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+        {members.map(member => {
+          const row = rows.find(item => item.id === member.sku_id);
+          return <button key={member.sku_id} type="button" disabled={!live || busy}
+            title="Remove member" onClick={() => setMembers(prev => prev.filter(item => item.sku_id !== member.sku_id))}
+            style={{ ...control, fontSize: T.label }}>{member.role} · {row?.plant_item_code || `SKU #${member.sku_id}`} × {member.qty_per_set} · remove</button>;
+        })}
+      </div>}
+      <button type="button" disabled={proposalDisabled} style={{ ...primary(proposalDisabled), width: "fit-content" }}
+        onClick={() => run("/masters/sku-sets", {
+          box_sku_id: sku.id, expected_content_version: sku.content_version,
+          set_label: label.trim(), members: proposalMembers,
+        }, "SKU Set proposed.")}>{busy ? "Saving…" : "Propose SKU Set"}</button>
+    </>}
+    {sets.map(set => {
+      const reason = reasonBySet[set.id] || "";
+      if (set.status === "proposed") return <div key={set.id} style={{ display: "grid", gap: 5 }}>
+        <span style={{ fontSize: T.label, color: C.slateL }}>
+          Confirm {set.label}. A settled Customer requires a different manage_sku_master holder.</span>
+        <button type="button" disabled={!live || busy || set.content_version == null}
+          style={{ ...primary(!live || busy || set.content_version == null), width: "fit-content" }}
+          onClick={() => run(`/masters/sku-sets/${set.id}/confirm`, { expected_content_version: set.content_version },
+            "SKU Set confirmed.", `Confirm SKU Set ${set.label}?`)}>Confirm SKU Set</button>
+      </div>;
+      if (set.status === "confirmed") return <div key={set.id} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <input aria-label={`Retirement reason for SKU Set ${set.label}`} value={reason} maxLength={500}
+          disabled={!live || busy} placeholder="Retirement reason" onChange={e => setReasonBySet(prev => ({ ...prev, [set.id]: e.target.value }))}
+          style={{ ...control, minWidth: 220 }} />
+        <button type="button" disabled={!live || busy || set.content_version == null || !reason.trim()} style={control}
+          onClick={() => run(`/masters/sku-sets/${set.id}/retire`, {
+            expected_content_version: set.content_version, reason: reason.trim(),
+          }, "SKU Set retired.", `Retire SKU Set ${set.label}? Its memberships will be withdrawn.`)}>Retire SKU Set</button>
+      </div>;
+      return null;
+    })}
+  </div>;
+}
+
 // ── Actions ▾ in the detail toolbar ─────────────────────────────────────────
 export function SkuActionsMenu({ data, rows, authority, mode, showToast, onChanged, onEditVersion }) {
   const { sku, versions = [] } = data;

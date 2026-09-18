@@ -64,13 +64,14 @@ record—not another documentation reorganisation.
   and Product Owner validation remain deferred. The Customer Family/Sector migrations are activated
   as `20260915100440` and `20260915100521` (catalogue gate 7/7); the governed Sector master still
   has zero rows, which blocks Family/Prospect/Batch creation until governed Sectors exist.
-- U2's caller-scoped SKU Master now includes the Amendment 02/03 field model and Amendment 04 slice-1
-  governed actions: proposal, draft/version work, approval, Plant Item Code assignment, publication,
-  lifecycle, portfolio, references and append-only history. All five SKU migrations were applied
-  live on 2026-09-17; local gates are SKU frontend 126/0, route 195/0 and Amendment 04 static contract
-  85/0. Authenticated-live browser mutation proof and Product Owner validation remain outstanding.
-  SKU Sets write support is not implemented. Master Location applicability writes are prepared
-  locally under Amendment 05 but not remotely applied; controls remain activation-gated.
+- U2's caller-scoped SKU Master now includes the Amendment 02/03 field model and both Amendment 04
+  governed-action slices: proposal, draft/version work, approval, Plant Item Code assignment,
+  publication, lifecycle, portfolio, references, SKU Set proposal/confirmation/retirement and
+  append-only history. Amendment 05 Master Location applicability writes are live too. The two latest
+  migrations were applied on 2026-09-17 after empty-table/conflict preflight; focused live pgTAP passed
+  74/74 across SKU governance and both new boundaries. Caller-token routes and activation-gated controls
+  are ready; settled-Customer Sets require a different confirmer. Genuine authenticated-browser mutation
+  proof and Product Owner validation remain outstanding because the live SKU tables are still empty.
 - U2 Plant Construction Adoption is now a read-only matrix inside the governed Construction surface
   (`2de4c15`): approved versions of published Constructions are shown against only the caller's exact
   `plant_access` scope, with Adopted, Withdrawn, Not adopted and Unavailable kept distinct. Focused

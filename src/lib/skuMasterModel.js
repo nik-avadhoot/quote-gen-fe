@@ -505,13 +505,13 @@ export function qtyPerSetText(qty) {
 
 export function skuSetView(sets, currentSkuId) {
   return (sets || []).map(s => ({
-    id: s.id, label: s.label, status: s.status,
+    id: s.id, label: s.label, status: s.status, contentVersion: s.content_version,
     role: SET_ROLE_LABELS[s.role] || s.role, qty: qtyPerSetText(s.qty_per_set), memberStatus: s.member_status,
     members: (s.members || []).map(m => ({
       skuId: m.sku_id, isCurrent: m.sku_id === currentSkuId,
       code: m.sku_visible === false ? `SKU #${m.sku_id} · ${NOT_VISIBLE}` : plantItemCodeLabel(m.plant_item_code),
       role: SET_ROLE_LABELS[m.role] || m.role, qty: qtyPerSetText(m.qty_per_set), status: m.status,
-      skuStatus: m.sku_status, visible: m.sku_visible !== false,
+      skuStatus: m.sku_status, visible: m.sku_visible !== false, contentVersion: m.content_version,
     })),
   }));
 }
@@ -531,4 +531,3 @@ export function skuSetGroups(rows) {
   }
   return order.map(k => byKey[k]);
 }
-

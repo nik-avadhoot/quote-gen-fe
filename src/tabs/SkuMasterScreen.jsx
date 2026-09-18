@@ -8,7 +8,8 @@
 // offered only to a caller holding the capability at the SKU's plant, and stays
 // visible but DISABLED with its reason until the operations are activated (and
 // always in the fixture preview). Master Location applicability is governed by
-// Amendment 05; batch_only applicability and SKU Set membership have no controls.
+// Amendment 05 governs master applicability; Amendment 04 slice 2 governs SKU Sets.
+// Quote-specific batch_only applicability remains read-only here.
 //
 // ── LAYOUT ────────────────────────────────────────────────────────────────
 // The TopBar already names the screen, so there is no second page header.
@@ -81,8 +82,8 @@ import {
   COLUMN_FILTERS, COLUMN_FILTER_MAX, COLUMN_FILTER_OP_LABELS, columnFilterAvailability, columnFilterScanNotice,
   columnFilterSummary, columnFilterValidation, sharedFilterFromState, sharedStateFromFilter,
 } from "../lib/skuColumnFilters.js";
-import { skuApplicabilityMode, skuOpsAuthority, skuOpsMode, skuProposalPlants } from "../lib/skuGovernedOps.js";
-import { SkuActionsMenu, SkuApplicabilityControls, SkuProposeForm, SkuReferenceControls, SkuVersionEditor } from "./sku/SkuGovernedActions.jsx";
+import { skuApplicabilityMode, skuOpsAuthority, skuOpsMode, skuProposalPlants, skuSetMode } from "../lib/skuGovernedOps.js";
+import { SkuActionsMenu, SkuApplicabilityControls, SkuProposeForm, SkuReferenceControls, SkuSetControls, SkuVersionEditor } from "./sku/SkuGovernedActions.jsx";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag, SummaryRow } from "../ui/dataDisplay.jsx";
 import { RefreshIcon } from "../ui/icons.jsx";
@@ -289,6 +290,8 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   const detailMode = skuOpsMode({ fixtureOnly, schemaPending: detailData?.schema_pending || {}, authority: detailAuthority });
   const applicabilityMode = skuApplicabilityMode({ fixtureOnly,
     schemaPending: detailData?.schema_pending || {}, authority: detailAuthority });
+  const setMode = skuSetMode({ fixtureOnly,
+    schemaPending: detailData?.schema_pending || {}, authority: detailAuthority });
   const proposalPlants = fixtureOnly ? scope : skuProposalPlants(profile, scope);
   const proposalMode = skuOpsMode({ fixtureOnly, schemaPending: catalogue.schemaPending || {},
     authority: { propose: proposalPlants.length > 0 } });
@@ -488,7 +491,8 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
             )}
             {selectedId != null && detail.status === "ready" &&
               <SkuDeepDive data={detail.data} fieldCols={fieldCols} onSelectSku={setSelectedId}
-                authority={detailAuthority} mode={detailMode} applicabilityMode={applicabilityMode}
+                rows={catalogue.skus || []} authority={detailAuthority} mode={detailMode}
+                applicabilityMode={applicabilityMode} setMode={setMode}
                 showToast={showToast} onChanged={refreshAfterWrite} />}
           </div>
         </div>}
@@ -673,7 +677,7 @@ function SpecGrid({ rows, ctx, groups, selectedId, onSelect, groupBySet, filterO
   );
 }
 
-function SkuDeepDive({ data, fieldCols, onSelectSku, authority, mode, applicabilityMode, showToast, onChanged }) {
+function SkuDeepDive({ data, rows, fieldCols, onSelectSku, authority, mode, applicabilityMode, setMode, showToast, onChanged }) {
   const [focus, setFocus] = useState("all");
   const row = specRowFromDetail(data);
   const visibility = data.detail_visibility || {};
@@ -750,6 +754,8 @@ function SkuDeepDive({ data, fieldCols, onSelectSku, authority, mode, applicabil
               </div>
             </div>
           ))}
+          <SkuSetControls data={data} rows={rows} authority={authority} mode={setMode}
+            showToast={showToast} onChanged={onChanged} />
         </div>
       </div>
 
