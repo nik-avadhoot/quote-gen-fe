@@ -36,7 +36,8 @@ import {
   familyNameByPartyId, fieldTitle, identityCaveat, identityFromText,
   likelyMatches, locationCreatedNotLinkedMessage, locationLabel,
   locationNotLinkedNotice, matchScore, normalizeForMatch, partyLabel,
-  partyLifecycleLabel, partyOptionParts, proposeLocationBody, quickPickAbilities,
+  partyLifecycleLabel, partyOptionParts, profileAfterProspect, proposeLocationBody,
+  prospectFormProblems, prospectPlantNote, quickPickAbilities,
 } from "../src/lib/batchQuickCreate.js";
 
 // Every helper the module exports, so a re-added freight/delivery helper
@@ -137,13 +138,55 @@ ok("apply: a refused `delivery` write leaves the freight destination exactly as 
 ok("apply: the input profile is not mutated — a new object is returned",
    PROFILE.client === "" && afterClient !== PROFILE);
 
-ok("apply: every field outside `client` is refused, profile returned untouched",
-   ["sector", "plant", "margin", "delivery", "freightOverride", "customerType",
+// PO ruling 2026-09-18: the one-window Prospect form also sets the Batch's
+// Sector and Plant, so exactly `client`, `sector` and `plant` are writable.
+// Everything commercial or freight-bearing stays refused.
+ok("apply: every field outside client/sector/plant is refused, profile returned untouched",
+   ["margin", "delivery", "freightOverride", "customerType",
     "priceContext", "interest", "paymentDisc"]
      .every(f => applyLabelToProfile(PROFILE, f, "anything") === PROFILE));
 
-ok("apply: `client` is the ONLY writable field — `delivery` is not on the list",
-   eq(BATCH_TEXT_FIELDS, ["client"]) && !BATCH_TEXT_FIELDS.includes("delivery"));
+ok("apply: exactly client, sector and plant are writable — `delivery` is not on the list",
+   eq(BATCH_TEXT_FIELDS, ["client", "sector", "plant"]) && !BATCH_TEXT_FIELDS.includes("delivery"));
+
+ok("apply: a sector or plant write changes only that field",
+   (() => {
+     const s = applyLabelToProfile(PROFILE, "sector", "TEXTILE");
+     const p = applyLabelToProfile(PROFILE, "plant", "Nagpur");
+     return s.sector === "TEXTILE" && p.plant === "Nagpur"
+       && Object.keys(PROFILE).filter(k => k !== "sector").every(k => s[k] === PROFILE[k])
+       && Object.keys(PROFILE).filter(k => k !== "plant").every(k => p[k] === PROFILE[k]);
+   })());
+
+// ── the one-window Prospect form ───────────────────────────────────────────
+
+ok("prospect form: name, Sector and Plant are all required",
+   eq(prospectFormProblems({ name: " ", sectorId: "", plantId: "" }).length, 3)
+   && prospectFormProblems({ name: "Indo Rama", sectorId: "276", plantId: "1" }).length === 0
+   && prospectFormProblems({ name: "Indo Rama", sectorId: "276", plantId: "" }).length === 1
+   && prospectFormProblems({ name: "Indo Rama", sectorId: "", plantId: "1" }).length === 1);
+
+ok("prospect body: the chosen Sector is sent as sector_id, which the backend requires for a new Family",
+   eq(createProspectBody("Indo Rama", null, "276"), { display_name: "Indo Rama", sector_id: 276 }));
+
+ok("prospect → Batch: Client, Sector and Plant are set; delivery and freight never move",
+   (() => {
+     const seeded = { ...PROFILE, delivery: "Nagpur", freightOverride: "" };
+     const after = profileAfterProspect(seeded, { name: "Indo Rama", sectorCode: "TEXTILE", plantName: "Nagpur" },
+       { sectorCodes: ["TEXTILE", "PAINTS"], plantNames: ["Nagpur", "Pune", "Kolkata"] });
+     return after.client === "Indo Rama" && after.sector === "TEXTILE" && after.plant === "Nagpur"
+       && after.delivery === "Nagpur" && after.freightOverride === "" && eq(keys(after), keys(seeded));
+   })());
+
+ok("prospect → Batch: a Sector or Plant the Batch Profile cannot display is not written",
+   (() => {
+     const after = profileAfterProspect(PROFILE, { name: "Indo Rama", sectorCode: "NEWCODE", plantName: "Khed" },
+       { sectorCodes: ["TEXTILE"], plantNames: ["Nagpur"] });
+     return after.client === "Indo Rama" && after.sector === "" && after.plant === "";
+   })());
+
+ok("prospect form: the Plant note says it is not yet stored on the Customer Family",
+   /Amendment 06/.test(prospectPlantNote("Nagpur")) && /not built yet/.test(prospectPlantNote("Nagpur")));
 
 ok("apply: an empty or whitespace-only label writes nothing",
    applyLabelToProfile(PROFILE, "client", "") === PROFILE
@@ -271,9 +314,10 @@ ok("location create: NO Batch field of any kind can be reached with a Location l
      const lbl = locationLabel({ id: 9 }, { address_text: "12 Kalamna Rd" });
      return Object.keys(SEEDED).every(f => {
        const after = applyLabelToProfile(SEEDED, f, lbl);
-       // `client` is the one legitimate target, and a Location label would
-       // never be offered to it by the UI — but even there, nothing else moves.
-       if (f === "client") return after.delivery === SEEDED.delivery
+       // client/sector/plant are the only legitimate targets, and a Location
+       // label is never offered to them by the UI — but even there, delivery
+       // and the key set do not move.
+       if (BATCH_TEXT_FIELDS.includes(f)) return after.delivery === SEEDED.delivery
          && eq(keys(after), keys(SEEDED));
        return after === SEEDED;
      });

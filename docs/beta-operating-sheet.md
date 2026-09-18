@@ -277,6 +277,16 @@ named `t1`.
 
   The daily self-approval check and the operating rule "Nagpur only; job work stays on the
   spreadsheet" remain in force. Restricting again uses the same operation (kill switch).
+- **One-window Prospect creation (PO ruling 2026-09-18).** Creating a Prospect from the Batch
+  Client field sent no Sector, so the backend refused it ("sector_id is required when proposing a
+  new Family"), and choosing the Batch Sector closed the panel and lost the typed name. It is now a
+  single window (`src/tabs/batch/ProspectCreateModal.jsx`) with Prospect name, governed Sector and
+  Producing Plant, all required. Likely duplicates are shown first. Create sends
+  `{display_name, sector_id}` to the same governed route, then sets the Batch Client, Sector and
+  Plant. This deliberately widens the Slice D write boundary from `client` to
+  `client`/`sector`/`plant`; `delivery` and every freight or commercial field stay unwritable, and
+  `test:batch-quick-create` pins the new boundary. The Plant is not yet stored on the Customer
+  Family: that needs Amendment 06, and the window says so.
 - The grant is made by the Admin through Users/Access (`POST /admin/users/3536/capabilities`,
   complete set with `expected_content_version`), not by a direct database write.
 

@@ -61,7 +61,13 @@ export { proposeLocationBody } from "./customerLocationActions.js";
 // widen the write surface without changing this line and failing its fixture.
 // `delivery` is deliberately absent and must stay absent: it belongs to the
 // freight master, and the fixtures assert that writing it is refused.
-export const BATCH_TEXT_FIELDS = Object.freeze(["client"]);
+//
+// WIDENED 2026-09-18 by Product Owner ruling: creating a Prospect happens in one
+// window that also chooses its governed Sector and its Producing Plant, and the
+// Batch takes those same choices, so `sector` and `plant` join `client`. Both are
+// plain selections the Batch Profile already offers. `delivery` and every
+// freight or commercial field stay unwritable, exactly as before.
+export const BATCH_TEXT_FIELDS = Object.freeze(["client", "sector", "plant"]);
 
 // Capabilities, mirroring the backend's own conditions rather than inventing a
 // narrower frontend rule:
@@ -136,7 +142,7 @@ export function applyLabelToProfile(profile, field, label) {
 
 // `delivery` is deliberately NOT here: it is not a field this slice may name,
 // title or write.
-const FIELD_TITLES = { client: "Client" };
+const FIELD_TITLES = { client: "Client", sector: "Sector", plant: "Plant" };
 
 export function fieldTitle(field) {
   return FIELD_TITLES[field] || field;
@@ -359,6 +365,42 @@ export function familyNameByPartyId(memberships, families) {
 // There is therefore no "create as Customer" option to expose, and no flag
 // saying so — the UI simply offers the supported governed action. See the
 // design plan for why, rather than a constant asserting it here.
+
+// ── the one-window Prospect form (PO ruling 2026-09-18) ────────────────────
+
+// Everything the window needs before Create is enabled. The database requires a
+// Sector for every Family; the Producing Plant is required by the Product
+// Owner's plant-assignment rule (Amendment 06).
+export function prospectFormProblems({ name, sectorId, plantId }) {
+  const problems = [];
+  if (!(typeof name === "string" && name.trim())) problems.push("Enter the Prospect's name.");
+  if (!sectorId) problems.push("Choose the Sector.");
+  if (!plantId) problems.push("Choose the Producing Plant.");
+  return problems;
+}
+
+// Honest about where the Plant lands today: Amendment 06 is drafted, not built,
+// so the Customer Master has nowhere to store a Family's plants yet.
+export function prospectPlantNote(plantName) {
+  return `${plantName || "The Producing Plant"} is set on this Batch now. Recording it on the `
+    + "Customer Family itself arrives with the plant-assignment change (Amendment 06), which is "
+    + "drafted but not built yet.";
+}
+
+// The Batch Profile after a Prospect is created from the window. Client is
+// always written. Sector and Plant are written only when the Batch Profile
+// already offers that exact option, so a select never holds a value it cannot
+// display. Nothing else is touched.
+export function profileAfterProspect(profile, { name, sectorCode, plantName }, { sectorCodes, plantNames }) {
+  let next = applyLabelToProfile(profile, "client", name);
+  if (sectorCode && (sectorCodes || []).includes(sectorCode)) {
+    next = applyLabelToProfile(next, "sector", sectorCode);
+  }
+  if (plantName && (plantNames || []).includes(plantName)) {
+    next = applyLabelToProfile(next, "plant", plantName);
+  }
+  return next;
+}
 
 export function createProspectConfirmMessage(name, matchCount) {
   const dupe = matchCount > 0

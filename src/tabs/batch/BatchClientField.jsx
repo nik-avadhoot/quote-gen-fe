@@ -39,13 +39,15 @@ import { createPortal } from "react-dom";
 import { useAuth } from "../../AuthContext.jsx";
 import { apiFetch } from "../../lib/apiClient.js";
 import { classifyResponse } from "../../lib/backendError.js";
-import { runMutation } from "../../lib/runMutation.js";
 import {
-  applyLabelToProfile, cannotBrowseNotice, createProspectBody, createProspectConfirmMessage,
+  applyLabelToProfile, cannotBrowseNotice,
   familyNameByPartyId, identityCaveat, identityFromText, likelyMatches, partyLabel,
-  partyOptionParts, quickPickAbilities,
+  partyOptionParts, profileAfterProspect, quickPickAbilities,
 } from "../../lib/batchQuickCreate.js";
+import { PLANTS } from "../../data/defaults.js";
+import { useAppState } from "../../state/AppStateContext.js";
 import BatchLocationCreateModal from "./BatchLocationCreateModal.jsx";
+import ProspectCreateModal from "./ProspectCreateModal.jsx";
 import { C } from "../../theme.js";
 
 const inputSt = {
@@ -93,6 +95,7 @@ const BADGE = {
 
 export default function BatchClientField({ batchProfile, setBatchProfile, showToast }) {
   const { profile: caller } = useAuth();
+  const { sectorCodes } = useAppState();
   const { canCreate, canBrowse } = quickPickAbilities(caller);
 
   const stored = batchProfile.client || "";
@@ -100,8 +103,7 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
   const [draft, setDraft] = useState("");
   const [masters, setMasters] = useState({ status: canBrowse ? "loading" : "denied",
     parties: [], families: [], memberships: [] });
-  const [pendingCreate, setPendingCreate] = useState(null); // { name, matches } | null
-  const [busy, setBusy] = useState(false);
+  const [pendingCreate, setPendingCreate] = useState(null); // { name, matches } | null — the window is open
   const [locationFor, setLocationFor] = useState(null);     // party | null
   const wrapRef = useRef(null);
   const panelRef = useRef(null);
@@ -212,31 +214,43 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
   };
 
   const askToCreate = (name) => {
-    // The duplicate guard: likely matches are computed and SHOWN before any
-    // create, so a spelling variation does not silently mint a second record.
-    setPendingCreate({ name, matches: likelyMatches(name, masters.parties, { limit: 6 }) });
+    // Opens the one-window Prospect form (PO ruling 2026-09-18). The duplicate
+    // guard still runs first: likely matches are computed and SHOWN in the
+    // window, so a spelling variation does not silently mint a second record.
+    setPendingCreate({ name: (name || "").trim(),
+      matches: likelyMatches(name, masters.parties, { limit: 6 }) });
+    setOpen(false);
   };
 
-  const doCreate = async () => {
-    const name = pendingCreate?.name?.trim();
-    if (!name) return;
-    setBusy(true);
-    const data = await runMutation("/masters/customer-families/prospects",
-      createProspectBody(name, null),
-      { showToast, successMessage: `Prospect "${name}" created in the Customer Master.` });
-    setBusy(false);
-    if (!data) return;
+  const onProspectCreated = async ({ name, partyId, sectorCode, plantName }) => {
+    setPendingCreate(null);
     // Refresh so the new record is genuinely selectable from the master list,
     // not merely assumed to exist (ruling item 5). If the refetch fails, splice
     // the created row in locally so the control is still consistent.
     const next = canBrowse ? await load() : null;
     if (!next) {
       setMasters(m => ({ ...m,
-        parties: [...m.parties, { id: data.party_id, display_name: name,
+        parties: [...m.parties, { id: partyId, display_name: name,
           lifecycle_state: "prospect", customer_code: null, status: "active" }] }));
     }
-    commit(name);
+    setBatchProfile(p => profileAfterProspect(p, { name, sectorCode, plantName },
+      { sectorCodes, plantNames: PLANTS }));
+    setDraft("");
+    const sectorSet = !!sectorCode && (sectorCodes || []).includes(sectorCode);
+    const plantSet = !!plantName && PLANTS.includes(plantName);
+    showToast?.(`✅ Prospect "${name}" created. Batch Client set`
+      + (sectorSet ? `, Sector ${sectorCode}` : "") + (plantSet ? `, Plant ${plantName}` : "") + "."
+      + (sectorCode && !sectorSet ? ` Sector ${sectorCode} is not in this Batch's Sector list, so choose it there.` : ""),
+      "success", 7000);
   };
+
+  // The one-window Prospect form, shared by both variants below.
+  const prospectWindow = pendingCreate && (
+    <ProspectCreateModal initialName={pendingCreate.name} matches={pendingCreate.matches}
+      familyOf={familyOf} defaultSectorCode={batchProfile.sector} defaultPlantName={batchProfile.plant}
+      onSelectExisting={(party) => { setPendingCreate(null); selectParty(party); }}
+      onCreated={onProspectCreated} onClose={() => setPendingCreate(null)} showToast={showToast} />
+  );
 
   // ── caller may not browse: a plain box, an explicit create, and the truth ──
   if (!canBrowse) {
@@ -246,7 +260,7 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
           onFocus={() => setOpen(true)} style={inputSt}
           title="You cannot search the Customer Master. This text is not a governed record until you create it." />
         {canCreate && (
-          <button type="button" onClick={() => { setDraft(stored); setOpen(true); askToCreate(stored); }}
+          <button type="button" onClick={() => askToCreate(stored)}
             disabled={!stored.trim()}
             title="Create this name as a Prospect in the Customer Master"
             style={{ padding: "1px 4px", borderRadius: 3, border: `1px solid ${C.amber}`,
@@ -257,24 +271,9 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
         {renderPanel(
           <>
             <div style={{ ...noteSt, color: C.amberD }}>{cannotBrowseNotice()}</div>
-            {pendingCreate && (
-              <>
-                <div style={{ ...noteSt, marginTop: 8, color: C.slate }}>
-                  {createProspectConfirmMessage(pendingCreate.name, 0)}
-                </div>
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  <button type="button" disabled={busy} onClick={doCreate}
-                    style={{ ...rowSt, width: "auto", background: C.amber, color: C.white,
-                      border: "none", fontWeight: 700 }}>
-                    {busy ? "Creating…" : "Create Prospect"}
-                  </button>
-                  <button type="button" onClick={() => { setPendingCreate(null); setOpen(false); }}
-                    style={{ ...rowSt, width: "auto" }}>Cancel</button>
-                </div>
-              </>
-            )}
           </>
         )}
+        {prospectWindow}
       </div>
     );
   }
@@ -334,42 +333,7 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
               listed right now; nothing has been changed.</div>
           )}
 
-          {pendingCreate ? (
-            <>
-              {pendingCreate.matches.length > 0 && (
-                <>
-                  <div style={{ ...noteSt, fontWeight: 700, color: C.amberD }}>
-                    Did you mean one of these? Selecting avoids a duplicate record.
-                  </div>
-                  {pendingCreate.matches.map(({ party }) => {
-                    const parts = partyOptionParts(party, familyOf[party.id]);
-                    return (
-                      <button key={party.id} type="button" style={rowSt}
-                        onClick={() => selectParty(party)}>
-                        <strong>{parts.name}</strong>
-                        <span style={{ color: C.slateL }}>
-                          {" · "}{parts.lifecycle}{parts.code ? ` · ${parts.code}` : ""}
-                          {parts.family ? ` · Family: ${parts.family}` : ""}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </>
-              )}
-              <div style={{ ...noteSt, marginTop: 8, color: C.slate }}>
-                {createProspectConfirmMessage(pendingCreate.name, pendingCreate.matches.length)}
-              </div>
-              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                <button type="button" disabled={busy} onClick={doCreate}
-                  style={{ ...rowSt, width: "auto", background: C.amber, color: C.white,
-                    border: "none", fontWeight: 700, opacity: busy ? 0.6 : 1 }}>
-                  {busy ? "Creating…" : `Create "${pendingCreate.name}" as a Prospect`}
-                </button>
-                <button type="button" onClick={() => setPendingCreate(null)}
-                  style={{ ...rowSt, width: "auto" }}>Back</button>
-              </div>
-            </>
-          ) : (
+          {(
             <>
               {masters.status === "ok" && results.length === 0 && (
                 <div style={noteSt}>No Customer or Prospect matches that text.</div>
@@ -396,7 +360,7 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
                   <button type="button" style={{ ...rowSt, borderColor: C.amber, background: "#FEF8F0" }}
                     onClick={() => askToCreate(draft)}>
                     ⊕ Create <strong>&quot;{draft.trim()}&quot;</strong> as a new Prospect…
-                    <span style={{ color: C.slateL }}> · checks for duplicates first</span>
+                    <span style={{ color: C.slateL }}> · opens the Prospect form: name, Sector, Plant</span>
                   </button>
                 ) : (
                   <div style={noteSt}>
@@ -424,6 +388,7 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
         <BatchLocationCreateModal party={locationFor} showToast={showToast}
           onClose={() => setLocationFor(null)} />
       )}
+      {prospectWindow}
     </div>
   );
 }
