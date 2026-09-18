@@ -12,7 +12,7 @@ Go-live authority: Product Owner
 |---|---|
 | Producing Plant | `NAG` / Nagpur only — PO confirmed 2026-09-17 |
 | Maker | `sales.01@avadhootpacks.in` — app user 3535 "Sonali", created 2026-09-18 by Admin 44 through Users/Access; exactly `plant_access` + `make_quote` at `NAG` |
-| Checker (also Maker) | `marketing@avadhootpacks.in` — app user 3536 "Snehal", created 2026-09-18 by Admin 44 through Users/Access with `plant_access` + `check_quote` at `NAG`; `make_quote` at `NAG` approved by the PO 2026-09-18 so she can prepare quotes and check others' — grant pending |
+| Checker (also Maker) | `marketing@avadhootpacks.in` — app user 3536 "Snehal", created 2026-09-18 by Admin 44 through Users/Access; `plant_access` + `check_quote` + `make_quote` at `NAG` (the `make_quote` grant was made by migration `20260918091350` through the governed `set_user_capabilities` operation under the PO's identity, on the PO's instruction; content version 2) |
 | Beta URL | `https://quote-gen-fe.vercel.app` (backend `https://quote-gen-be.vercel.app`) — the only surface beta users can reach |
 | Admin | `nikunj@avadhootpacks.in` / NikunjRL — active login; no beta fence change yet |
 | Alongside period | First week; every system result compared with the existing spreadsheet |
@@ -259,7 +259,8 @@ named `t1`.
 
 - **Users 44 and 45 keep their current capabilities for beta**, including `make_quote` +
   `check_quote` at `NAG`.
-- **Snehal (3536) is also a Maker at `NAG`**: add `make_quote` so she can prepare quotes as well
+- Both beta users signed in on the Vercel application on 2026-09-18 (Snehal 06:51, Sonali 06:52 UTC).
+- **Snehal (3536) is also a Maker at `NAG`** (granted as above): add `make_quote` so she can prepare quotes as well
   as check quotes prepared by others. The rule is now per Quote — a Quote's Checker must not be
   its Maker — and is enforced by operation and the daily self-approval check, not by the
   database. The Wave C smoke still runs Sonali (Maker) → Snehal (Checker).
@@ -274,6 +275,9 @@ named `t1`.
 - [ ] Named users and beta plant recorded; wrong-plant and ungranted checks pass.
 - [x] `QCA_KEY_ID` and `QCA_KEY_HEX` confirmed present without reading their values.
 - [ ] Matching `active` key provisioned in `app_private.attestation_keys` (0 rows on 2026-09-18).
+      Procedure given to the PO: a one-shot SQL Editor snippet generates the key inside the
+      database and shows it once; the PO copies both values into the Edge secrets. SR DEV never
+      sees the values, and the key id is never `t1`.
 - [ ] CP-108 passes; Edge Function deployed with JWT verification; deployed version recorded.
 - [ ] Maker Calculate → Send → Submit → Checker Approve → Maker Issue smoke passes with persistent
       evidence.
