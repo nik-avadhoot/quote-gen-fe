@@ -33,6 +33,8 @@ import { canPinAddOn, MAX_PINNED_ADD_ONS } from "../../lib/pinnedAddOns.js";
 import { batchDeliveryGridEntries, deliverySectionItemCount } from "../../lib/batchDeliverySections.js";
 import { durableRowToLocalPreview } from "../../lib/batchRowModel.js";
 import { C, T, mono, sans } from "../../theme.js";
+import { CollapseIcon, ExpandIcon } from "../../ui/icons.jsx";
+import { iconButton, toolbar } from "../../ui/screenStandards.js";
 import { useAppState } from "../../state/AppStateContext.js";
 
 const BASE_GRID_COLUMN_COUNT=37;
@@ -167,8 +169,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
             2. The standalone Construction Library tab */}
         {/* ↓↓↓ old LEFT panel content REMOVED ↓↓↓ */}
         {/* Grid toolbar */}
-        <div style={{padding:"8px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",gap:8,
-          alignItems:"center",flexWrap:"nowrap",background:C.cream,flexShrink:0}}>
+        <div role="toolbar" aria-label="Batch Builder grid controls" style={{...toolbar,gap:8,lineHeight:1.3}}>
           <Btn ch="⚡ Calculate All" v="primary" sm onClick={calculateAll}
             disabled={batchRows.length===0||constructionLib.length===0}
             style={{whiteSpace:"nowrap",flexShrink:0}}/>
@@ -190,12 +191,6 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
               style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.amber}`,background:C.white,
                 color:C.amberD,fontSize:T.label,cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>
               + New batch
-            </button>
-            <button type="button" aria-pressed={focusMode} onClick={onToggleFocusMode}
-              style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${focusMode?C.green:C.border}`,
-                background:focusMode?C.greenL:C.white,color:focusMode?C.green:C.slateM,
-                fontSize:T.label,cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>
-              {focusMode?"Exit focus":"Focus mode"}
             </button>
             <details style={{position:"relative",flexShrink:0}}>
               <summary style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.border}`,
@@ -220,7 +215,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
           </div>
           <button onClick={()=>{setBatchConstrOverlay(true);setBatchConstrTargetRowId(null);setBatchConstrOverlayQuery('');setBatchConstrOverlayFilter({sector:'',client:'',});}}
             style={{padding:"3px 10px",borderRadius:5,border:`1px solid ${C.amber}`,
-              background:C.amberL,color:C.amberD,fontSize:11,cursor:"pointer",fontWeight:700,
+              background:C.amberL,color:C.amberD,fontSize:T.body,cursor:"pointer",fontWeight:700,
               whiteSpace:"nowrap",flexShrink:0}}>
             📚 Construction Library ({constructionLib.filter(c=>(c.status||'active')==='active').length} active)
           </button>
@@ -228,10 +223,22 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
             {["Box","Plate","Part-L","Part-W"].map(t=>(
               <button key={t} onClick={()=>addBatchRow(t)}
                 style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${C.border}`,
-                  background:C.white,color:C.slateM,fontSize:11,cursor:"pointer",fontWeight:600,
+                  background:C.white,color:C.slateM,fontSize:T.body,cursor:"pointer",fontWeight:600,
                   whiteSpace:"nowrap",flexShrink:0}}>
                  + {t}</button>))}
           </div>
+          <span style={{flex:"1 1 auto"}}/>
+          {/* Focus mode as the shared expand / collapse icon (SKU Master idiom): it
+              fills the Batch Builder area inside the app window - never the browser
+              Fullscreen API - collapsing the navigation and the Batch Profile to
+              its one-line summary. Same handler as before. */}
+          <button type="button" aria-pressed={focusMode} onClick={onToggleFocusMode}
+            aria-label={focusMode?"Collapse the grid":"Expand the grid"}
+            title={focusMode?"Collapse · restore the Batch Profile and navigation"
+              :"Expand the grid to fill the Batch Builder area"}
+            style={iconButton(focusMode)}>
+            {focusMode?<CollapseIcon size={14}/>:<ExpandIcon size={14}/>}
+          </button>
         </div>
 
         {/* The grid */}
@@ -243,7 +250,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
               <div style={{fontSize:11}}>Click + Box, + Plate etc above to add rows. First 5 columns (Status → SET Role) are frozen while you scroll right.</div>
             </div>
           :<div style={{flex:1,overflowX:"auto",overflowY:"auto"}}>
-            <table style={{borderCollapse:"collapse",fontSize:11,minWidth:1400,width:"100%"}}>
+            <table style={{borderCollapse:"collapse",fontSize:T.body,lineHeight:1.3,minWidth:1400,width:"100%"}}>
               <thead style={{position:"sticky",top:0,zIndex:5}}>
                 <tr style={{background:C.slateM}}>
                   {(()=>{
@@ -264,7 +271,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                     ].map(h=>{
                       const fr=FROZEN[h];
                       return<th key={h} style={{
-                        padding:"6px 5px",color:C.white,fontSize:9,fontWeight:600,
+                        padding:"4px 5px",color:C.white,fontSize:T.label,fontWeight:600,
                         textAlign:CENTER_COLS.includes(h)?"center":"left",
                         whiteSpace:"nowrap",
                         borderRight:fr?.borderRight?`2px solid ${C.amber}44`:`1px solid ${C.slateL}44`,
@@ -278,9 +285,9 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                   })()}
                   {pinnedAddOns.map(k=>{
                     const AO_LABELS={printing:"Print",stitching:"Stitch",coating:"Coat",handling:"Hdlg",moqCharge:"MOQ Chg",packing:"Pack",other:"Other",unloading:"Unlod"};
-                    return<th key={`pin_${k}`} style={{padding:"6px 4px",color:C.amber,fontSize:9,fontWeight:600,textAlign:"center",whiteSpace:"nowrap",borderRight:`1px solid ${C.slateL}44`,background:"#3a2a10"}}>
-                      {AO_LABELS[k]||k}<br/><span style={{fontSize:8,fontWeight:400,opacity:0.7}}>Rs/pc 📌</span></th>;})}
-                  <th style={{padding:"6px 4px",color:C.white,fontSize:9,minWidth:52,textAlign:"center"}}>▾ more</th>
+                    return<th key={`pin_${k}`} style={{padding:"4px 4px",color:C.amber,fontSize:T.label,fontWeight:600,textAlign:"center",whiteSpace:"nowrap",borderRight:`1px solid ${C.slateL}44`,background:"#3a2a10"}}>
+                      {AO_LABELS[k]||k}<br/><span style={{fontSize:T.micro,fontWeight:400,opacity:0.7}}>Rs/pc 📌</span></th>;})}
+                  <th style={{padding:"4px 4px",color:C.white,fontSize:T.label,minWidth:52,textAlign:"center"}}>▾ more</th>
                 </tr>
               </thead>
               <tbody>
@@ -383,21 +390,21 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                       {/* ── FROZEN COL 1: Status (left:0, w:28) — click to expand/collapse sub-row ── */}
                       <td onClick={()=>toggleRowExpand(row.id)}
                         title={expandedRows.has(row.id)?`Collapse sub-row (${sd.label})`:`Expand sub-row: add-ons, overrides, cost build-up (${sd.label})`}
-                        style={{padding:"3px 4px",textAlign:"center",width:28,minWidth:28,
+                        style={{padding:"2px 3px",textAlign:"center",width:28,minWidth:28,
                           position:"sticky",left:0,zIndex:3,cursor:"pointer",
                           background:expandedRows.has(row.id)
                             ?`${C.amber}22`
                             :isActive?"#EEF4FB":ri%2?C.cream:C.white,
                           borderBottom:expandedRows.has(row.id)?`2px solid ${C.amber}`:undefined}}>
-                        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
-                          <span>{sd.icon}</span>
-                          <span style={{fontSize:7,color:expandedRows.has(row.id)?C.amber:C.slateL,lineHeight:1}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:1}}>
+                          <span style={{lineHeight:1}}>{sd.icon}</span>
+                          <span style={{fontSize:T.micro,color:expandedRows.has(row.id)?C.amber:C.slateL,lineHeight:1}}>
                             {expandedRows.has(row.id)?"▴":"▾"}
                           </span>
                         </div>
                       </td>
                       {/* ── FROZEN COL 2: Row # (left:28, w:24) ── */}
-                      <td style={{padding:"3px 4px",color:C.slateL,fontWeight:600,width:24,minWidth:24,
+                      <td style={{padding:"2px 4px",color:C.slateL,fontWeight:600,width:24,minWidth:24,
                         position:"sticky",left:28,zIndex:3,
                         background:isActive?"#EEF4FB":ri%2?C.cream:C.white}}>
                         {ri+1}</td>
@@ -461,7 +468,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                         })()}
                       </td>
                       {/* SET Code — with "Part of a SET" switch + assumed indicator + confirm/clear for non-Box rows */}
-                      <td style={{padding:"3px 4px",minWidth:86}}>
+                      <td style={{padding:"2px 4px",minWidth:86}}>
                         <div style={{position:"relative",display:"inline-block"}}>
                           <input type="checkbox" checked={!!row.setAutoFill}
                             onChange={e=>{
@@ -507,18 +514,18 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                         </div>
                       </td>
                       {/* Nos/Set — Glass-SKU detail stays in the expanded row */}
-                      <td style={{padding:"3px 4px",textAlign:"center",minWidth:50}}>
+                      <td style={{padding:"2px 4px",textAlign:"center",minWidth:50}}>
                         {inpC("nosPerSet",40,"number")}
                       </td>
                       {/* Box Type */}
-                      <td style={{padding:"3px 4px",minWidth:58}}>
+                      <td style={{padding:"2px 4px",minWidth:58}}>
                         <select value={row.boxType||"RSC"} onChange={e=>updC("boxType",e.target.value)}
                           style={{padding:"2px 3px",border:`1px solid ${C.border}`,borderRadius:3,fontSize:9,width:54}}>
                           {BOX_TYPES.map(bt=><option key={bt} value={bt}>{bt}</option>)}
                         </select>
                       </td>
                       {/* Paper Construction — opens slide-over overlay for selection */}
-                      <td style={{padding:"3px 4px",minWidth:164}}>
+                      <td style={{padding:"2px 4px",minWidth:164}}>
                         {(()=>{
                           const ce=row.constructionCode?constructionLib.find(c=>c.code===row.constructionCode):null;
                           const autoN=ce?constrAutoName(ce):"";
@@ -559,7 +566,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                         const dimInvalid=isDimField&&dimVal!=null&&(dimVal<=0||dimVal>2500);
                         const dimTip=dimInvalid?`⚠ ${k}=${dimVal}mm is outside valid range (1–2500mm) — please verify`:"";
                         return(
-                          <td key={k} style={{padding:"3px 4px",textAlign:"center",minWidth:52}}>
+                          <td key={k} style={{padding:"2px 4px",textAlign:"center",minWidth:52}}>
                             {isAutoDim
                               ?<input type="number" step="0.25" value=""
                                   placeholder={autoVal!=null?`↳${autoVal}`:"—"}
@@ -580,7 +587,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                       {/* Descriptive SKU printing specification — row-owned and
                           intentionally non-calculation-driving. Placement is fixed
                           after Ups and before the standard output specifications. */}
-                      <td style={{padding:"3px 4px",textAlign:"center",minWidth:54}}>
+                      <td style={{padding:"2px 4px",textAlign:"center",minWidth:54}}>
                         <input type="number" min="0" step="1" value={row.number_of_colours??""}
                           aria-label="Number of colours"
                           onChange={e=>{
@@ -591,7 +598,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                           style={{width:44,padding:"2px 4px",border:`1px solid ${C.border}`,
                             borderRadius:3,fontSize:10,textAlign:"center",fontFamily:mono}}/>
                       </td>
-                      <td style={{padding:"3px 4px",textAlign:"center",minWidth:72}}>
+                      <td style={{padding:"2px 4px",textAlign:"center",minWidth:72}}>
                         <select value={row.printing_technology??""}
                           aria-label="Print technology"
                           onChange={e=>upd("printing_technology",e.target.value)}
@@ -603,10 +610,10 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                       </td>
                       {/* Std specs: Board GSM, BS, BCT, ECT, Cobb, Box Wt */}
                       {["board_gsm","spec_bs","spec_bct","spec_ect"].map(k=>(
-                        <td key={k} style={{padding:"3px 4px",textAlign:"center",minWidth:50}}>
+                        <td key={k} style={{padding:"2px 4px",textAlign:"center",minWidth:50}}>
                           {inp(k,44,"number")}</td>))}
                       {/* Std Cobb — amber flag when ≤125 */}
-                      <td style={{padding:"3px 4px",textAlign:"center",minWidth:54}}>
+                      <td style={{padding:"2px 4px",textAlign:"center",minWidth:54}}>
                         <input type="number" step={5} value={row.spec_cobb??""}
                           onChange={e=>upd("spec_cobb",e.target.value===""?"":+e.target.value)}
                           title={(()=>{const cv=row.spec_cobb?+row.spec_cobb:null;return cv&&cv<=125?"⚠️ Cobb Max "+cv+" — moisture-sensitive, confirm Coating add-on":cv&&cv<=155?"Cobb Max "+cv+" g/m² — standard":"Cobb (g/m² Max) — leave blank if not specified";})()}
@@ -615,13 +622,13 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                             borderRadius:3,fontSize:10,textAlign:"center",fontFamily:mono,
                             background:row.spec_cobb&&+row.spec_cobb<=125?"#FFF8ED":C.white}}/>
                       </td>
-                      <td style={{padding:"3px 4px",textAlign:"center",minWidth:52}}>
+                      <td style={{padding:"2px 4px",textAlign:"center",minWidth:52}}>
                         {inp("reqBoxWt",44,"number")}</td>
                       {/* Commercial */}
-                      <td style={{padding:"3px 4px",textAlign:"center",minWidth:70}}>{inp("salesMOQ",58,"number")}</td>
-                      <td style={{padding:"3px 4px",textAlign:"center",minWidth:62}}>{inp("volume",52,"number")}</td>
+                      <td style={{padding:"2px 4px",textAlign:"center",minWidth:70}}>{inp("salesMOQ",58,"number")}</td>
+                      <td style={{padding:"2px 4px",textAlign:"center",minWidth:62}}>{inp("volume",52,"number")}</td>
                       {/* Waste% override (context-interpreted: Box or PP based on row type) */}
-                      <td style={{padding:"3px 4px",textAlign:"center",minWidth:52}}>
+                      <td style={{padding:"2px 4px",textAlign:"center",minWidth:52}}>
                         {(()=>{
                           const isPP=isPPType(row.itemType); // R-2
                           const profVal=isPP?_profileDefaults.wastePP:_profileDefaults.waste;
@@ -639,7 +646,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                         })()}
                       </td>
                       {/* Conv Rs/kg override */}
-                      <td style={{padding:"3px 4px",textAlign:"center",minWidth:58}}>
+                      <td style={{padding:"2px 4px",textAlign:"center",minWidth:58}}>
                         {(()=>{
                           const isPP=isPPType(row.itemType); // R-2
                           const profVal=isPP?_profileDefaults.convRatePP:_profileDefaults.convRate;
@@ -657,7 +664,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                         })()}
                       </td>
                       {/* Margin% */}
-                      <td style={{padding:"3px 4px",textAlign:"center",minWidth:58}}>
+                      <td style={{padding:"2px 4px",textAlign:"center",minWidth:58}}>
                         <input type="number" step="0.25" value={row.marginOverride??""}
                           placeholder={String(
                             (row.itemType==="Plate"||row.itemType==="Part-L"||row.itemType==="Part-W")
@@ -670,7 +677,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                             borderRadius:3,fontSize:10,textAlign:"center",fontFamily:mono,
                             background:row.marginOverride!=null&&row.marginOverride!==""?"#FFF8ED":C.white}}/>
                       </td>
-                      <td style={{padding:"3px 4px",minWidth:100}}>{inp("remarks",88)}</td>
+                      <td style={{padding:"2px 4px",minWidth:100}}>{inp("remarks",88)}</td>
                       {/* Outputs: SheetWt > FinalRate > Rate/SET > MOQ > Rate/kg > CalcGSM > CalcBS > EstBoxWt > AllSpecOK */}
                       <td style={{padding:"3px 6px",textAlign:"center",fontFamily:mono,fontSize:10,color:C.slateL}}>
                         {res?(res.wtSheet*1000).toFixed(0)+"g":"—"}</td>
@@ -722,7 +729,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                       </td>
                       {/* Pinned add-on cells */}
                       {pinnedAddOns.map(k=>(
-                        <td key={`pin_${k}`} style={{padding:"3px 4px",textAlign:"center",minWidth:52}}>
+                        <td key={`pin_${k}`} style={{padding:"2px 4px",textAlign:"center",minWidth:52}}>
                           <input type="number" step="0.25" value={(row.addOns||{})[k]??""}
                             onChange={e=>updC("addOns",{...(row.addOns||{}),[k]:e.target.value===""?"":+e.target.value})}
                             style={{width:44,padding:"2px 4px",border:`1px solid ${(row.addOns||{})[k]?C.amber:C.border}`,
@@ -730,7 +737,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                               background:(row.addOns||{})[k]?"#FFF8ED":C.white}}/>
                         </td>))}
                       {/* Actions + expand toggle */}
-                      <td style={{padding:"3px 4px",textAlign:"center",whiteSpace:"nowrap",minWidth:52}}>
+                      <td style={{padding:"2px 4px",textAlign:"center",whiteSpace:"nowrap",minWidth:52}}>
                         <button onClick={()=>toggleRowExpand(row.id)}
                           title={expandedRows.has(row.id)?"Collapse sub-row":"Expand: add-ons, interest, freight, cost breakdown"}
                           style={{background:"none",border:`1px solid ${expandedRows.has(row.id)?C.amber:C.border}`,

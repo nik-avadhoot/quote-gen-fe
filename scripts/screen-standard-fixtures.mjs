@@ -2,7 +2,8 @@
 // scripts/screen-standard-fixtures.mjs — the shared screen-space standard on
 // Commercial Policies, Rate Masters, Freight Masters, Users & Access and
 // Producing Plants, then GSM Master, Customer Families and the Pricing Basis
-// drill-down tables (2026-09-16).
+// drill-down tables (2026-09-16). SS-31+ bring the Batch Builder grid onto the
+// same standard (2026-09-18) and keep the app light-only.
 //
 // Source-shape assertions, like the other UX gates: they prove the chrome is
 // the shared one and that every guard the rewrite moved is still present. The
@@ -29,6 +30,10 @@ const gsm = read("src/tabs/GsmMasterScreen.jsx");
 const families = read("src/tabs/CustomerFamiliesScreen.jsx");
 const pricingBasis = read("src/tabs/PricingBasisScreen.jsx");
 const chrome = read("src/ui/screenChrome.jsx");
+const batchGrid = read("src/tabs/batch/BatchGrid.jsx");
+const batchEntry = read("src/tabs/batch/BatchEntryTab.jsx");
+const styles = read("src/ui/styles.js");
+const css = read("src/index.css");
 
 let passes = 0;
 const failures = [];
@@ -172,6 +177,43 @@ check(count(pricingBasis, /\.\.\.denseTable, minWidth/g) === 3 && pricingBasis.i
   && pricingBasis.includes("style={{ ...denseCell, color: C.slateM, fontWeight: emphasis ? 800 : 500 }}")
   && !pricingBasis.includes('fontSize: 8.5, color: C.slateL }}>'),
   "SS-30 Pricing Basis: the Rate, Freight and interest drill-down tables use dense one-line rows");
+
+// ── Batch Builder grid (2026-09-18) ──────────────────────────────────────
+// Browser-measured at 1440x900, fixture-browser: rows 41 -> 26px, grid toolbar
+// 53 -> 43px, table header 39 -> 20px, Delivery Group band 33 -> 27px. The
+// Batch Profile bar above the grid is deliberately untouched.
+check(batchGrid.includes('role="toolbar" aria-label="Batch Builder grid controls" style={{...toolbar,gap:8,lineHeight:1.3}}')
+  && batchGrid.includes('import { iconButton, toolbar } from "../../ui/screenStandards.js"')
+  && !batchGrid.includes('padding:"8px 12px"'),
+  "SS-31 Batch Builder: the grid toolbar is the shared 43px toolbar, with its line-height pinned");
+check(batchGrid.includes("onClick={onToggleFocusMode}") && batchGrid.includes("style={iconButton(focusMode)}")
+  && batchGrid.includes("{focusMode?<CollapseIcon size={14}/>:<ExpandIcon size={14}/>}")
+  && batchGrid.includes('aria-label={focusMode?"Collapse the grid":"Expand the grid"}')
+  && !/>\s*\{?\s*focusMode\?"Exit focus":"Focus mode"/.test(batchGrid)
+  && !/requestFullscreen|fullscreenElement/.test(batchGrid + batchEntry),
+  "SS-32 Batch Builder: focus mode is the shared expand / collapse icon, not a text button, inside the app window only");
+check(batchEntry.includes("setSidebarCollapsed(true)") && batchEntry.includes("setSidebarCollapsed(sidebarBeforeFocus.current)")
+  && batchEntry.includes("onExpandedChange={toggleFocusMode}"),
+  "SS-33 Batch Builder: the icon drives the SAME focus handler - navigation collapse and restore are unchanged");
+check(styles.includes("export const compactGridRowSt={height:26};")
+  && batchGrid.includes('<table style={{borderCollapse:"collapse",fontSize:T.body,lineHeight:1.3,minWidth:1400,width:"100%"}}>')
+  && batchGrid.includes('padding:"4px 5px",color:C.white,fontSize:T.label,fontWeight:600,'),
+  "SS-34 Batch Builder: compact rows are 26px, with the grid's line-height pinned and a one-line header");
+const compact = batchGrid.slice(batchGrid.indexOf("<tr style={{...compactGridRowSt"),
+  batchGrid.indexOf("{expandedRows.has(row.id)&&(()=>{"));
+check(compact.length > 1000 && !compact.includes('<td style={{padding:"3px 4px"')
+  && !compact.includes('flexDirection:"column",alignItems:"center",gap:1')
+  && batchGrid.includes('<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:1}}>'),
+  "SS-35 Batch Builder: no compact-row cell is taller than one line - the Status icon and chevron sit side by side");
+check(batchGrid.indexOf("onClick={startNewBatch}") < batchGrid.indexOf("onClick={onToggleFocusMode}")
+  && batchGrid.includes("onClick={copyCostingToProfile}") && batchGrid.includes("Code tools ▾"),
+  "SS-36 Batch Builder: Import profile, New batch and Code tools keep their places in the grid toolbar");
+
+// ── Light only ────────────────────────────────────────────────────────────
+check(css.includes("  color-scheme: light;\n") && !css.includes("color-scheme: light dark")
+  && !css.includes("prefers-color-scheme: dark") && !css.includes("#social .button-icon"),
+  "SS-37 the app is light-only: no dark color-scheme, so a dark-mode OS cannot paint inputs white-on-white");
+
 
 console.log(`\n${passes} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);
