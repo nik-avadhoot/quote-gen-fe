@@ -12,7 +12,7 @@ Go-live authority: Product Owner
 |---|---|
 | Producing Plant | `NAG` / Nagpur only — PO confirmed 2026-09-17 |
 | Maker | `sales.01@avadhootpacks.in` — app user 3535 "Sonali", created 2026-09-18 by Admin 44 through Users/Access; exactly `plant_access` + `make_quote` at `NAG` |
-| Checker | `marketing@avadhootpacks.in` — app user 3536 "Snehal", created 2026-09-18 by Admin 44 through Users/Access; exactly `plant_access` + `check_quote` at `NAG` |
+| Checker (also Maker) | `marketing@avadhootpacks.in` — app user 3536 "Snehal", created 2026-09-18 by Admin 44 through Users/Access with `plant_access` + `check_quote` at `NAG`; `make_quote` at `NAG` approved by the PO 2026-09-18 so she can prepare quotes and check others' — grant pending |
 | Beta URL | `https://quote-gen-fe.vercel.app` (backend `https://quote-gen-be.vercel.app`) — the only surface beta users can reach |
 | Admin | `nikunj@avadhootpacks.in` / NikunjRL — active login; no beta fence change yet |
 | Alongside period | First week; every system result compared with the existing spreadsheet |
@@ -50,6 +50,9 @@ freight**, not governed-master freight. A destination master remains a post-beta
 
 Complete once per beta day and after any deployment:
 
+- Check for self-approval: any Quote whose approving actor is also its Maker. The database permits
+  it for a dual `make_quote` + `check_quote` holder (Snehal, users 44 and 45) and records it
+  truthfully; in beta it is an operating-rule breach to be explained, not a system refusal.
 - Record `/health` build revision and artifact SHA-256.
 - Confirm the expected frontend build and `limited_beta` flag are active.
 - Confirm `calculate-batch-row` is deployed with JWT verification and engine
@@ -215,6 +218,17 @@ reported, not verified). Verified live:
 - `app_private.attestation_keys` still has **0 rows**: live Calculate cannot verify until the
   Product Owner provisions the matching database key, so the smoke cannot yet start.
 - Users 44 and 45 still hold `make_quote` + `check_quote` at `NAG`; ruling outstanding.
+
+### Product Owner rulings — 2026-09-18
+
+- **Users 44 and 45 keep their current capabilities for beta**, including `make_quote` +
+  `check_quote` at `NAG`.
+- **Snehal (3536) is also a Maker at `NAG`**: add `make_quote` so she can prepare quotes as well
+  as check quotes prepared by others. The rule is now per Quote — a Quote's Checker must not be
+  its Maker — and is enforced by operation and the daily self-approval check, not by the
+  database. The Wave C smoke still runs Sonali (Maker) → Snehal (Checker).
+- The grant is made by the Admin through Users/Access (`POST /admin/users/3536/capabilities`,
+  complete set with `expected_content_version`), not by a direct database write.
 
 ## Go-live checklist
 
