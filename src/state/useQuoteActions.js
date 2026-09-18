@@ -274,7 +274,7 @@ export function useQuoteActions(st){
     const unconfirmed=batchRows.filter(r=>r.itemType!=="Box"&&r.setCodeAssumed);
     if(unconfirmed.length>0){
       const list=unconfirmed.map((r,i)=>`Row ${batchRows.indexOf(r)+1}${r.matCode?` [${r.matCode}]`:""}`).join(", ");
-      showToast(`⚠️ Confirm SET Codes first: ${list}`,'error',5000);
+      showToast(`⚠️ Confirm SET Codes first: ${list} — click the orange ! in its SET Code`,'error',6000);
       return;
     }
     const incompleteConstructions=batchRows.filter(row=>{
@@ -376,7 +376,7 @@ export function useQuoteActions(st){
     const unconfirmed=batchRows.filter(r=>r.itemType!=="Box"&&r.setCodeAssumed);
     if(unconfirmed.length>0){
       const list=unconfirmed.map(r=>`Row ${batchRows.indexOf(r)+1}${r.matCode?` [${r.matCode}]`:""}`).join(", ");
-      showToast(`⚠️ Confirm SET Codes first: ${list}`,'error',5000);
+      showToast(`⚠️ Confirm SET Codes first: ${list} — click the orange ! in its SET Code`,'error',6000);
       return;
     }
     const newItems=[];

@@ -471,6 +471,8 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                       <td style={{padding:"2px 4px",minWidth:86}}>
                         <div style={{position:"relative",display:"inline-block"}}>
                           <input type="checkbox" checked={!!row.setAutoFill}
+                            title="Part of a SET"
+                            aria-label="Part of a SET"
                             onChange={e=>{
                               const on=e.target.checked;
                               upd("setAutoFill",on);
@@ -506,11 +508,16 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                               border:`1px solid ${isAssumed?"#E8830A":C.border}`,
                               borderRadius:3,fontSize:10,fontFamily:mono,
                               background:isAssumed?"#FFF8ED":C.white}}/>
-                          {isAssumed&&isNonBox&&<span aria-label="SET Code is assumed; expand this row to confirm or clear it"
-                            title="Assumed SET Code — expand this row to confirm or clear"
-                            style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",
-                              width:10,height:10,borderRadius:"50%",background:C.amber,color:C.white,
-                              fontSize:7,fontWeight:800,lineHeight:"10px",textAlign:"center"}}>!</span>}
+                          {/* The tick is "Part of a SET", not confirmation. An assumed
+                              code is confirmed here in one click (or from the expanded
+                              row); Calculate/Send refuse it until then. */}
+                          {isAssumed&&isNonBox&&<button type="button" onClick={handleConfirm}
+                            aria-label={`Confirm SET Code ${row.setCode||""}, assumed from the Box above`}
+                            title="Assumed from the Box above — click to confirm this SET Code"
+                            style={{position:"absolute",right:3,top:"50%",transform:"translateY(-50%)",
+                              width:12,height:12,borderRadius:"50%",background:C.amber,color:C.white,
+                              border:"none",padding:0,cursor:"pointer",
+                              fontSize:7,fontWeight:800,lineHeight:"12px",textAlign:"center"}}>!</button>}
                         </div>
                       </td>
                       {/* Nos/Set — Glass-SKU detail stays in the expanded row */}
