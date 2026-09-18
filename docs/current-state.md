@@ -1,6 +1,6 @@
 # Current state handoff
 
-Updated: 2026-09-17. This is a concise working snapshot, not a closure award. Verify the source,
+Updated: 2026-09-18. This is a concise working snapshot, not a closure award. Verify the source,
 repository status, and deployed state before relying on any time-sensitive claim.
 
 ## Product and repository shape
@@ -30,9 +30,9 @@ S9 remains active unfinished work:
 |---|---|
 | Local implementation | Present |
 | Automated database verification | Complete in the recorded S9 run |
-| Database migrations | Activated through `20260911091000_s9c_quote_workflow_gates` |
-| Production attestation secret | Not provisioned |
-| `calculate-batch-row` Edge Function | Source retained; not deployed or activated |
+| Database migrations | S9 gates activated through `20260911091000_s9c_quote_workflow_gates`; beta Wave A (`20260917182121`, `20260917182138`) and Wave B seed (`20260918040738`) are live |
+| Production attestation secret | Edge half (`QCA_KEY_ID`, `QCA_KEY_HEX`) provisioned 2026-09-17; database keyring `app_private.attestation_keys` still empty (0 rows, 2026-09-18), so live Calculate cannot verify yet |
+| `calculate-batch-row` Edge Function | Version 1 ACTIVE with JWT verification (deployed 2026-09-18); not yet exercised by a real caller |
 | Governed Calculate through real authenticated runtime | Not verified |
 | Atomic Send and quotation workflow through deployed runtime | Not verified |
 | Maker/Checker/Admin authorization through that runtime | Not verified end to end |
@@ -78,8 +78,8 @@ record—not another documentation reorganisation.
   fixtures are 10/0 and the existing Construction route gate is 38/0. Browser evidence is a labelled
   developer fixture only; adoption proposal/approval/withdrawal and authenticated-live qualification
   remain later work. See [`u2-plant-construction-adoption-increment.md`](u2-plant-construction-adoption-increment.md).
-- A Family G authenticated-read correction is committed but not applied; until it is, caller-token
-  Quote History and Approval Inbox reads that reach a Family G row are refused.
+- The Family G authenticated-read correction is applied live as `20260917182121` (beta Wave A):
+  authenticated callers can execute the Family G read helpers; anon/public remain denied.
 - U5 read-only Quote workflow presentation is implemented and automated-test verified locally:
   Approval Inbox, Quote History, immutable revisions/items/snapshots, workflow chronology, customer
   outcomes, exact persisted identities, and guarded Batch-to-Quote navigation are present. Submit,
@@ -110,8 +110,10 @@ record—not another documentation reorganisation.
 ## Immediate sequence
 
 1. Continue independent read-only/product-surface work only within its accepted scope.
-2. For S9 activation, provision the attestation material through approved secret-management
-   surfaces, deploy/activate the retained Edge Function, and exercise the real authenticated paths.
+2. For S9 activation, follow the limited-beta waves in
+   [`beta-readiness-plan.md`](beta-readiness-plan.md): the Edge Function is deployed and its secrets
+   are present; the Product Owner still provisions the matching database keyring row, and the
+   Maker/Checker invitees must accept before any capability grant and the real authenticated smoke.
 3. Verify Maker, Checker, and Admin boundaries; inspect persistent calculation, quotation, and
    workflow evidence; run directly affected regressions.
 4. Complete the genuine frontend journey with the Product Owner.
