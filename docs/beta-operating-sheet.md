@@ -235,9 +235,25 @@ Verified intact: 19 Sectors, 17 Rate entries (version 512), Release 799, 4 Const
 adoptions, and Location 600. Inserts into an approved version are guarded
 (`trg_fe_follows_version`); deletes are not.
 
-Until repaired: **do not run `tests.run_all()` or either suite on production.** Until the lane is
-restored, the smoke's Nagpur Ship-to has no governed freight and would need Maker-entered freight.
-The repair (scoped cleanup plus restoring the approved lane) awaits Product Owner approval.
+**Repaired 2026-09-18 (Product Owner approved; backend `e7fb926`):**
+
+- `20260918090723_scope_family_d_and_pricing_basis_test_cleanup` rewrote the three plant-wide cleanup
+  deletes in place so each suite deletes only entries and releases under its own freight set. An
+  audit of every stored `tests.*` function found no other delete or update that can reach real rows.
+- `20260918090810_restore_nagpur_beta_freight_lane` re-inserted the identical approved lane into the
+  same approved Version 246, so Release 799 keeps its identity. It is now entry 190: `NAG` →
+  Location 600, ₹2.0000/kg, `created_by` 44. `trg_fe_follows_version` was disabled for that one
+  insert only and is verified re-enabled.
+- Rolled-back proof: `tests.family_d_plant_masters()` passes 48/48 and leaves the real lane and
+  Release 799 intact. `tests.pricing_basis()` still aborts on the known pre-existing overlap with the
+  real automatic default (`ex_pbr_default_no_overlap`) before its cleanup, so its scoped cleanup is
+  proven by source audit, not by execution. No fixture residue remained.
+
+Still open: the handoff's fixture defects (GSM boolean result, Pricing Basis default overlap, and any
+suite assuming Calculation Defaults version 1 is unused). Until they are repaired, `tests.run_all()`
+is not a usable gate on production. The S7-R suite inserts its own active key `t1`, so once the real
+attestation key is active that suite will fail rather than touch it. The real key must never be
+named `t1`.
 
 ### Product Owner rulings — 2026-09-18
 
