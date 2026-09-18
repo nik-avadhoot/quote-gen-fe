@@ -11,8 +11,9 @@ Go-live authority: Product Owner
 | Item | Beta value |
 |---|---|
 | Producing Plant | `NAG` / Nagpur only — PO confirmed 2026-09-17 |
-| Maker | `sales.01@avadhootpacks.in` — Auth invitation sent 2026-09-18; activation pending; no capabilities granted |
-| Checker | `marketing@avadhootpacks.in` — Auth invitation sent 2026-09-18; activation pending; no capabilities granted |
+| Maker | `sales.01@avadhootpacks.in` — dashboard invitation unusable (see onboarding below); no app identity; no capabilities granted |
+| Checker | `marketing@avadhootpacks.in` — dashboard invitation unusable (see onboarding below); no app identity; no capabilities granted |
+| Beta URL | `https://quote-gen-fe.vercel.app` (backend `https://quote-gen-be.vercel.app`) — the only surface beta users can reach |
 | Admin | `nikunj@avadhootpacks.in` / NikunjRL — active login; no beta fence change yet |
 | Alongside period | First week; every system result compared with the existing spreadsheet |
 | Production build flag | `limited_beta` plus only the approved destination flags |
@@ -178,6 +179,27 @@ No live write, grant or deployment was made. Findings:
 5. App user 3440 `__p2_fixture_owner` (synthetic fixture) is active with zero capability grants.
 6. The backend workflow signal models Send → **Submit** → Approve → Issue
    (`quote-gen-be/workflow_activation.py`); the smoke must include the Maker Submit step.
+
+### Production deployment — 2026-09-18
+
+`main` was fast-forwarded to `data-model/s0-provenance` in both repositories (frontend
+`c43903d → 0d22293`, backend `82a807b → 716f1b5`). Vercel production `/health` reports revision
+`716f1b5…` from `VERCEL_GIT_COMMIT_SHA`; the frontend serves the PKGCanvas build and its login screen
+loads without console errors. Pre-push gates: `npm run build` and backend `py_compile` clean. No new
+environment variable is required. Production frontend flags are dashboard-managed and were not
+changed; `limited_beta` is still unset.
+
+### Beta user onboarding — why the dashboard invitations cannot be used
+
+The 2026-09-17 invitations were sent from the Supabase dashboard and link to the project Site URL
+(localhost). Resending them to the Vercel URL would still not work: the application signs in with
+email + password through `POST /auth/login` and has no invite-acceptance or set-password screen; a
+first sign-in creates an application identity only from an `app_private.pending_invitations` row, and
+none exists; and the invited Auth rows are unconfirmed. The governed path is Admin → Users/Access →
+Create user (`POST /admin/users`), which creates a confirmed Auth account, returns a temporary
+password and, through `admin_create_app_user`, grants exactly `plant_access` + `make_quote`
+(role `maker`) or `plant_access` + `check_quote` (role `checker`) at the named plant. Because
+creation and the NAG grant are one atomic step, creating the users opens the fence.
 
 ## Go-live checklist
 
