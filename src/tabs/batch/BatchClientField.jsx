@@ -41,7 +41,7 @@ import { apiFetch } from "../../lib/apiClient.js";
 import { classifyResponse } from "../../lib/backendError.js";
 import {
   applyLabelToProfile, cannotBrowseNotice,
-  familyNameByPartyId, identityCaveat, identityFromText, likelyMatches, partyLabel,
+  familyNameByPartyId, familySectorCodes, identityCaveat, identityFromText, likelyMatches, partyLabel,
   partyOptionParts, profileAfterProspect, quickPickAbilities,
 } from "../../lib/batchQuickCreate.js";
 import { PLANTS } from "../../data/defaults.js";
@@ -102,7 +102,7 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [masters, setMasters] = useState({ status: canBrowse ? "loading" : "denied",
-    parties: [], families: [], memberships: [] });
+    parties: [], families: [], memberships: [], familySectors: [], sectors: [] });
   const [pendingCreate, setPendingCreate] = useState(null); // { name, matches } | null — the window is open
   const [locationFor, setLocationFor] = useState(null);     // party | null
   const wrapRef = useRef(null);
@@ -144,7 +144,8 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
     const outcome = classifyResponse({ ok: resp.ok, status: resp.status, data });
     if (outcome.kind === "ok") {
       const next = { status: "ok", parties: data.parties || [], families: data.families || [],
-        memberships: data.memberships || [] };
+        memberships: data.memberships || [], familySectors: data.family_sectors || [],
+        sectors: data.sectors || [] };
       setMasters(next);
       return next;
     }
@@ -208,9 +209,16 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
     setOpen(false); setPendingCreate(null); setDraft("");
   };
 
+  // Selecting a Customer also brings its Family's Sector when there is exactly
+  // one, so the Sector's conversion, waste and margin load for the Batch.
   const selectParty = (party) => {
     commit(partyLabel(party));
-    showToast?.(`✅ Client set to "${partyLabel(party)}" from the Customer Master.`, "success", 5000);
+    const codes = familySectorCodes(party.id, masters);
+    const code = codes.length === 1 && (sectorCodes || []).includes(codes[0]) ? codes[0] : null;
+    if (code) setBatchProfile(p => applyLabelToProfile(p, "sector", code));
+    showToast?.(`✅ Client set to "${partyLabel(party)}"`
+      + (code ? `, Sector ${code}.` : codes.length > 1 ? ". Its Family has several Sectors; choose one on the Batch." : "."),
+      "success", 5000);
   };
 
   const askToCreate = (name) => {

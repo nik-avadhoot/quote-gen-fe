@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { getItem, setItem } from "../lib/persist.js";
 import { sameSetCode } from "../engine/rowType.js";
 import { togglePinnedAddOn } from "../lib/pinnedAddOns.js";
+import { clearUntouchedLegacySeed, freshNewClientProfileValues } from "./costingDraftModel.js";
 
 export function useBatchState(st){
   // D-5: setTab and showToast were used ONLY by restoreAutosave, which the
@@ -20,14 +21,12 @@ export function useBatchState(st){
   const { constructionLib, sectorCodes } = st;
 
   // ── BATCH ENTRY STATE ─────────────────────────────────────────────────────
+  // A first load starts with no commercial overrides, like + New Batch, so the
+  // selected Sector is the authority for conversion, waste and margin.
   const[batchProfile,setBatchProfile]=useState(()=>{
-    try{const s=getItem('cbb_batchprofile');return s?JSON.parse(s):{
-      client:'',sector:'',plant:'',delivery:'',
-      margin:8,marginPP:8,interest:0.5,paymentDisc:'30',freightOverride:'',
-      waste:5,convRate:7,wastePP:5,convRatePP:12.5,customerType:'existing',priceContext:'unknown',
-    };}catch(e){return{client:'',sector:'',plant:'',delivery:'',
-      margin:8,marginPP:8,interest:0.5,paymentDisc:'30',freightOverride:'',
-      waste:5,convRate:7,wastePP:5,convRatePP:12.5,customerType:'existing',priceContext:'unknown'};}
+    try{const s=getItem('cbb_batchprofile');
+      return s?clearUntouchedLegacySeed(JSON.parse(s)):freshNewClientProfileValues();
+    }catch(e){return freshNewClientProfileValues();}
   });
   // Persist batchProfile on every change
   useEffect(()=>{try{setItem('cbb_batchprofile',JSON.stringify(batchProfile));}catch(e){};},[batchProfile]);

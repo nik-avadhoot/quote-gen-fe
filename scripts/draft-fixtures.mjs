@@ -22,7 +22,7 @@ import { deepEqual, freshEnvelope, freshReviewCopy, isDirty, isPlainObject,
   PUSH_CONSTRUCTION_FIELDS, isValidProfileDraft, isDraftDirty, freshProfileDraft,
   shouldAdvanceSkuValue, CONTEXT_ONLY_FIELDS, SKU_EXCEPTION_FIELDS,
   PROFILE_DRAFT_FIELDS, DRAFT_VERSION, freshBatchProfileValues, freshNewClientProfileValues,
-  normalizeProfileOverrideInput, seedSkuDefaults } from "../src/state/costingDraftModel.js";
+  normalizeProfileOverrideInput, seedSkuDefaults, clearUntouchedLegacySeed } from "../src/state/costingDraftModel.js";
 
 let fails = 0;
 const ok = (name, cond, extra = "") => {
@@ -632,6 +632,28 @@ console.log("-- Push preserves commercial-override PROVENANCE (Margin, Waste, Co
     ok("reading the patch alone WOULD have broken the mark",
        Number.isNaN(+patchOmits.marginOverride));
   }
+}
+
+// ── first-load Batch Profile: Sector remains the authority (2026-09-18) ────
+{
+  const LEGACY = { client: "Acme", sector: "TEXTILE", plant: "Nagpur", delivery: "Pune",
+    margin: 8, marginPP: 8, interest: 0.5, paymentDisc: "30", freightOverride: "",
+    waste: 5, convRate: 7, wastePP: 5, convRatePP: 12.5, customerType: "existing", priceContext: "unknown" };
+  const cleared = clearUntouchedLegacySeed(LEGACY);
+  ok("legacy seed: an untouched old first-load seed is cleared back to inherit",
+     ["margin", "marginPP", "interest", "waste", "convRate", "wastePP", "convRatePP"].every(k => cleared[k] === null));
+  ok("legacy seed: identity, terms and context fields are kept",
+     cleared.client === "Acme" && cleared.sector === "TEXTILE" && cleared.plant === "Nagpur"
+     && cleared.delivery === "Pune" && cleared.paymentDisc === "30" && cleared.customerType === "existing");
+  ok("legacy seed: any one deliberate value keeps the whole profile untouched",
+     clearUntouchedLegacySeed({ ...LEGACY, margin: 9 }).margin === 9
+     && clearUntouchedLegacySeed({ ...LEGACY, convRate: 0 }).waste === 5
+     && clearUntouchedLegacySeed({ ...LEGACY, interest: null }).margin === 8);
+  ok("legacy seed: an already-blank profile is returned unchanged",
+     (() => { const p = freshNewClientProfileValues(); return clearUntouchedLegacySeed(p) === p; })());
+  ok("first load: the fresh profile carries no commercial override",
+     ["margin", "marginPP", "interest", "waste", "convRate", "wastePP", "convRatePP"]
+       .every(k => freshNewClientProfileValues()[k] === null));
 }
 
 console.log(fails === 0 ? "\nall checks pass" : `\n${fails} FAILED`);

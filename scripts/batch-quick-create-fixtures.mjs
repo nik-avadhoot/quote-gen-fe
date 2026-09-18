@@ -37,7 +37,7 @@ import {
   likelyMatches, locationCreatedNotLinkedMessage, locationLabel,
   locationNotLinkedNotice, matchScore, normalizeForMatch, partyLabel,
   partyLifecycleLabel, partyOptionParts, profileAfterProspect, proposeLocationBody,
-  prospectFormProblems, quickPickAbilities, CUSTOMER_TYPE_OPTS,
+  prospectFormProblems, quickPickAbilities, CUSTOMER_TYPE_OPTS, familySectorCodes,
 } from "../src/lib/batchQuickCreate.js";
 
 // Every helper the module exports, so a re-added freight/delivery helper
@@ -175,6 +175,23 @@ ok("prospect form: Customer Type must be one of the Batch Profile's own options"
 
 ok("prospect body: the chosen Sector is sent as sector_id, which the backend requires for a new Family",
    eq(createProspectBody("Indo Rama", null, "276"), { display_name: "Indo Rama", sector_id: 276 }));
+
+{
+  const M = {
+    memberships: [{ party_id: 1, family_id: 10, is_current: true },
+                  { party_id: 2, family_id: 20, is_current: true },
+                  { party_id: 3, family_id: 30, is_current: false }],
+    familySectors: [{ family_id: 10, sector_id: 101 },
+                    { family_id: 20, sector_id: 101 }, { family_id: 20, sector_id: 102 }],
+    sectors: [{ id: 101, sector_code: "ALCOBEV" }, { id: 102, sector_code: "PAINTS" }],
+  };
+  ok("customer select: a Family with one Sector yields exactly that Sector",
+     eq(familySectorCodes(1, M), ["ALCOBEV"]));
+  ok("customer select: a Family with several Sectors yields all of them, so none is guessed",
+     eq(familySectorCodes(2, M), ["ALCOBEV", "PAINTS"]));
+  ok("customer select: no current membership yields no Sector",
+     eq(familySectorCodes(3, M), []) && eq(familySectorCodes(99, M), []));
+}
 
 const LISTS = { sectorCodes: ["TEXTILE", "PAINTS"], plantNames: ["Nagpur", "Pune", "Kolkata"],
   deliveryOptions: ["Nagpur", "Pune", "Delhi"] };

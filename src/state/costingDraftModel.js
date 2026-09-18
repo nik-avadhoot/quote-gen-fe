@@ -202,6 +202,20 @@ export function freshNewClientProfileValues(){
     customerType:'existing',priceContext:'unknown'};
 }
 
+// The Batch Profile's first-load seed used to be these literal numbers, so every
+// new browser (every Vercel user) started with seven "overrides" that hid the
+// Sector defaults. A stored profile still holding exactly that untouched seed is
+// cleared back to inherit; any other value is a real choice and is kept.
+const LEGACY_SEED={margin:8,marginPP:8,interest:0.5,waste:5,convRate:7,wastePP:5,convRatePP:12.5};
+export function clearUntouchedLegacySeed(profile){
+  if(!isPlainObject(profile))return profile;
+  const untouched=Object.entries(LEGACY_SEED).every(([k,v])=>profile[k]===v);
+  if(!untouched)return profile;
+  const cleared={...profile};
+  for(const k of Object.keys(LEGACY_SEED))cleared[k]=null;
+  return cleared;
+}
+
 // The Batch Builder's + New Batch reset follows the same inheritance rule as
 // Costing's New Draft. A governed Batch may supply deliberate profile values;
 // nulls stay null so its selected Sector remains the next authority. Explicit

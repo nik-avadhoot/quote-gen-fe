@@ -350,6 +350,19 @@ export function familyNameByPartyId(memberships, families) {
   return out;
 }
 
+// The Sector a selected Customer brings to the Batch: its current Family's
+// Sector when there is exactly one. Several Sectors are ambiguous and none is
+// chosen; the Maker picks on the Batch.
+export function familySectorCodes(partyId, { memberships, familySectors, sectors }) {
+  const current = (memberships || []).find(m => m.is_current && m.party_id === partyId);
+  if (!current) return [];
+  const codeById = Object.fromEntries((sectors || []).map(s => [s.id, s.sector_code]));
+  return [...new Set((familySectors || [])
+    .filter(fs => fs.family_id === current.family_id)
+    .map(fs => codeById[fs.sector_id])
+    .filter(Boolean))];
+}
+
 // ── the create path ───────────────────────────────────────────────────────
 //
 // A genuinely new Batch-side client is created as a governed PROSPECT through
