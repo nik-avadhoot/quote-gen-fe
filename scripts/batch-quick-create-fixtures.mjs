@@ -37,7 +37,7 @@ import {
   likelyMatches, locationCreatedNotLinkedMessage, locationLabel,
   locationNotLinkedNotice, matchScore, normalizeForMatch, partyLabel,
   partyLifecycleLabel, partyOptionParts, profileAfterProspect, proposeLocationBody,
-  prospectFormProblems, prospectPlantNote, quickPickAbilities,
+  prospectFormProblems, quickPickAbilities, CUSTOMER_TYPE_OPTS,
 } from "../src/lib/batchQuickCreate.js";
 
 // Every helper the module exports, so a re-added freight/delivery helper
@@ -160,33 +160,50 @@ ok("apply: a sector or plant write changes only that field",
 
 // ── the one-window Prospect form ───────────────────────────────────────────
 
-ok("prospect form: name, Sector and Plant are all required",
-   eq(prospectFormProblems({ name: " ", sectorId: "", plantId: "" }).length, 3)
-   && prospectFormProblems({ name: "Indo Rama", sectorId: "276", plantId: "1" }).length === 0
-   && prospectFormProblems({ name: "Indo Rama", sectorId: "276", plantId: "" }).length === 1
-   && prospectFormProblems({ name: "Indo Rama", sectorId: "", plantId: "1" }).length === 1);
+const FULL_FORM = { name: "Indo Rama", sectorId: "276", plantId: "1", delivery: "Nagpur", customerType: "new" };
+
+ok("prospect form: name, Sector, Plant, Delivery and Customer Type are all required",
+   eq(prospectFormProblems({ name: " ", sectorId: "", plantId: "", delivery: "", customerType: "" }),
+      ["name", "sector", "plant", "delivery", "customerType"])
+   && prospectFormProblems(FULL_FORM).length === 0
+   && ["sectorId", "plantId", "delivery"].every(k =>
+        eq(prospectFormProblems({ ...FULL_FORM, [k]: "" }).length, 1)));
+
+ok("prospect form: Customer Type must be one of the Batch Profile's own options",
+   eq(CUSTOMER_TYPE_OPTS.map(o => o.v), ["new", "existing", "strategic", "spot"])
+   && eq(prospectFormProblems({ ...FULL_FORM, customerType: "vip" }), ["customerType"]));
 
 ok("prospect body: the chosen Sector is sent as sector_id, which the backend requires for a new Family",
    eq(createProspectBody("Indo Rama", null, "276"), { display_name: "Indo Rama", sector_id: 276 }));
 
-ok("prospect → Batch: Client, Sector and Plant are set; delivery and freight never move",
+const LISTS = { sectorCodes: ["TEXTILE", "PAINTS"], plantNames: ["Nagpur", "Pune", "Kolkata"],
+  deliveryOptions: ["Nagpur", "Pune", "Delhi"] };
+
+ok("prospect → Batch: Client, Sector, Plant, Delivery and Customer Type are set; freight never moves",
    (() => {
-     const seeded = { ...PROFILE, delivery: "Nagpur", freightOverride: "" };
-     const after = profileAfterProspect(seeded, { name: "Indo Rama", sectorCode: "TEXTILE", plantName: "Nagpur" },
-       { sectorCodes: ["TEXTILE", "PAINTS"], plantNames: ["Nagpur", "Pune", "Kolkata"] });
+     const seeded = { ...PROFILE, freightOverride: "" };
+     const after = profileAfterProspect(seeded, { name: "Indo Rama", sectorCode: "TEXTILE",
+       plantName: "Nagpur", delivery: "Delhi", customerType: "new" }, LISTS);
      return after.client === "Indo Rama" && after.sector === "TEXTILE" && after.plant === "Nagpur"
-       && after.delivery === "Nagpur" && after.freightOverride === "" && eq(keys(after), keys(seeded));
+       && after.delivery === "Delhi" && after.customerType === "new"
+       && after.freightOverride === "" && after.margin === PROFILE.margin && eq(keys(after), keys(seeded));
    })());
 
-ok("prospect → Batch: a Sector or Plant the Batch Profile cannot display is not written",
+ok("prospect → Batch: Delivery is written only as a listed freight destination, never a Location label",
    (() => {
-     const after = profileAfterProspect(PROFILE, { name: "Indo Rama", sectorCode: "NEWCODE", plantName: "Khed" },
-       { sectorCodes: ["TEXTILE"], plantNames: ["Nagpur"] });
-     return after.client === "Indo Rama" && after.sector === "" && after.plant === "";
+     const seeded = { ...PROFILE, delivery: "Nagpur" };
+     const after = profileAfterProspect(seeded, { name: "Indo Rama",
+       delivery: locationLabel({ id: 9 }, { address_text: "12 Kalamna Rd" }), customerType: "new" }, LISTS);
+     return after.delivery === "Nagpur";
    })());
 
-ok("prospect form: the Plant note says it is not yet stored on the Customer Family",
-   /Amendment 06/.test(prospectPlantNote("Nagpur")) && /not built yet/.test(prospectPlantNote("Nagpur")));
+ok("prospect → Batch: a Sector, Plant or Customer Type the Batch Profile cannot display is not written",
+   (() => {
+     const after = profileAfterProspect(PROFILE, { name: "Indo Rama", sectorCode: "NEWCODE",
+       plantName: "Khed", delivery: "", customerType: "vip" }, LISTS);
+     return after.client === "Indo Rama" && after.sector === "" && after.plant === ""
+       && after.delivery === "" && after.customerType === PROFILE.customerType;
+   })());
 
 ok("apply: an empty or whitespace-only label writes nothing",
    applyLabelToProfile(PROFILE, "client", "") === PROFILE

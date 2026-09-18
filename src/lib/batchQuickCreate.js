@@ -368,30 +368,35 @@ export function familyNameByPartyId(memberships, families) {
 
 // ── the one-window Prospect form (PO ruling 2026-09-18) ────────────────────
 
+// The Batch Profile's own Customer Type options. A just-created Prospect
+// defaults to "new"; the value only feeds the margin suggestion.
+export const CUSTOMER_TYPE_OPTS = Object.freeze([
+  { v: "new", l: "New" }, { v: "existing", l: "Existing" },
+  { v: "strategic", l: "Strategic" }, { v: "spot", l: "Spot" },
+]);
+const CUSTOMER_TYPES = CUSTOMER_TYPE_OPTS.map(o => o.v);
+
 // Everything the window needs before Create is enabled. The database requires a
 // Sector for every Family; the Producing Plant is required by the Product
-// Owner's plant-assignment rule (Amendment 06).
-export function prospectFormProblems({ name, sectorId, plantId }) {
+// Owner's plant-assignment rule (Amendment 06); a Batch cannot be priced
+// without its delivery destination.
+export function prospectFormProblems({ name, sectorId, plantId, delivery, customerType }) {
   const problems = [];
-  if (!(typeof name === "string" && name.trim())) problems.push("Enter the Prospect's name.");
-  if (!sectorId) problems.push("Choose the Sector.");
-  if (!plantId) problems.push("Choose the Producing Plant.");
+  if (!(typeof name === "string" && name.trim())) problems.push("name");
+  if (!sectorId) problems.push("sector");
+  if (!plantId) problems.push("plant");
+  if (!delivery) problems.push("delivery");
+  if (!CUSTOMER_TYPES.includes(customerType)) problems.push("customerType");
   return problems;
 }
 
-// Honest about where the Plant lands today: Amendment 06 is drafted, not built,
-// so the Customer Master has nowhere to store a Family's plants yet.
-export function prospectPlantNote(plantName) {
-  return `${plantName || "The Producing Plant"} is set on this Batch now. Recording it on the `
-    + "Customer Family itself arrives with the plant-assignment change (Amendment 06), which is "
-    + "drafted but not built yet.";
-}
-
 // The Batch Profile after a Prospect is created from the window. Client is
-// always written. Sector and Plant are written only when the Batch Profile
-// already offers that exact option, so a select never holds a value it cannot
-// display. Nothing else is touched.
-export function profileAfterProspect(profile, { name, sectorCode, plantName }, { sectorCodes, plantNames }) {
+// always written. Every other value is written only when it is one of the
+// options the Batch Profile itself offers, so a select never holds a value it
+// cannot display and `delivery` can only ever be a real freight destination —
+// never a Location label (applyLabelToProfile still refuses `delivery`).
+export function profileAfterProspect(profile, { name, sectorCode, plantName, delivery, customerType },
+  { sectorCodes, plantNames, deliveryOptions }) {
   let next = applyLabelToProfile(profile, "client", name);
   if (sectorCode && (sectorCodes || []).includes(sectorCode)) {
     next = applyLabelToProfile(next, "sector", sectorCode);
@@ -399,6 +404,8 @@ export function profileAfterProspect(profile, { name, sectorCode, plantName }, {
   if (plantName && (plantNames || []).includes(plantName)) {
     next = applyLabelToProfile(next, "plant", plantName);
   }
+  if (delivery && (deliveryOptions || []).includes(delivery)) next = { ...next, delivery };
+  if (CUSTOMER_TYPES.includes(customerType)) next = { ...next, customerType };
   return next;
 }
 

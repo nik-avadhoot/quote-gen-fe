@@ -280,13 +280,21 @@ named `t1`.
 - **One-window Prospect creation (PO ruling 2026-09-18).** Creating a Prospect from the Batch
   Client field sent no Sector, so the backend refused it ("sector_id is required when proposing a
   new Family"), and choosing the Batch Sector closed the panel and lost the typed name. It is now a
-  single window (`src/tabs/batch/ProspectCreateModal.jsx`) with Prospect name, governed Sector and
-  Producing Plant, all required. Likely duplicates are shown first. Create sends
-  `{display_name, sector_id}` to the same governed route, then sets the Batch Client, Sector and
-  Plant. This deliberately widens the Slice D write boundary from `client` to
-  `client`/`sector`/`plant`; `delivery` and every freight or commercial field stay unwritable, and
-  `test:batch-quick-create` pins the new boundary. The Plant is not yet stored on the Customer
-  Family: that needs Amendment 06, and the window says so.
+  single window (`src/tabs/batch/ProspectCreateModal.jsx`) with five required fields: Prospect
+  name, governed Sector, Producing Plant, Delivery to (chosen only from the Batch Profile's own
+  freight destinations) and Customer Type (defaults to New; it feeds only the margin suggestion).
+  Likely duplicates are shown first, and explanatory text was removed at the PO's request. Create
+  sends `{display_name, sector_id}` to the same governed route, then applies all five to the Batch.
+  This deliberately widens the Slice D write boundary:
+  - `applyLabelToProfile` accepts `client`/`sector`/`plant` and still refuses `delivery`;
+  - Delivery and Customer Type are written only as listed options, so a Location label can never
+    reach the freight key;
+  - margin and freight fields never move.
+
+  `test:batch-quick-create` pins all of this. Not included, by judgment: Price Context (it varies
+  per enquiry) and a ship-to Customer Location (not needed to create or price; the existing
+  Location action covers it). The Plant is not yet stored on the Customer Family; that needs
+  Amendment 06.
 - The grant is made by the Admin through Users/Access (`POST /admin/users/3536/capabilities`,
   complete set with `expected_content_version`), not by a direct database write.
 

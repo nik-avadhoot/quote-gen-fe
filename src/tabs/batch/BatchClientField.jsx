@@ -95,7 +95,7 @@ const BADGE = {
 
 export default function BatchClientField({ batchProfile, setBatchProfile, showToast }) {
   const { profile: caller } = useAuth();
-  const { sectorCodes } = useAppState();
+  const { sectorCodes, locations } = useAppState();
   const { canCreate, canBrowse } = quickPickAbilities(caller);
 
   const stored = batchProfile.client || "";
@@ -222,7 +222,7 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
     setOpen(false);
   };
 
-  const onProspectCreated = async ({ name, partyId, sectorCode, plantName }) => {
+  const onProspectCreated = async ({ name, partyId, sectorCode, plantName, delivery, customerType }) => {
     setPendingCreate(null);
     // Refresh so the new record is genuinely selectable from the master list,
     // not merely assumed to exist (ruling item 5). If the refetch fails, splice
@@ -233,21 +233,20 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
         parties: [...m.parties, { id: partyId, display_name: name,
           lifecycle_state: "prospect", customer_code: null, status: "active" }] }));
     }
-    setBatchProfile(p => profileAfterProspect(p, { name, sectorCode, plantName },
-      { sectorCodes, plantNames: PLANTS }));
+    setBatchProfile(p => profileAfterProspect(p, { name, sectorCode, plantName, delivery, customerType },
+      { sectorCodes, plantNames: PLANTS, deliveryOptions: locations }));
     setDraft("");
     const sectorSet = !!sectorCode && (sectorCodes || []).includes(sectorCode);
-    const plantSet = !!plantName && PLANTS.includes(plantName);
-    showToast?.(`✅ Prospect "${name}" created. Batch Client set`
-      + (sectorSet ? `, Sector ${sectorCode}` : "") + (plantSet ? `, Plant ${plantName}` : "") + "."
-      + (sectorCode && !sectorSet ? ` Sector ${sectorCode} is not in this Batch's Sector list, so choose it there.` : ""),
-      "success", 7000);
+    showToast?.(`✅ Prospect "${name}" created and applied to this Batch.`
+      + (sectorCode && !sectorSet ? ` Sector ${sectorCode} is not in this Batch's Sector list; choose it there.` : ""),
+      "success", 6000);
   };
 
   // The one-window Prospect form, shared by both variants below.
   const prospectWindow = pendingCreate && (
     <ProspectCreateModal initialName={pendingCreate.name} matches={pendingCreate.matches}
       familyOf={familyOf} defaultSectorCode={batchProfile.sector} defaultPlantName={batchProfile.plant}
+      deliveryOptions={locations} defaultDelivery={batchProfile.delivery}
       onSelectExisting={(party) => { setPendingCreate(null); selectParty(party); }}
       onCreated={onProspectCreated} onClose={() => setPendingCreate(null)} showToast={showToast} />
   );
@@ -360,7 +359,6 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
                   <button type="button" style={{ ...rowSt, borderColor: C.amber, background: "#FEF8F0" }}
                     onClick={() => askToCreate(draft)}>
                     ⊕ Create <strong>&quot;{draft.trim()}&quot;</strong> as a new Prospect…
-                    <span style={{ color: C.slateL }}> · opens the Prospect form: name, Sector, Plant</span>
                   </button>
                 ) : (
                   <div style={noteSt}>

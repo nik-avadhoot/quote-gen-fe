@@ -1,39 +1,37 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // src/tabs/batch/ProspectCreateModal.jsx — create a Prospect in one window.
 //
-// Product Owner ruling, 2026-09-18. Creating a Prospect from the Batch Client
-// field used to be a small confirmation that sent no Sector, so the backend
-// refused it ("sector_id is required when proposing a new Family"), and picking
-// the Batch Sector to satisfy it closed the panel and discarded the name. This
-// window collects everything creation needs, in one place:
+// Product Owner rulings, 2026-09-18. Everything creating a Prospect from a
+// Batch needs, in one place, all required:
 //
-//   - the Prospect's name;
-//   - its governed Sector (required by the database for every Family);
-//   - its Producing Plant (required by the plant-assignment rule).
+//   - name;
+//   - governed Sector (the database requires one for every Family);
+//   - Producing Plant (the plant-assignment rule, Amendment 06);
+//   - Delivery destination (the Batch cannot be priced without it), chosen
+//     from the Batch Profile's own freight destinations;
+//   - Customer Type, defaulting to New (it feeds only the margin suggestion).
 //
-// It still shows likely duplicates first, so a spelling variant can be
-// selected instead of creating a second record. Create goes through the same
-// governed route as before:
+// Likely duplicates are shown first. Create calls the governed route
 //
 //   POST /masters/customer-families/prospects   { display_name, sector_id }
 //
-// The Sector is stored on the new Family. The Plant is applied to this Batch;
-// the Customer Master cannot store a Family's plants until Amendment 06 is
-// built, and the window says so rather than implying otherwise.
+// and the caller then applies Client, Sector, Plant, Delivery and Customer
+// Type to the Batch. The Plant is not stored on the Family until Amendment 06
+// is built.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../../lib/apiClient.js";
 import { classifyResponse } from "../../lib/backendError.js";
 import { runMutation } from "../../lib/runMutation.js";
 import {
-  createProspectBody, partyOptionParts, prospectFormProblems, prospectPlantNote,
+  CUSTOMER_TYPE_OPTS, createProspectBody, partyOptionParts, prospectFormProblems,
 } from "../../lib/batchQuickCreate.js";
 import { Btn, Inp, Sel } from "../../ui/primitives.jsx";
 import { C, sans } from "../../theme.js";
 
 const overlaySt = { position: "fixed", inset: 0, background: "rgba(28,43,58,.45)", display: "flex",
   alignItems: "center", justifyContent: "center", zIndex: 10000 };
-const cardSt = { width: 460, maxHeight: "86vh", overflowY: "auto", background: C.white,
+const cardSt = { width: 440, maxHeight: "86vh", overflowY: "auto", background: C.white,
   border: `1px solid ${C.border}`, borderRadius: 10, padding: 22,
   boxShadow: "0 8px 32px rgba(0,0,0,.2)", fontFamily: sans };
 const labelSt = { fontSize: 10, fontWeight: 700, color: C.slateM, textTransform: "uppercase",
@@ -45,11 +43,15 @@ const matchSt = { display: "block", width: "100%", textAlign: "left", border: `1
 
 export default function ProspectCreateModal({
   initialName, matches, familyOf, defaultSectorCode, defaultPlantName,
+  deliveryOptions, defaultDelivery,
   onSelectExisting, onCreated, onClose, showToast,
 }) {
   const [name, setName] = useState(initialName || "");
   const [sectorId, setSectorId] = useState("");
   const [plantId, setPlantId] = useState("");
+  const [delivery, setDelivery] = useState(
+    (deliveryOptions || []).includes(defaultDelivery) ? defaultDelivery : "");
+  const [customerType, setCustomerType] = useState("new");
   const [options, setOptions] = useState({ status: "loading", sectors: [], plants: [] });
   const [busy, setBusy] = useState(false);
 
@@ -73,7 +75,6 @@ export default function ProspectCreateModal({
       const sectors = (data.sectors || []).filter(s => s.status === "active");
       const plants = data.plants || [];
       setOptions({ status: "ok", sectors, plants });
-      // Start from what the Batch already says, when it names a governed option.
       const sector = sectors.find(s => s.sector_code === defaultSectorCode);
       if (sector) setSectorId(String(sector.id));
       const plant = plants.find(p => p.name === defaultPlantName)
@@ -90,7 +91,7 @@ export default function ProspectCreateModal({
   const chosenPlant = options.plants.find(p => String(p.id) === plantId) || null;
   const chosenSector = options.sectors.find(s => String(s.id) === sectorId) || null;
 
-  const problems = prospectFormProblems({ name, sectorId, plantId });
+  const problems = prospectFormProblems({ name, sectorId, plantId, delivery, customerType });
 
   const submit = async () => {
     if (problems.length || busy) return;
@@ -102,25 +103,23 @@ export default function ProspectCreateModal({
     setBusy(false);
     if (!data) return;
     onCreated({ name: trimmed, partyId: data.party_id, familyId: data.family_id,
-      sectorCode: chosenSector?.sector_code || "", plantName: chosenPlant?.name || "" });
+      sectorCode: chosenSector?.sector_code || "", plantName: chosenPlant?.name || "",
+      delivery, customerType });
   };
+
+  const unavailable = options.status === "loading" ? "Loading…"
+    : options.status === "denied" ? "You cannot read the governed Sectors and Plants."
+    : "Sectors and Plants could not be loaded.";
 
   return (
     <div style={overlaySt} role="dialog" aria-modal="true" aria-label="Create a new Prospect">
       <div style={cardSt}>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.slate }}>Create a new Prospect</div>
-        <div style={noteSt}>
-          Creates the Prospect and its Customer Family in the Customer Master and sets this Batch's
-          Client. Graduating it to a Customer with a permanent Customer Code is a separate action in
-          Customer Families.
-        </div>
 
         {matches?.length > 0 && (
           <div style={{ marginTop: 10, padding: "6px 8px", border: `1px solid ${C.amber}`,
             borderRadius: 5, background: "#FEF8F0" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.amberD }}>
-              Similar records already exist. Selecting one avoids a duplicate.
-            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.amberD }}>Similar existing records</div>
             {matches.map(({ party }) => {
               const parts = partyOptionParts(party, familyOf?.[party.id]);
               return (
@@ -141,28 +140,25 @@ export default function ProspectCreateModal({
         <Inp value={name} onChange={setName} placeholder="Customer or prospect name"
           st={{ width: "100%", boxSizing: "border-box" }} />
 
-        <label style={labelSt}>Sector *</label>
-        {options.status === "ok"
-          ? <Sel value={sectorId} onChange={setSectorId} opts={sectorOpts} ph="— choose a Sector —" />
-          : <div style={noteSt}>{options.status === "loading" ? "Loading Sectors and Plants…"
-              : options.status === "denied" ? "You cannot read the governed Sectors, so a Prospect cannot be created here."
-              : "Sectors and Plants could not be loaded. Nothing has been changed."}</div>}
+        {options.status !== "ok" ? <div style={noteSt}>{unavailable}</div> : (
+          <>
+            <label style={labelSt}>Sector *</label>
+            <Sel value={sectorId} onChange={setSectorId} opts={sectorOpts} ph="— choose —" />
 
-        <label style={labelSt}>Producing Plant *</label>
-        {options.status === "ok" && (
-          plantOpts.length
-            ? <Sel value={plantId} onChange={setPlantId} opts={plantOpts} ph="— choose a Plant —" />
-            : <div style={noteSt}>You hold Maker access at no Producing Plant, so none can be chosen.</div>
-        )}
-        {chosenPlant && <div style={noteSt}>{prospectPlantNote(chosenPlant.name)}</div>}
-
-        {problems.length > 0 && options.status === "ok" && (
-          <div style={{ marginTop: 10, fontSize: 11, color: C.slateM }}>
-            {problems.join(" ")}
-          </div>
+            <label style={labelSt}>Producing Plant *</label>
+            {plantOpts.length
+              ? <Sel value={plantId} onChange={setPlantId} opts={plantOpts} ph="— choose —" />
+              : <div style={noteSt}>You hold Maker access at no Producing Plant.</div>}
+          </>
         )}
 
-        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <label style={labelSt}>Delivery to *</label>
+        <Sel value={delivery} onChange={setDelivery} opts={deliveryOptions || []} ph="— choose —" />
+
+        <label style={labelSt}>Customer Type *</label>
+        <Sel value={customerType} onChange={setCustomerType} opts={CUSTOMER_TYPE_OPTS} />
+
+        <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
           <Btn ch={busy ? "Creating…" : "Create Prospect"} full
             disabled={busy || problems.length > 0 || options.status !== "ok"} onClick={submit} />
           <Btn ch="Cancel" v="secondary" disabled={busy} onClick={onClose} />
