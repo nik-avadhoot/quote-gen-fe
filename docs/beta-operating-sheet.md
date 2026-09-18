@@ -152,6 +152,33 @@ Ship-to `G0080-001-03`, whose exact governed Nagpur freight entry is ₹2.00/kg.
 - Supabase Auth leaked-password protection warning and five unindexed foreign keys are follow-up
   debt; neither was introduced by beta readiness work.
 
+### Wave C readiness recheck — 2026-09-18 (Claude SD, read-only)
+
+No live write, grant or deployment was made. Findings:
+
+1. **Maker and Checker have not accepted.** `sales.01@` and `marketing@` exist only as invited
+   Auth rows (invited 2026-09-17 18:50/18:51 UTC; `email_confirmed_at` and `last_sign_in_at` null)
+   with no `app_users` row. They are not yet distinct application users, so no capability was
+   granted and the smoke did not run.
+2. **The database attestation keyring is empty.** `app_private.attestation_keys` has 0 rows.
+   `app_private.qca_key()` resolves the verifying key only from that table, so every live Calculate
+   attestation from the Edge Function would be refused even with correctly provisioned Edge
+   secrets. The Edge half (`QCA_KEY_ID`, `QCA_KEY_HEX`) is confirmed; the database half — one
+   `active` row whose `keyid` equals `QCA_KEY_ID` and whose 32-byte `key` equals `QCA_KEY_HEX` — is
+   Product Owner out-of-band provisioning (S7-R/1) and has not happened. This is the
+   attestation-activation-pending condition; the fence stays closed until it clears. Key values were
+   not read.
+3. **Two active accounts already hold `make_quote` and `check_quote` at `NAG`** (and at `KOL`,
+   `PUN`): app user 44 (`nikunj@`) and app user 45 (`ClaudeCode`, `claude@com`, last sign-in
+   2026-09-15). User 45 is not named in the fence above.
+4. **Maker ≠ Checker is not database-enforced.** `20260911091000_s9c_quote_workflow_gates.sql`
+   (S9C-23/24) deliberately permits a dual-capability Maker to self-approve and records it
+   truthfully. Different-person approval therefore depends entirely on the Maker holding no
+   `check_quote` and the Checker holding no `make_quote` at `NAG`, and on 44/45 not acting in beta.
+5. App user 3440 `__p2_fixture_owner` (synthetic fixture) is active with zero capability grants.
+6. The backend workflow signal models Send → **Submit** → Approve → Issue
+   (`quote-gen-be/workflow_activation.py`); the smoke must include the Maker Submit step.
+
 ## Go-live checklist
 
 - [x] Direct confirmation received for the two Wave A live migrations; applied ledger entries and
@@ -159,8 +186,10 @@ Ship-to `G0080-001-03`, whose exact governed Nagpur freight entry is ₹2.00/kg.
 - [ ] Single Wave B content approval recorded; idempotent seed applied and inspected.
 - [ ] Named users and beta plant recorded; wrong-plant and ungranted checks pass.
 - [x] `QCA_KEY_ID` and `QCA_KEY_HEX` confirmed present without reading their values.
+- [ ] Matching `active` key provisioned in `app_private.attestation_keys` (0 rows on 2026-09-18).
 - [ ] CP-108 passes; Edge Function deployed with JWT verification; deployed version recorded.
-- [ ] Maker Calculate → Send → Checker Approve → Maker Issue smoke passes with persistent evidence.
+- [ ] Maker Calculate → Send → Submit → Checker Approve → Maker Issue smoke passes with persistent
+      evidence.
 - [ ] Backend-reported workflow activation drives enabled UI actions; unavailable actions remain
       disabled with a reason.
 - [ ] Production build contains only approved beta flags; Excel and PDF exports visibly say BETA.
