@@ -2,7 +2,7 @@
 
 Prepared: 2026-09-17
 
-Status: **Approved and amended by Product Owner; live application awaits the new `25` grade's commercial values**
+Status: **Applied live as `20260918040738_seed_nagpur_limited_beta_masters`**
 
 Source workbook: `APSPL NAGPUR Master_20260720.xlsx`
 
@@ -68,6 +68,7 @@ Source: current application `DEFAULT_RATES`, **not the workbook**. Supplier inte
 | 20 | 20 BF Kraft | 33.50 | 1.00 | 0 |
 | 22 | 22 BF Kraft | 35.00 | 1.00 | 0 |
 | 24 | 24 BF Kraft | 39.00 | 1.00 | 0 |
+| 25 | 25 BF Kraft | 39.00 | 1.00 | 0 |
 | 28 | 28 BF Kraft | 44.50 | 1.50 | 0 |
 | 35 | 35 BF Kraft (calc as 33) | 51.50 | 1.50 | 0 |
 | 20GY | 20 BF Golden Yellow | 35.00 | 1.00 | 0 |
@@ -81,8 +82,9 @@ Source: current application `DEFAULT_RATES`, **not the workbook**. Supplier inte
 | 40VKL | 40 BF Imported Virgin Kraft | 68.00 | 1.50 | 0 |
 
 On 2026-09-18 the Product Owner ruled that workbook grade `25` remains its own governed exact grade;
-it is not `25WTL` or `24GY`. Its price, discount, incoming freight and governed description must be
-supplied before this Rate Set can be approved and the Wave B seed applied.
+it is not `25WTL` or `24GY`. For the first governed version its description is `25 BF Kraft`, with
+the same commercial values as grade `24`: price ₹39.00/kg, discount ₹1.00/kg, incoming freight zero
+and a `NULL` per-grade supplier-interest exception.
 
 ## Proposed Nagpur Freight Set version 1
 
@@ -93,9 +95,9 @@ whose current address exactly evidences a destination below are inserted. An unm
 does not block this amended seed: its Pricing Group must use `freight_mode = 'manual'` with an
 explicit Maker-entered value, and the tracker must label that quote's freight as Maker-entered.
 
-Live preflight on 2026-09-18 found **1 of 9 destination cities** matched: Nagpur. The Freight Set
-will bind that lane only to the newly proposed, approved and coded Nagpur Ship-to authorised for
-Nagpur Distillers Private Limited; fixtures 122 and 165 stay untouched. The other eight cities
+Live preflight on 2026-09-18 found **1 of 9 destination cities** matched: Nagpur. The live Freight
+Set binds that lane only to the newly proposed, approved and coded Nagpur Ship-to
+`G0080-001-03` for Nagpur Distillers Private Limited; locations 122 and 165 stayed untouched. The other eight cities
 (Pune, Kolkata, Haldia, Howrah, Guwahati, Delhi, Ahmedabad and Hyderabad) have no exact governed
 Customer Location match and therefore use manual Pricing Group freight during limited beta.
 
@@ -159,5 +161,10 @@ freight for every unmatched destination. The same amendment removed the `18J` Co
 placed all job-work enquiries outside limited beta; no `18J` rate or `18J` → `18` mapping is allowed.
 
 On 2026-09-18 the Product Owner resolved the identity contradiction: create `25` as its own governed
-grade and rename Construction 2 to carry `25` explicitly. It must not be equated with `25WTL` or
-`24GY`. Live application now awaits the approved commercial values for that new Rate entry.
+grade with the commercial values of grade `24`, and rename Construction 2 to carry `25` explicitly.
+It is not equated with `25WTL` or `24GY`.
+
+Wave B was applied atomically on 2026-09-18 as recorded migration
+`20260918040738_seed_nagpur_limited_beta_masters`. Live verification found 19 approved Sector
+versions, 17 Rate entries, one approved Nagpur Freight entry, one approved automatic Release and
+four published/adopted starter Constructions.

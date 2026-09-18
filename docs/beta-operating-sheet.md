@@ -118,20 +118,37 @@ document, a repository file, a command transcript or chat. Confirm only that bot
 
 ## Known issues before entry
 
+### Live U1 beta-exit evidence — 2026-09-18
+
+Admin `nikunj@avadhootpacks.in` exercised the governed lifecycle for Nagpur Distillers Private
+Limited (`G0080-001`, party 245), with database attribution to app user 44:
+
+- Bill-to location 599: proposed with short address `Gurugram`, approved from content version 1,
+  then assigned permanent code `G0080-001-02`; active at content version 2.
+- Ship-to location 600: proposed with short address `Nagpur`, approved from content version 1,
+  then assigned permanent code `G0080-001-03`; active at content version 2.
+- Locations 122 and 165 were not updated or reactivated.
+
+This propose → approve → code-assignment evidence counts toward beta exit. The Wave C smoke uses
+Ship-to `G0080-001-03`, whose exact governed Nagpur freight entry is ₹2.00/kg.
+
 - Wave A is live and verified as migrations `20260917182121` and `20260917182138`.
-- Wave B freight handling is approved: one of nine destination cities matches; every unmatched
-  destination uses explicit Maker-entered manual freight. The governed Nagpur lane will bind only
-  to the new approved and coded Ship-to for Nagpur Distillers; locations 122 and 165 stay untouched.
-- The Product Owner ruled that Construction 2 uses a distinct governed grade `25`, not `25WTL` or
-  `24GY`, and its evidence name will be `Beta 3-ply C 25/150-16/120-18/150`. Wave B remains unapplied
-  until the new grade's price, discount, incoming freight and description are supplied.
+- Wave B is live as `20260918040738_seed_nagpur_limited_beta_masters`. One of nine destination
+  cities has governed coverage: Ship-to `G0080-001-03` in Nagpur at ₹2.00/kg. Every unmatched
+  destination uses explicit Maker-entered manual freight; locations 122 and 165 stayed untouched.
+- Construction 2 uses governed grade `25`, not `25WTL` or `24GY`, with the first-version commercial
+  values of grade `24`. Its evidence name is `Beta 3-ply C 25/150-16/120-18/150`.
 - Job-work enquiries are excluded from limited beta and stay on the spreadsheet.
 - Maker and Checker Auth invitations were sent on 2026-09-18; both must activate their logins before
   any capability grant.
-- Edge secret names are confirmed provisioned; the function is not deployed because Wave B must
-  complete first.
+- Edge Function `calculate-batch-row` version 1 is ACTIVE with JWT verification enabled. Local
+  executor fixtures pass and no deployment/startup errors were present at verification time.
+- The stored test aggregate has pre-existing production-data fixture defects: the GSM catalogue
+  suite returns boolean into a text runner, the Family D group suite hard-codes Calculation Defaults
+  version 1, and the Pricing Basis suite tries to create an overlapping automatic default. The
+  unaffected Construction, plant-master, security and product-workflow suites passed 178/178.
 - Workflow HTTP/UI activation is committed; deployed-role and state-transition smoke proof remains a
-  beta-entry check after Wave A–C are live.
+  beta-entry check after Maker and Checker activate their logins.
 - Supabase Auth leaked-password protection warning and five unindexed foreign keys are follow-up
   debt; neither was introduced by beta readiness work.
 
