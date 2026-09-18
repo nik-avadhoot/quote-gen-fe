@@ -264,6 +264,19 @@ named `t1`.
   as check quotes prepared by others. The rule is now per Quote — a Quote's Checker must not be
   its Maker — and is enforced by operation and the daily self-approval check, not by the
   database. The Wave C smoke still runs Sonali (Maker) → Snehal (Checker).
+- **Superseding ruling, later on 2026-09-18 — all permissions to all users for verification.** So
+  that users can see every screen and exercise every intended workflow, access is not restricted by
+  role for now. Migration `20260918094026_open_all_capabilities_to_beta_users` gave Sonali (3535)
+  and Snehal (3536) the complete set app user 44 holds: all 6 group capabilities, including
+  `administer_users`, and all 7 plant capabilities at `NAG`, `PUN` and `KOL`. Users 44, 45, 3535 and
+  3536 are now identical. Consequences, accepted by this ruling:
+  - the NAG-only fence no longer holds for users;
+  - anyone may change user access;
+  - anyone may propose and approve live commercial masters;
+  - anyone may approve their own Quote.
+
+  The daily self-approval check and the operating rule "Nagpur only; job work stays on the
+  spreadsheet" remain in force. Restricting again uses the same operation (kill switch).
 - The grant is made by the Admin through Users/Access (`POST /admin/users/3536/capabilities`,
   complete set with `expected_content_version`), not by a direct database write.
 
