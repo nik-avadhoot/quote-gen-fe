@@ -219,6 +219,26 @@ reported, not verified). Verified live:
   Product Owner provisions the matching database key, so the smoke cannot yet start.
 - Users 44 and 45 still hold `make_quote` + `check_quote` at `NAG`; ruling outstanding.
 
+### Incident — governed Nagpur freight lane deleted by stored tests (found 2026-09-18)
+
+Approved Freight Set Version 246 (`Nagpur Limited Beta Freight Set`, used by Release 799) now has
+**0 entries**. The Wave B seed inserted exactly one (`NAG` → Location 600 / `G0080-001-03`,
+₹2.0000/kg) and asserted it in the same transaction. Two stored pgTAP suites clean up with a
+plant-wide delete that removes **every** `NAG`/`PUN` freight entry, real ones included:
+
+- `20260905194804_s5_2_family_d_plant_masters_tests.sql:267`
+- `20260905195206_s5_3_pricing_basis_tests.sql:377`
+
+They were written when the live masters were empty, and ran against live data when the aggregate
+`tests.run_all()` was executed after the seed. Every other cleanup in both suites is fixture-scoped.
+Verified intact: 19 Sectors, 17 Rate entries (version 512), Release 799, 4 Constructions and 4
+adoptions, and Location 600. Inserts into an approved version are guarded
+(`trg_fe_follows_version`); deletes are not.
+
+Until repaired: **do not run `tests.run_all()` or either suite on production.** Until the lane is
+restored, the smoke's Nagpur Ship-to has no governed freight and would need Maker-entered freight.
+The repair (scoped cleanup plus restoring the approved lane) awaits Product Owner approval.
+
 ### Product Owner rulings — 2026-09-18
 
 - **Users 44 and 45 keep their current capabilities for beta**, including `make_quote` +

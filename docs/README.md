@@ -124,6 +124,7 @@ These documents may contain status tables that were true at a particular checkpo
   portfolio (CDM-45), including why it is NOT NULL rather than a publication gate.
 - [`data-model-canonical-amendment-04.md`](data-model-canonical-amendment-04.md) — SKU Master editing by due authority (CDM-46): rulings D-01 to D-12, slice 1, and the open settled-customer questions.
 - [`data-model-canonical-amendment-05.md`](data-model-canonical-amendment-05.md) — master-only SKU Location applicability lifecycle and quote-exception boundary (CDM-47).
+- [`data-model-canonical-amendment-06.md`](data-model-canonical-amendment-06.md) — **draft for PO approval**: Producing Plant assignment for Customer Families and Customers, filter + enforcement (CDM-48, amends CDM-04).
 - [`archive/data-model-design/data-model-design-for-approval.md`](archive/data-model-design/data-model-design-for-approval.md)
 - [`archive/data-model-design/data-model-sr-dev-proposal.md`](archive/data-model-design/data-model-sr-dev-proposal.md)
 - [`archive/data-model-design/data-model-sr-dev-review.md`](archive/data-model-design/data-model-sr-dev-review.md)
