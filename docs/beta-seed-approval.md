@@ -2,7 +2,7 @@
 
 Prepared: 2026-09-17
 
-Status: **Approved and amended by Product Owner; live application blocked by one remaining exact-grade identity**
+Status: **Approved and amended by Product Owner; live application awaits the new `25` grade's commercial values**
 
 Source workbook: `APSPL NAGPUR Master_20260720.xlsx`
 
@@ -80,6 +80,10 @@ Source: current application `DEFAULT_RATES`, **not the workbook**. Supplier inte
 | 26HRCT | 26 BF High Recycle Content | 44.50 | 1.50 | 0 |
 | 40VKL | 40 BF Imported Virgin Kraft | 68.00 | 1.50 | 0 |
 
+On 2026-09-18 the Product Owner ruled that workbook grade `25` remains its own governed exact grade;
+it is not `25WTL` or `24GY`. Its price, discount, incoming freight and governed description must be
+supplied before this Rate Set can be approved and the Wave B seed applied.
+
 ## Proposed Nagpur Freight Set version 1
 
 Source: current application Nagpur freight mirror, **not the workbook**. The workbook's `Customer
@@ -89,8 +93,9 @@ whose current address exactly evidences a destination below are inserted. An unm
 does not block this amended seed: its Pricing Group must use `freight_mode = 'manual'` with an
 explicit Maker-entered value, and the tracker must label that quote's freight as Maker-entered.
 
-Live preflight on 2026-09-18 found **1 of 9 destination cities** matched: Nagpur. It maps to two
-ship-to-eligible Customer Location identities, both currently `proposed`. The other eight cities
+Live preflight on 2026-09-18 found **1 of 9 destination cities** matched: Nagpur. The Freight Set
+will bind that lane only to the newly proposed, approved and coded Nagpur Ship-to authorised for
+Nagpur Distillers Private Limited; fixtures 122 and 165 stay untouched. The other eight cities
 (Pune, Kolkata, Haldia, Howrah, Guwahati, Delhi, Ahmedabad and Hyderabad) have no exact governed
 Customer Location match and therefore use manual Pricing Group freight during limited beta.
 
@@ -127,7 +132,7 @@ version is directly adopted at Nagpur as authorised seed data. The former fifth 
 | # | Frequency | Name | Ply | Flutes | TOP | F1 | L1 | F2 | L2 | Board GSM |
 |---:|---:|---|---:|---|---|---|---|---|---|---:|
 | 1 | 84 | Beta 3-ply B 16/100 | 3 | B / NULL | 16/100 | 16/100 | 16/100 | NULL | NULL | 337 |
-| 2 | 57 | Beta 3-ply C 25-16-18 | 3 | C / NULL | 25/150 | 16/120 | 18/150 | NULL | NULL | 474 |
+| 2 | 57 | Beta 3-ply C 25/150-16/120-18/150 | 3 | C / NULL | 25/150 | 16/120 | 18/150 | NULL | NULL | 474 |
 | 3 | 48 | Beta 3-ply C 16/170 | 3 | C / NULL | 16/170 | 16/170 | 16/170 | NULL | NULL | 586.5 |
 | 4 | 38 | Beta 3-ply C 16/120 | 3 | C / NULL | 16/120 | 16/120 | 16/120 | NULL | NULL | 414 |
 
@@ -153,7 +158,6 @@ generic destination master or pseudo Customer Locations, and require explicit ma
 freight for every unmatched destination. The same amendment removed the `18J` Construction and
 placed all job-work enquiries outside limited beta; no `18J` rate or `18J` → `18` mapping is allowed.
 
-The amended preflight found one remaining contradiction before live application: Construction 2
-uses exact layer grade code `25`, while the approved Rate Set has no `25` entry (`25WTL` is a distinct
-code). Exact Rate Set lookup would leave that layer without a governed material rate. The seed must
-not reinterpret `25` as `25WTL` without an explicit Product Owner ruling.
+On 2026-09-18 the Product Owner resolved the identity contradiction: create `25` as its own governed
+grade and rename Construction 2 to carry `25` explicitly. It must not be equated with `25WTL` or
+`24GY`. Live application now awaits the approved commercial values for that new Rate entry.

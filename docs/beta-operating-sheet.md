@@ -119,11 +119,12 @@ document, a repository file, a command transcript or chat. Confirm only that bot
 ## Known issues before entry
 
 - Wave A is live and verified as migrations `20260917182121` and `20260917182138`.
-- Wave B freight handling is approved: one of nine destination cities matches existing governed
-  locations; every unmatched destination uses explicit Maker-entered manual freight. Both matched
-  Nagpur ship-to identities are still `proposed`, so they cannot be selected until activated.
-- Construction 2 still names exact grade `25`, absent from the approved Rate Set. It is not silently
-  mapped to `25WTL`; Wave B remains unapplied pending that final exact-grade ruling.
+- Wave B freight handling is approved: one of nine destination cities matches; every unmatched
+  destination uses explicit Maker-entered manual freight. The governed Nagpur lane will bind only
+  to the new approved and coded Ship-to for Nagpur Distillers; locations 122 and 165 stay untouched.
+- The Product Owner ruled that Construction 2 uses a distinct governed grade `25`, not `25WTL` or
+  `24GY`, and its evidence name will be `Beta 3-ply C 25/150-16/120-18/150`. Wave B remains unapplied
+  until the new grade's price, discount, incoming freight and description are supplied.
 - Job-work enquiries are excluded from limited beta and stay on the spreadsheet.
 - Maker and Checker Auth invitations were sent on 2026-09-18; both must activate their logins before
   any capability grant.
