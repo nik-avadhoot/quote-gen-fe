@@ -34,7 +34,8 @@
 // suggestion that what they typed is already governed. Backend and RLS remain
 // decisive; everything here is a usability aid (design-plan §2.1).
 // ═══════════════════════════════════════════════════════════════════════════
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../../AuthContext.jsx";
 import { apiFetch } from "../../lib/apiClient.js";
 import { classifyResponse } from "../../lib/backendError.js";
@@ -51,11 +52,30 @@ const inputSt = {
   padding: "2px 6px", borderRadius: 3, border: `1px solid ${C.border}`,
   fontSize: 10, background: C.white, color: C.slate, width: 90, minWidth: 0,
 };
+// The panel is portalled to <body> and positioned against the field. Rendered
+// in place it was clipped by the collapsed Batch Profile strip, which hid the
+// Create Prospect confirmation and its buttons.
+const PANEL_W = 340;
+const PANEL_MAX_H = 340;
 const panelSt = {
-  position: "absolute", top: "calc(100% + 3px)", left: 0, zIndex: 9000, width: 340,
+  position: "fixed", zIndex: 9000, width: PANEL_W,
   background: C.white, border: `1px solid ${C.amber}`, borderRadius: 6,
-  boxShadow: "0 8px 24px rgba(0,0,0,.18)", padding: 8, maxHeight: 340, overflowY: "auto",
+  boxShadow: "0 8px 24px rgba(0,0,0,.18)", padding: 8, overflowY: "auto",
 };
+
+// Below the field when there is room, otherwise above; always inside the viewport.
+function panelPlacement(rect) {
+  const gap = 3, edge = 8;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const left = Math.max(edge, Math.min(rect.left, vw - PANEL_W - edge));
+  const below = vh - rect.bottom - gap - edge;
+  const above = rect.top - gap - edge;
+  if (below >= Math.min(PANEL_MAX_H, 200) || below >= above) {
+    return { left, top: rect.bottom + gap, maxHeight: Math.max(120, Math.min(PANEL_MAX_H, below)) };
+  }
+  const maxHeight = Math.max(120, Math.min(PANEL_MAX_H, above));
+  return { left, bottom: vh - rect.top + gap, maxHeight };
+}
 const rowSt = {
   display: "block", width: "100%", textAlign: "left", border: `1px solid ${C.border}`,
   borderRadius: 4, background: C.white, padding: "5px 7px", marginBottom: 4,
@@ -84,6 +104,27 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
   const [busy, setBusy] = useState(false);
   const [locationFor, setLocationFor] = useState(null);     // party | null
   const wrapRef = useRef(null);
+  const panelRef = useRef(null);
+  const [place, setPlace] = useState(null);
+
+  // Keep the portalled panel attached to the field while open.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      if (wrapRef.current) setPlace(panelPlacement(wrapRef.current.getBoundingClientRect()));
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+
+  const renderPanel = (children) => open && place && createPortal(
+    <div ref={panelRef} style={{ ...panelSt, ...place }}>{children}</div>,
+    document.body);
 
   // Loaded once on mount, not on open: the resolution badge beside the field
   // has to be meaningful straight after a reload (ruling item 8), and it cannot
@@ -122,7 +163,8 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
   useEffect(() => {
     if (!open) return;
     const onDown = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)
+          && !(panelRef.current && panelRef.current.contains(e.target))) {
         setOpen(false); setPendingCreate(null);
       }
     };
@@ -212,8 +254,8 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
               cursor: stored.trim() ? "pointer" : "not-allowed", opacity: stored.trim() ? 1 : 0.45,
               lineHeight: 1.3, flexShrink: 0 }}>⊕</button>
         )}
-        {open && (
-          <div style={panelSt}>
+        {renderPanel(
+          <>
             <div style={{ ...noteSt, color: C.amberD }}>{cannotBrowseNotice()}</div>
             {pendingCreate && (
               <>
@@ -231,7 +273,7 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
                 </div>
               </>
             )}
-          </div>
+          </>
         )}
       </div>
     );
@@ -277,8 +319,8 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
           background: C.white, color: C.amber, fontSize: 9, fontWeight: 700,
           cursor: "pointer", lineHeight: 1.3, flexShrink: 0 }}>▾</button>
 
-      {open && (
-        <div style={panelSt}>
+      {renderPanel(
+        <>
           {/* What the stored text can honestly be said to mean. */}
           {stored && masters.status === "ok" && (
             <div style={{ ...noteSt, background: badge.bg, color: badge.fg, borderRadius: 4,
@@ -375,7 +417,7 @@ export default function BatchClientField({ batchProfile, setBatchProfile, showTo
               )}
             </>
           )}
-        </div>
+        </>
       )}
 
       {locationFor && (
