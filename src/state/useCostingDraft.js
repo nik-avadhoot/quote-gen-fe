@@ -38,6 +38,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useState } from "react";
 import { INIT_SPEC } from "../data/defaults.js";
+import { resolveBatchInterest } from "../engine/resolveAuthority.js";
 import { getItem, setItem } from "../lib/persist.js";
 import { CONTEXT_ONLY_FIELDS, DRAFT_CORRUPT_KEY, DRAFT_KEY, DRAFT_VERSION,
   freshEnvelope, freshProfileDraft, freshReviewCopy, isDirty, isDraftDirty,
@@ -127,7 +128,10 @@ export function useCostingDraft(st){
     // not editable state: no path can change it.
     if(!inReview){
       const cv=contextValues||{};
-      out.interest=cv.interest===undefined||cv.interest===null?INIT_SPEC.interest:cv.interest;
+      // Was `cv.interest ?? INIT_SPEC.interest` (0.5): BatchContextBar showed the
+      // Payment-Terms-derived rate while the engine priced at 0.5%. Same resolver
+      // as the bar, Calculate All and Send All.
+      out.interest=resolveBatchInterest(cv).value;
       // S8(a). Was `cv.freightOverride||""`, which turned an explicit ZERO into
       // a blank one layer ABOVE the engine - so the legacy_batch tier could
       // never express a zero from the UI no matter what the resolver did. Same

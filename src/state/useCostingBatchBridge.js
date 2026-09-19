@@ -24,7 +24,7 @@
 import { INIT_SPEC } from "../data/defaults.js";
 import { deepEqual, freshBatchProfileValues, freshNewClientProfileValues, seedSkuDefaults } from "./costingDraftModel.js";
 import { buildSpecFromRow } from "../engine/costing.js";
-import { resolveBatchCommercialDefaults } from "../engine/resolveAuthority.js";
+import { resolveBatchCommercialDefaults, resolveBatchInterest } from "../engine/resolveAuthority.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
 import {
   constructionLayerIssues, findUsableConstructionMatch,
@@ -61,11 +61,12 @@ export function useCostingBatchBridge(st){
     sp.margin=(row.marginOverride!==""&&row.marginOverride!=null)?+row.marginOverride
       :(isPP?batchCommercialDefaults.marginPP:batchCommercialDefaults.margin);
     // WAVE 3: the two row-override reads were here. Freight and Interest are
-    // BATCH-level only now, so the review copy keeps what buildSpecFromRow
-    // seeded from the profile - freightOverride:prof.freightOverride||"" and
-    // interest:prof.interest??0.5 (engine/costing.js:205,209). Those two lines
-    // are the CANONICAL Batch values and are deliberately untouched; only the
-    // per-row override on top of them is gone.
+    // BATCH-level only now. Freight keeps what buildSpecFromRow seeded from the
+    // profile (freightOverride:prof.freightOverride||""). Interest does NOT:
+    // buildSpecFromRow's `prof.interest??0.5` skips the Payment-Terms derivation,
+    // so a 60-day Batch reviewed at 0.5% while Calculate All costed it at 1%.
+    // The review copy now carries the same figure calcBatchRow uses.
+    sp.interest=resolveBatchInterest(batchProfile).value;
     applyAddOns(sp,row); // R-1: single injection point
     // C4 · E4: replacing a review copy that has unpushed changes is the one
     // Deep Dive that can lose work. Opening a review from START cannot — the

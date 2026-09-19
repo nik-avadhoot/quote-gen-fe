@@ -30,7 +30,7 @@
 import { CALC_DEFAULTS } from "../src/engine/calcDefaults.js";
 import { APPROVED_DAY_COUNT_BASIS, STRUCTURED_PAYMENT_TERMS,
   deriveInterestPct, isStructuredPaymentTerm } from "../src/engine/interestBasis.js";
-import { isBlank, normalizeFreightOverrideInput, resolveBatchCommercialDefaults, resolveField, resolveFreight, resolveInterest, resolveRowAuthority } from "../src/engine/resolveAuthority.js";
+import { isBlank, normalizeFreightOverrideInput, resolveBatchCommercialDefaults, resolveBatchInterest, resolveField, resolveFreight, resolveInterest, resolveRowAuthority } from "../src/engine/resolveAuthority.js";
 import { establishEffectiveMaterialRate, resolveSupplierCreditCost } from "../src/engine/rateMaster.js";
 import { CREDIT_PCT } from "../src/data/defaults.js";
 
@@ -533,6 +533,21 @@ console.log("\n── S8 producer: a route change preserves the override ──"
   ok("calcBatchRow costs with the shared Batch interest", body("calcBatchRow").includes("sp.interest=batchInterestPct();"));
   ok("sendAllToQuoteItems stores the same Batch interest on the item",
      body("sendAllToQuoteItems").includes("sp.interest=batchInterestPct();"));
+  ok("batchInterestPct is the shared Batch resolver",
+     src.includes("const batchInterestPct=()=>resolveBatchInterest(batchProfile).value;"));
+
+  // Costing: Deep Dive (REVIEW) and START priced a 60-day Batch at 0.5% too.
+  eq("resolveBatchInterest derives 60-day terms", resolveBatchInterest({ paymentDisc: "60", interest: null }).value, 1);
+  eq("an explicit override still wins", resolveBatchInterest({ paymentDisc: "60", interest: 0.4 }).value, 0.4);
+  eq("an explicit zero still wins", resolveBatchInterest({ paymentDisc: "90", interest: 0 }).value, 0);
+  eq("no context falls back to the system figure", resolveBatchInterest(undefined).value, 0.5);
+  const bridge = readFileSync(new URL("../src/state/useCostingBatchBridge.js", import.meta.url), "utf8");
+  const draft = readFileSync(new URL("../src/state/useCostingDraft.js", import.meta.url), "utf8");
+  ok("Deep Dive review copy carries the resolved Batch interest",
+     bridge.includes("sp.interest=resolveBatchInterest(batchProfile).value;"));
+  ok("Costing START resolves interest instead of `?? INIT_SPEC.interest`",
+     draft.includes("out.interest=resolveBatchInterest(cv).value;")
+     && !draft.includes("out.interest=cv.interest===undefined"));
 }
 
 console.log(fails === 0 ? "\nall checks pass" : `\n${fails} FAILED`);

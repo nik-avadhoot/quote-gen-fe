@@ -15,7 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { buildSpecFromRow, calcCostingOutcome, checkSpecCompliance, freightBlockerText } from "../engine/costing.js";
 import { isFeatureEnabled } from "../lib/featureFlags.js";
-import { resolveBatchCommercialDefaults, resolveField, resolveInterest } from "../engine/resolveAuthority.js";
+import { resolveBatchCommercialDefaults, resolveBatchInterest, resolveField } from "../engine/resolveAuthority.js";
 import { materializeEffectiveRates } from "../engine/rateMaster.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
 import { findDuplicate, isUsableConstruction } from "../lib/constructionIdentity.js";
@@ -225,9 +225,7 @@ export function useQuoteActions(st){
   // to CBB+PP BJ3/BJ4. Send used to keep buildSpecFromRow's `prof.interest??0.5`,
   // so a Batch whose interest was DERIVED from Payment Terms (no override) was
   // costed at the derived rate on screen but exported at 0.5%.
-  const batchInterestPct=()=>resolveInterest({pricingGroup:{
-    paymentTermsDays:batchProfile.paymentDisc,
-    interestOverridePct:batchProfile.interest}}).value;
+  const batchInterestPct=()=>resolveBatchInterest(batchProfile).value;
   const calcBatchRow=(row)=>{
     const constEntry=constructionLib.find(c=>c.code===row.constructionCode);
     if(!constEntry||!isUsableConstruction(constEntry))return null;

@@ -140,6 +140,20 @@ export function resolveBatchCommercialDefaults(batchProfile, sector, calcDefault
 }
 
 /**
+ * The Batch-level customer interest: Payment Terms plus the optional stored
+ * override on a Batch Profile (or Costing context) object. Every surface that
+ * COSTS with interest - Calculate All, Send All, Costing START and REVIEW -
+ * must use this, not `profile.interest ?? 0.5`, which ignores the derived tier
+ * and silently priced 45/60/90-day terms at 0.5%.
+ */
+export function resolveBatchInterest(profile, calcDefaults) {
+  return resolveInterest({ calcDefaults, pricingGroup: {
+    paymentTermsDays: profile?.paymentDisc,
+    interestOverridePct: profile?.interest,
+  } });
+}
+
+/**
  * Resolve customer Payment-Terms Interest (CDM-18, Amendment 01 A-01 to A-04).
  *
  *   explicit Pricing Group override
