@@ -71,8 +71,14 @@
 // stay off. The one production-only addition is limited_beta, the approved
 // beta-plan requirement that Quote exports visibly say BETA. VITE_FEATURE_FLAGS
 // still adds flags on top, and nothing here can remove one.
+//
+// ── 2026-09-19: u2_construction_library joins (Product Owner) ─────────────
+// The beta issue log called the disabled Construction Library a major issue
+// and ruled that new Constructions go to the GOVERNED library. The flag opens
+// the read-only Construction Library and Plant Construction Adoption screens;
+// access is still the read_construction_library capability, never the flag.
 const BUILD_DEFAULTS = ["u1_producing_plants", "u1_customer_families", "u3_pricing_basis", "u2_gsm_master",
-  "u2_sku_master", "u1_batch_party_link"];
+  "u2_sku_master", "u1_batch_party_link", "u2_construction_library"];
 const PRODUCTION_DEFAULTS = ["limited_beta"];
 
 const RAW = import.meta.env.VITE_FEATURE_FLAGS || "";
