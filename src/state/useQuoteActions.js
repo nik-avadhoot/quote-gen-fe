@@ -220,6 +220,14 @@ export function useQuoteActions(st){
   // we must not silently apply dimensions based on an unconfirmed relationship.
   // If SET Code was explicitly cleared (empty string, not assumed), the row is
   // standalone and auto-dims are disabled — user must enter L/W manually.
+  // The ONE Batch interest figure. calcBatchRow costs with it and
+  // sendAllToQuoteItems stores it on the item, which is what the exporter writes
+  // to CBB+PP BJ3/BJ4. Send used to keep buildSpecFromRow's `prof.interest??0.5`,
+  // so a Batch whose interest was DERIVED from Payment Terms (no override) was
+  // costed at the derived rate on screen but exported at 0.5%.
+  const batchInterestPct=()=>resolveInterest({pricingGroup:{
+    paymentTermsDays:batchProfile.paymentDisc,
+    interestOverridePct:batchProfile.interest}}).value;
   const calcBatchRow=(row)=>{
     const constEntry=constructionLib.find(c=>c.code===row.constructionCode);
     if(!constEntry||!isUsableConstruction(constEntry))return null;
@@ -254,9 +262,7 @@ export function useQuoteActions(st){
     // the profile always carried a marginPP; clearing a field now stores null, so
     // it becomes reachable and had to be settled rather than left ambiguous.
     sp.margin=resolveField('margin',{..._ctx,rowOverride:row.marginOverride}).value;
-    sp.interest=resolveInterest({pricingGroup:{
-      paymentTermsDays:batchProfile.paymentDisc,
-      interestOverridePct:batchProfile.interest}}).value;
+    sp.interest=batchInterestPct();
     // WAVE 3: no row-level Interest/Freight override. sp already carries the
     // canonical Batch figures from buildSpecFromRow, and calcCosting resolves
     // freight as override-else-matrix (getFreightRate, engine/costing.js:29-32).
@@ -412,8 +418,11 @@ export function useQuoteActions(st){
       sp.wastePP=isPP?(rowWaste!==""&&rowWaste!=null?+rowWaste:profWaste):sp.wastePP;
       sp.convRatePP=isPP?(rowConv!==""&&rowConv!=null?+rowConv:profConv):sp.convRatePP;
       sp.margin=row.marginOverride!==""&&row.marginOverride!=null?+row.marginOverride:profMargin;
-      // WAVE 3: as in calcBatchRow above - the Batch figures already on sp are
-      // what reaches the item, and from there the exporter and backend.
+      // Interest must be the figure calcBatchRow costed `res` with, or the
+      // exported workbook (BJ3/BJ4) recomputes a different rate.
+      sp.interest=batchInterestPct();
+      // WAVE 3: as in calcBatchRow above - the other Batch figures already on
+      // sp are what reaches the item, and from there the exporter and backend.
       // ─────────────────────────────────────────────────────────────────────
 
       // ── Add-on costs from batch row into the spec ─────────────────────────

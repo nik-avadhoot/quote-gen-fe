@@ -523,5 +523,17 @@ console.log("\n── S8 producer: a route change preserves the override ──"
        originPlant: "Nagpur", legacyDestination: "Pune" }).source, "legacy_matrix");
 }
 
+// ── Send stores the interest Calculate costed with (2026-09-19 beta issue 3) ──
+// sendAllToQuoteItems rebuilt the spec and kept buildSpecFromRow's
+// `prof.interest??0.5`, so a PT-derived Batch interest exported to BJ3 as 0.5%.
+{
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/state/useQuoteActions.js", import.meta.url), "utf8");
+  const body = name => src.slice(src.indexOf(`const ${name}=`), src.indexOf("\n  };\n", src.indexOf(`const ${name}=`)));
+  ok("calcBatchRow costs with the shared Batch interest", body("calcBatchRow").includes("sp.interest=batchInterestPct();"));
+  ok("sendAllToQuoteItems stores the same Batch interest on the item",
+     body("sendAllToQuoteItems").includes("sp.interest=batchInterestPct();"));
+}
+
 console.log(fails === 0 ? "\nall checks pass" : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);
