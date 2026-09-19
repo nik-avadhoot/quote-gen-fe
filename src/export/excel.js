@@ -242,18 +242,50 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
   };
 
   // ── Update RATE MASTER prices and discounts ─────────────────────────────
+  // MIRRORS quote-gen-be/server.py "Update RATE MASTER" — change one, change
+  // both. Grades live in A7:G24; A25:C29 is the GSM surcharge table that CBB+PP
+  // reads on the FIXED range $A$26:$C$29, so nothing is written there. Grade
+  // lookups are whole-column ($A:$G, exact), so grades added in the app are
+  // appended below the sheet notes instead of being dropped.
   if(ws_rm){
-    for(let r=7;r<=30;r++){
+    const _num=(v,d)=>{if(v===null||v===undefined||v==='')return d;const n=+v;return Number.isNaN(n)?d:n;};
+    const setFormula=(addr,f)=>{ws_rm[addr]={...(ws_rm[addr]||{}),t:'n',f};delete ws_rm[addr].v;delete ws_rm[addr].w;};
+    const templateRows=new Map();
+    for(let r=7;r<=24;r++){
       const codeCell=ws_rm[`A${r}`];
-      if(!codeCell?.v)continue;
-      const code=String(codeCell.v).trim();
-      const appRate=rates.find(x=>x.code===code);
-      if(appRate){
-        sc(ws_rm,`C${r}`,appRate.price);   // Paper Price
-        sc(ws_rm,`E${r}`,appRate.disc);
-        sc(ws_rm,`F${r}`,appRate.freight||0);  // Incoming Freight (col F)
-        // D (credit cost =C*$B$4) and F (effective rate =C+D-E) keep their formulas
-      }
+      if(codeCell?.v!==undefined&&codeCell.v!=='')templateRows.set(String(codeCell.v).trim(),r);
+    }
+    const writeRateRow=(r,appRate)=>{
+      sc(ws_rm,`C${r}`,_num(appRate.price,0));   // Paper Price
+      sc(ws_rm,`E${r}`,_num(appRate.disc,1.5));
+      sc(ws_rm,`F${r}`,_num(appRate.freight,0)); // Incoming Freight (col F)
+      // A per-grade SUPPLIER credit % replaces the sheet-wide $B$4 for this grade.
+      const credit=_num(appRate.interest,null);
+      setFormula(`D${r}`,credit===null?`C${r}*$B$4`:`C${r}*${credit/100}`);
+    };
+    const APPENDED_HEADING=33;
+    const appended=[];
+    rates.forEach(appRate=>{
+      const code=String(appRate.code??'').trim();
+      if(!code)return;
+      if(templateRows.has(code)){writeRateRow(templateRows.get(code),appRate);return;}
+      if(appended.includes(code))return;
+      appended.push(code);
+      const r=APPENDED_HEADING+appended.length;
+      'ABCDEFGH'.split('').forEach(col=>{
+        if(ws_rm[`${col}23`]?.s)ws_rm[`${col}${r}`]={...(ws_rm[`${col}${r}`]||{}),s:ws_rm[`${col}23`].s};
+      });
+      sc(ws_rm,`A${r}`,code);
+      sc(ws_rm,`B${r}`,appRate.desc||'');
+      writeRateRow(r,appRate);
+      setFormula(`G${r}`,`C${r}+D${r}-E${r}+F${r}`);
+    });
+    if(appended.length){
+      sc(ws_rm,`A${APPENDED_HEADING}`,'Grades added in the app (appended at export)');
+      const range=XLSX.utils.decode_range(ws_rm['!ref']||'A1:H31');
+      range.e.r=Math.max(range.e.r,APPENDED_HEADING+appended.length-1);
+      range.e.c=Math.max(range.e.c,7);
+      ws_rm['!ref']=XLSX.utils.encode_range(range);
     }
   }
 
