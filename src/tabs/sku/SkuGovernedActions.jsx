@@ -21,6 +21,9 @@ import {
   buildFieldChanges, fieldEditability, replacementCandidates, skuLifecycleActions, skuOpsBody,
   versionChangeVerdict, versionEditPlan, versionFieldValues,
 } from "../../lib/skuGovernedOps.js";
+import GovernedConstructionField from "../../components/GovernedConstructionField.jsx";
+import { governedConstructionEntry } from "../../lib/governedConstructionCatalogue.js";
+import { hasCapabilityAtPlant } from "../../lib/capabilities.js";
 import { control, menuPanel, menuSummary } from "../../ui/screenStandards.js";
 import { C, T, mono, sans } from "../../theme.js";
 
@@ -414,7 +417,7 @@ export function SkuReferenceControls({ data, references, authority, mode, showTo
 }
 
 // ── Propose a SKU (D1: a Maker may) ─────────────────────────────────────────
-export function SkuProposeForm({ plants, profile, mode, onClose, onSaved, showToast }) {
+export function SkuProposeForm({ plants, plantRows = [], gradeCodes = [], profile, mode, onClose, onSaved, showToast }) {
   const live = mode.state === "live";
   const canReadParties = hasCapability(profile, "read_party_master");
   const canReadConstructions = hasCapability(profile, "read_construction_library");
@@ -425,7 +428,13 @@ export function SkuProposeForm({ plants, profile, mode, onClose, onSaved, showTo
   const [inputs, setInputs] = useState({ box_type: "RSC", ups: "1" });
   const [parties, setParties] = useState({ status: canReadParties && live ? "loading" : "idle", rows: [] });
   const [constructions, setConstructions] = useState({ status: canReadConstructions && live ? "loading" : "idle", rows: [] });
+  const [constructionReload, setConstructionReload] = useState(0);
   const [busy, setBusy] = useState(false);
+  // The exact governed plant row the SKU sits at. "+ New" publishes AND adopts
+  // there, so without it the create path is not offered at all.
+  const plantRow = plantRows.find(row => row?.plant_code === plant) || null;
+  const mayCreateConstruction = hasCapability(profile, "manage_construction_library")
+    && !!plantRow && hasCapabilityAtPlant(profile, "adopt_construction_for_plant", plant);
 
   useEffect(() => {
     if (!live) return undefined;
@@ -443,10 +452,11 @@ export function SkuProposeForm({ plants, profile, mode, onClose, onSaved, showTo
     };
     load("/masters/customer-families", body => (body.parties || []).filter(p => p.status !== "retired"), setParties, canReadParties);
     load("/masters/constructions", body => (body.constructions || []).filter(c => c.status === "published")
-      .flatMap(c => (c.versions || []).filter(v => v.approved_at || v.approved).map(v => ({ id: v.id, label: `${c.construction_code || c.name} v${v.version_no} · ${v.ply ?? "?"}-ply` }))),
+      .flatMap(c => (c.versions || []).filter(v => v.approved_at || v.approved)
+        .map(v => governedConstructionEntry(c, { ...v, approved: true }))),
       setConstructions, canReadConstructions);
     return () => { cancelled = true; };
-  }, [live, canReadParties, canReadConstructions]);
+  }, [live, canReadParties, canReadConstructions, constructionReload]);
 
   const { fields, errors } = buildFieldChanges(
     Object.fromEntries(Object.entries(inputs).filter(([, v]) => v !== "")), {});
@@ -484,11 +494,14 @@ export function SkuProposeForm({ plants, profile, mode, onClose, onSaved, showTo
               {parties.rows.map(p => <option key={p.id} value={p.id}>{p.customer_code ? `${p.customer_code} · ` : ""}{p.display_name}</option>)}
             </select></label>
           <label style={fieldLabel}>Construction version
-            <select value={inputs.construction_version_id || ""} disabled={!live || constructions.status !== "ready"}
-              onChange={set("construction_version_id")} style={control}>
-              <option value="">{!canReadConstructions ? "Needs read_construction_library" : constructions.status === "ready" ? "Choose…" : constructions.status === "loading" ? "Loading…" : "Unavailable"}</option>
-              {constructions.rows.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-            </select></label>
+            <GovernedConstructionField entries={constructions.rows}
+              value={inputs.construction_version_id || ""}
+              onChange={id => setInputs(prev => ({ ...prev, construction_version_id: String(id) }))}
+              plant={plantRow} gradeCodes={gradeCodes} mayCreate={mayCreateConstruction}
+              onRefresh={() => setConstructionReload(token => token + 1)}
+              disabled={!live || constructions.status !== "ready"}
+              unavailableReason={!canReadConstructions ? "Needs read_construction_library"
+                : constructions.status === "loading" ? "Loading…" : "Unavailable"} /></label>
           <label style={fieldLabel}>Pricing portfolio
             <select value={portfolio} disabled={!live} onChange={e => setPortfolio(e.target.value)} style={control}>
               <option value="">Choose…</option>

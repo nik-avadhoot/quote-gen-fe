@@ -144,7 +144,9 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
   const [hiddenGroups, setHiddenGroups] = useState([]);
   const [groupBySet, setGroupBySet] = useState(false);
   const [openFilter, setOpenFilter] = useState(null); // { key, anchor } | null
-  const { showToast } = useAppState();
+  // governedPlants carries the exact plant rows (id + code) the "+ New
+  // construction" path needs; gradeCodes feeds its paper-grade suggestions.
+  const { governedPlants, gradeCodes, showToast } = useAppState();
   const [editPlan, setEditPlan] = useState(null);   // the version editor's plan, or null
   const [proposing, setProposing] = useState(false);
   const { focusPanel, toggleFocus, exitFocusOnEscape } = usePanelFocus();
@@ -499,7 +501,8 @@ export default function SkuMasterScreen({ fixtureOnly = false, onExitFixture }) 
       </div>
       {editPlan && detailData && detailMode.state === "live" && <SkuVersionEditor data={detailData} plan={editPlan}
         showToast={showToast} onClose={() => setEditPlan(null)} onSaved={refreshAfterWrite} />}
-      {proposing && <SkuProposeForm plants={proposalPlants} profile={profile} mode={proposalMode} showToast={showToast}
+      {proposing && <SkuProposeForm plants={proposalPlants} plantRows={governedPlants} gradeCodes={gradeCodes}
+        profile={profile} mode={proposalMode} showToast={showToast}
         onClose={() => setProposing(false)}
         onSaved={id => { setProposing(false); setSelectedId(id); setReloadKey(k => k + 1); }} />}
     </div>

@@ -107,6 +107,9 @@ export function useGovernedConstructions(st) {
   return {
     constructionCatalogue: catalogue,
     governedConstructions,
+    // The caller-visible plant rows, for any screen that must name the exact
+    // plant a Construction would be adopted at (the SKU proposal form does).
+    governedPlants: plants,
     governedConstructionBatchPlant: batchPlant,
     governedConstructionState: { ...state, enabled, plantResolved: batchPlantId !== null },
     refreshGovernedConstructions,

@@ -271,8 +271,15 @@ const chrome = read("../src/ui/screenChrome.jsx");
 check(sidebar.includes('isFeatureEnabled("u2_sku_master")&&canOpenSkuMaster(profile)')
   && shell.includes('tab==="skus"&&isFeatureEnabled("u2_sku_master")&&canOpenSkuMaster(profile)&&<SkuMasterScreen/>'),
   "U2-SKU-FE-45 the same flag and capability gate the nav entry and the mount");
-check(/"u2_sku_master"\]/.test(flags.replace(/\s+/g, "")) && flags.includes("import.meta.env.DEV ? DEV_DEFAULTS"),
-  "U2-SKU-FE-46 the destination is on only in the development floor; production stays default-off");
+// Stale since the 2026-09-18 localhost/Vercel parity ruling and repaired on
+// 2026-09-22: there is no DEV_DEFAULTS branch any more. BUILD_DEFAULTS is the
+// one set applied to EVERY build, and production adds only limited_beta — so
+// the claim under test is now that the destination ships everywhere and that
+// production adds nothing else behind it.
+check(flags.includes('"u2_sku_master"') && /const BUILD_DEFAULTS = \[/.test(flags)
+  && /const PRODUCTION_DEFAULTS = \["limited_beta"\]/.test(flags)
+  && !flags.includes("DEV_DEFAULTS"),
+  "U2-SKU-FE-46 the destination is in the one build set; production adds only limited_beta");
 check(app.includes("import.meta.env.DEV && fixtureIllustration === \"u2-skus\"") && app.includes("<SkuMasterScreen fixtureOnly"),
   "U2-SKU-FE-47 the fixture preview exists only in a development build without a signed-in profile");
 const apiCalls = screen.match(/apiFetch\(([^)]*)\)/g) || [];
