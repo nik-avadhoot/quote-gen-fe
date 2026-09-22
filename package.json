@@ -30,6 +30,7 @@
     "test:printing-spec": "node scripts/printing-spec-fixtures.mjs",
     "test:pinned-addons": "node scripts/pinned-addons-fixtures.mjs",
     "test:gsm-master": "node scripts/gsm-master-fixtures.mjs",
+    "test:sector-actions": "node scripts/sector-actions-fixtures.mjs",
     "test:sku-master": "node scripts/sku-master-fixtures.mjs",
     "test:beta-export": "node scripts/beta-export-fixtures.mjs",
     "test:screen-standard": "node scripts/screen-standard-fixtures.mjs",

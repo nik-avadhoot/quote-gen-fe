@@ -9,7 +9,7 @@
 // byte-identical to the monolith; only the surrounding closure changed.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useState } from "react";
-import { DEFAULT_BOX_TRIM_DATA, DEFAULT_FREIGHT, DEFAULT_RATES, DEFAULT_SECTORS_DATA, PARTITIONS_MASTER_DEFAULT } from "../data/defaults.js";
+import { DEFAULT_BOX_TRIM_DATA, DEFAULT_FREIGHT, DEFAULT_RATES, PARTITIONS_MASTER_DEFAULT } from "../data/defaults.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useMastersState(){
@@ -26,31 +26,13 @@ export function useMastersState(){
     try{setItem('cbb_rate_date',d);}catch(e){}
   };
   const[freight,setFreight]=useState(()=>{try{const s=getItem('cbb_freight');return s?JSON.parse(s):DEFAULT_FREIGHT;}catch(e){return DEFAULT_FREIGHT;}});
-  const[sectors,setSectors]=useState(()=>{
-    try{
-      const s=getItem('cbb_sectors');
-      // First run only — no stored data yet: seed from defaults.
-      // All subsequent runs use stored data exclusively so deliberate
-      // admin deletions (or additions) are never overwritten by defaults.
-      if(!s)return DEFAULT_SECTORS_DATA;
-      const stored=JSON.parse(s);
-      // Deduplicate by code (guards against backup/restore duplicates).
-      // Field-merge with defaults so new schema keys propagate to stale backups,
-      // but stored values always win — user edits are never silently reverted.
-      // The re-seed loop (adding back deleted codes) has been removed: a sector
-      // deleted by admin must stay deleted across refreshes.
-      const seen=new Set();
-      const deduped=[];
-      for(const row of stored){
-        if(!seen.has(row.code)){
-          seen.add(row.code);
-          const def=DEFAULT_SECTORS_DATA.find(d=>d.code===row.code)||{};
-          deduped.push({...def,...row}); // stored wins; def fills missing keys only
-        }
-      }
-      return deduped.length?deduped:DEFAULT_SECTORS_DATA;
-    }catch(e){return DEFAULT_SECTORS_DATA;}
-  });
+  // ── SECTORS ARE NO LONGER HELD HERE ──────────────────────────────────────
+  // The browser-local `cbb_sectors` list was retired on 2026-09-22 when
+  // Commercial Policies became the GOVERNED Sector master. `sectors` and
+  // `sectorCodes` now come from state/useGovernedSectors.js, which reads
+  // /masters/sectors on the caller's own token. Nothing reads or writes the
+  // localStorage key any more, and DEFAULT_SECTORS_DATA is not a fallback:
+  // substituting it would cost a quote against numbers no one approved.
   const[boxTrim,setBoxTrim]=useState(()=>{
     try{
       const s=getItem('cbb_boxtrim');
@@ -89,14 +71,10 @@ export function useMastersState(){
   // Persist all masters on change — rates was missing its useEffect
   useEffect(()=>{try{setItem('cbb_rates',JSON.stringify(rates));}catch(e){}},[rates]);
   useEffect(()=>{try{setItem('cbb_freight',JSON.stringify(freight));}catch(e){}},[freight]);
-  useEffect(()=>{try{setItem('cbb_sectors',JSON.stringify(sectors));}catch(e){}},[sectors]);
   useEffect(()=>{try{setItem('cbb_boxtrim',JSON.stringify(boxTrim));}catch(e){}},[boxTrim]);
   useEffect(()=>{try{setItem('cbb_partitions',JSON.stringify(partitionsMaster));}catch(e){}},[partitionsMaster]);
   useEffect(()=>{try{setItem('cbb_constrlib',JSON.stringify(constructionLib));}catch(e){}},[constructionLib]);
-  // Derived sector code list — always from sectors state so dynamic additions appear everywhere.
-  // SECTORS constant from defaults.js is used only as the initial seed in DEFAULT_SECTORS_DATA.
-  const sectorCodes=sectors.map(s=>s.code);
   const gradeCodes=["",...rates.map(r=>r.code)];
 
-  return { DEFAULT_LOCATIONS, blanketDisc, blanketInterest, boxTrim, constructionLib, freight, freightBands, gradeCodes, gyPremHigh, gyPremLow, locations, partitionsMaster, rateUpdatedAt, rates, sectorCodes, sectors, setBlanketDisc, setBlanketInterest, setBoxTrim, setConstructionLib, setFreight, setFreightBands, setGyPremHigh, setGyPremLow, setLocations, setPartitionsMaster, setRateUpdatedAt, setRates, setSectors, touchRateDate };
+  return { DEFAULT_LOCATIONS, blanketDisc, blanketInterest, boxTrim, constructionLib, freight, freightBands, gradeCodes, gyPremHigh, gyPremLow, locations, partitionsMaster, rateUpdatedAt, rates, setBlanketDisc, setBlanketInterest, setBoxTrim, setConstructionLib, setFreight, setFreightBands, setGyPremHigh, setGyPremLow, setLocations, setPartitionsMaster, setRateUpdatedAt, setRates, touchRateDate };
 }
