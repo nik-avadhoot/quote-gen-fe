@@ -1,6 +1,9 @@
 import {
   automaticPricingBasisSuggestion,
+  compareReleaseComponents,
   customerInterestPolicy,
+  defaultReleaseOn,
+  releaseComponentSummary,
   filterPricingBasisReleases,
   isValidDateOnly,
   pricingBasisOptions,
@@ -598,6 +601,57 @@ check(workspace.includes('freshness: "not_calculated"')
   && workspace.includes('waste: { value: 0, source: "row" }')
   && !workspace.includes("supplier_credit"),
   "U4-FE-38 fixture evidence distinguishes not-calculated, stale and explicit zero without supplier-credit inputs")
+
+// ── PO ruling 2026-09-22: composition on the row, comparison with the default ──
+const currentRelease = PRICING_BASIS_ILLUSTRATION.find(r => r.id === "fixture-current");
+const alternativeRelease = PRICING_BASIS_ILLUSTRATION.find(r => r.id === "fixture-alternative");
+const draftRelease = PRICING_BASIS_ILLUSTRATION.find(r => r.id === "fixture-draft-release");
+
+const summary = releaseComponentSummary(alternativeRelease);
+check(summary.map(part => part.label).join(",") === "Rate,Freight,Sector,Calculation"
+  && summary[0].version === "v2" && summary[0].name === "Nagpur Export Rates"
+  && summary[3].available === false && summary[3].version === "unavailable",
+  "PB-FE-46 the catalogue row states each component version, and says unavailable rather than guessing")
+check(releaseComponentSummary({}).every(part => part.available === false)
+  && releaseComponentSummary(null).length === 4,
+  "PB-FE-47 a Release with no visible components still reports all four slots as unavailable")
+
+const comparison = compareReleaseComponents(alternativeRelease, currentRelease);
+check(comparison.baselineId === "fixture-current" && comparison.differing === 3
+  && comparison.incomparable === 1
+  && comparison.rows.find(r => r.key === "rate").differs === true
+  && comparison.rows.find(r => r.key === "rate").baseline === "v4"
+  && comparison.rows.find(r => r.key === "rate").current === "v2",
+  "PB-FE-48 comparison counts differing components by governed version identity")
+check(comparison.rows.find(r => r.key === "calculation_defaults").comparable === false
+  && comparison.rows.find(r => r.key === "calculation_defaults").differs === null,
+  "PB-FE-49 a component the caller cannot see is 'cannot compare', never same and never different")
+check((() => {
+  const sector = comparison.rows.find(r => r.key === "sector");
+  const margin = sector.values.find(v => v.label === "Target margin");
+  return margin.baseline === "8.000%" && margin.current === "10.000%"
+    && sector.values.every(v => v.changed)
+    && sector.values.some(v => v.current === "not set");
+})(), "PB-FE-50 a differing Sector names the values that moved, and blank stays 'not set'")
+check(compareReleaseComponents(currentRelease, currentRelease) === null
+  && compareReleaseComponents(currentRelease, null) === null,
+  "PB-FE-51 there is nothing to compare against itself, or against no default")
+check(compareReleaseComponents(draftRelease, currentRelease).rows
+  .every(row => row.comparable === false && row.differs === null),
+  "PB-FE-52 a Release whose components are not visible compares nothing at all")
+
+check(defaultReleaseOn(PRICING_BASIS_ILLUSTRATION, "NAG", "2026-09-22")?.id === "fixture-current"
+  && defaultReleaseOn(PRICING_BASIS_ILLUSTRATION, "NAG", "2026-08-01") === null
+  && defaultReleaseOn(PRICING_BASIS_ILLUSTRATION, "PUN", "2026-09-22") === null,
+  "PB-FE-53 the comparison baseline is the single eligible automatic default for that plant and date")
+
+check(screen.includes("import.meta.env.DEV &&")
+  && !screen.includes("{fixtureOnly && <div style={{ marginBottom: 10"),
+  "PB-FE-54 the Batch pricing card is localhost-only and absent from a production build")
+check(!screen.includes("Same-plant composition is database-enforced.</strong>")
+  && screen.includes("Same-plant composition is database-enforced —")
+  && (screen.match(/does not assert replacement lineage/g) || []).length === 1,
+  "PB-FE-55 the standing explanation is stated once for the screen, not repeated inside every card")
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);

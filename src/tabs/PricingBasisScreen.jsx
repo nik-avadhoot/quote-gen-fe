@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
+import { useAppState } from "../state/AppStateContext.js";
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
 import {
+  compareReleaseComponents,
   customerInterestPolicy,
+  defaultReleaseOn,
   filterPricingBasisReleases,
   localIsoDate,
   PRICING_BASIS_ILLUSTRATION,
+  releaseComponentSummary,
   releaseEligibility,
   releaseResolutionLadders,
 } from "../lib/pricingBasisModel.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
-import { LifecycleBadge, PermanentCode, SummaryRow } from "../ui/dataDisplay.jsx";
+import { LifecycleBadge, PermanentCode } from "../ui/dataDisplay.jsx";
 import { denseCell, denseHead, denseTable } from "../ui/screenStandards.js";
 import { C, T, mono, sans } from "../theme.js";
 import BatchPricingCard from "./batch/BatchPricingCard.jsx";
@@ -24,33 +28,40 @@ function value(value, suffix = "") {
     : `${value}${suffix}`;
 }
 
+// The component's values are the point of the card, so they are shown, not
+// hidden behind a disclosure. Only the full rate/freight tables stay behind a
+// drill-down, and the version history behind its own.
 function BasisPart({ title, eyebrow, component, historyLabel, children, drilldownLabel, drilldown }) {
   const [drilldownOpen, setDrilldownOpen] = useState(false);
-  const positive = ["active", "approved", "current", "published"].includes(component?.status);
   return (
-    <SummaryRow title={eyebrow}
-      facts={[title]}
-      status={component?.status || "Unavailable"}
-      statusTone={!component ? "warning" : positive ? "positive" : "neutral"}
-      style={{ minWidth: 0 }}
-    >
+    <section aria-label={`${eyebrow} component`}
+      style={{ ...panel, padding: 9, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 8.5, fontWeight: 800, color: C.slateL,
+          textTransform: "uppercase", letterSpacing: ".06em" }}>{eyebrow}</span>
+        <span style={{ fontSize: 10.5, fontWeight: 750, color: C.slate, minWidth: 0,
+          overflow: "hidden", textOverflow: "ellipsis" }}>{title}</span>
+        <span style={{ marginLeft: "auto" }}>
+          <LifecycleBadge status={component?.status || "Unavailable"} />
+        </span>
+      </div>
       {component
-        ? <div style={{ fontSize: T.body, color: C.slateM, lineHeight: 1.55 }}>{children}</div>
+        ? <div style={{ fontSize: T.body, color: C.slateM, lineHeight: 1.5 }}>{children}</div>
         : <div style={{ fontSize: T.body, color: C.slateL, lineHeight: 1.45 }}>
             This governed source was not visible in the current caller-scoped read. No value is guessed.
           </div>}
       <VersionHistory label={historyLabel} versions={component?.history} />
-      {drilldown && <div style={{ marginTop: 9 }}>
+      {drilldown && <div>
         <button type="button" onClick={() => setDrilldownOpen(open => !open)}
           aria-expanded={drilldownOpen}
           style={{ border: `1px solid ${C.border}`, borderRadius: 5,
             background: C.white, color: C.slate, fontSize: T.label, fontWeight: 750,
-            padding: "6px 9px", cursor: "pointer" }}>
+            padding: "5px 8px", cursor: "pointer" }}>
           {drilldownOpen ? `Hide ${drilldownLabel}` : `View ${drilldownLabel}`}
         </button>
         {drilldownOpen && <div style={{ marginTop: 8 }}>{drilldown}</div>}
       </div>}
-    </SummaryRow>
+    </section>
   );
 }
 
@@ -63,13 +74,15 @@ function Identity({ setLabel, component }) {
   );
 }
 
+// The current version's values are the card's subject, so the older versions
+// sit behind one native disclosure rather than lengthening every card.
 function VersionHistory({ label, versions = [] }) {
   return (
-    <div style={{ marginTop: 9 }}>
-      <div style={{ fontSize: 9, color: C.slateL, fontWeight: 800, marginBottom: 5 }}>
-        {label} lifecycle
-      </div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+    <details style={{ marginTop: 5 }}>
+      <summary style={{ fontSize: 9, color: C.slateL, fontWeight: 800, cursor: "pointer" }}>
+        {label} lifecycle{versions.length ? ` · ${versions.length}` : ""}
+      </summary>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 5 }}>
         {versions.length === 0
           ? <span style={{ fontSize: 9.5, color: C.slateL }}>No caller-visible version history.</span>
           : versions.map(version => (
@@ -81,7 +94,7 @@ function VersionHistory({ label, versions = [] }) {
             </div>
           ))}
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -444,18 +457,62 @@ function ReleaseChronology({ release }) {
           <div style={{ color: C.slateM, fontSize: 9.2, marginTop: 6 }}>
             {release.effective_from || "Start unavailable"} → {release.effective_until || "open-ended"}
           </div>
-          <div style={{ color: C.slateL, fontSize: 8.5, marginTop: 3 }}>
-            No replacement link exists in the current schema. A newer governed Release may be a later basis,
-            but this screen does not assert replacement lineage.
-          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function ReleaseCard({ release, asOf }) {
+// What this Release changes against the one a Batch would actually price with
+// today. Version identity decides; a component the caller cannot see is
+// reported as such rather than counted as same or different.
+function ComparisonPanel({ comparison }) {
+  return (
+    <section aria-label="Comparison with the automatic default"
+      style={{ ...panel, padding: 10, marginTop: 8 }}>
+      <div style={{ fontSize: 10, color: C.slateM, marginBottom: 7 }}>
+        Compared with <strong>{comparison.baselineName}</strong>, the automatic default on this date.{" "}
+        {comparison.differing === 0
+          ? "No governed component differs."
+          : `${comparison.differing} of 4 components differ.`}
+        {comparison.incomparable > 0
+          && ` ${comparison.incomparable} cannot be compared from this caller's read.`}
+      </div>
+      <table style={denseTable}>
+        <thead><tr>
+          <Head>Component</Head><Head>Default</Head><Head>This release</Head><Head>Verdict</Head>
+        </tr></thead>
+        <tbody>
+          {comparison.rows.map(row => (
+            <tr key={row.key}>
+              <Cell emphasis>{row.label}</Cell>
+              <Cell>{row.baseline}</Cell>
+              <Cell>{row.current}</Cell>
+              <Cell>
+                {!row.comparable
+                  ? <span style={{ color: C.slateL }}>Cannot compare</span>
+                  : row.differs
+                    ? <span style={{ color: C.amberD, fontWeight: 750 }}>Differs</span>
+                    : <span style={{ color: C.green }}>Same version</span>}
+                {row.values.length > 0 && <div style={{ color: C.slateM, marginTop: 2 }}>
+                  {row.values.map(value => (
+                    <div key={value.label}>{value.label}: {value.baseline} → {value.current}</div>
+                  ))}
+                </div>}
+              </Cell>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function ReleaseCard({ release, asOf, defaultRelease }) {
   const [policyOpen, setPolicyOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const comparison = useMemo(() => compareReleaseComponents(release, defaultRelease),
+    [release, defaultRelease]);
   const eligibility = releaseEligibility(release, asOf);
   const parts = release.components || {};
   const rate = parts.rate;
@@ -505,11 +562,6 @@ function ReleaseCard({ release, asOf }) {
       <div style={{ padding: 12, background: C.cream }}>
         <div style={{ fontSize: 9, color: C.slateL, fontWeight: 800, marginBottom: 7,
           textTransform: "uppercase", letterSpacing: ".06em" }}>Governed composition</div>
-        <div style={{ marginBottom: 8, padding: "7px 8px", border: `1px solid ${C.green}`,
-          borderRadius: 5, background: C.greenL, color: C.slateM, fontSize: 9.5, lineHeight: 1.45 }}>
-          <strong>Same-plant composition is database-enforced.</strong>{" "}
-          The Release, Rate version and Freight version share composite plant foreign keys; this is not frontend filtering.
-        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
           <BasisPart eyebrow="Rate" component={rate}
             title={rate ? `${rate.set_name} · v${rate.version_no}` : "Rate Set version"}
@@ -559,7 +611,16 @@ function ReleaseCard({ release, asOf }) {
               padding: "6px 9px", cursor: "pointer" }}>
             {policyOpen ? "Hide Sector & Default details" : "View Sector & Default details"}
           </button>
+          {comparison && <button type="button" onClick={() => setCompareOpen(open => !open)}
+            aria-expanded={compareOpen}
+            style={{ border: `1px solid ${C.border}`, borderRadius: 5,
+              background: C.white, color: C.slate, fontSize: 10, fontWeight: 750,
+              padding: "6px 9px", cursor: "pointer" }}>
+            {compareOpen ? "Hide comparison" : `Compare with today's default${
+              comparison.differing > 0 ? ` · ${comparison.differing} differ` : ""}`}
+          </button>}
         </div>
+        {compareOpen && comparison && <ComparisonPanel comparison={comparison} />}
         {policyOpen && <div style={{ marginTop: 8 }}>
           <SectorDefaultDrilldown sector={sector} defaults={defaults} />
         </div>}
@@ -568,9 +629,10 @@ function ReleaseCard({ release, asOf }) {
   );
 }
 
-function ReleaseSummaryRow({ release, asOf }) {
+function ReleaseSummaryRow({ release, asOf, defaultRelease }) {
   const [expanded, setExpanded] = useState(false);
   const eligibility = releaseEligibility(release, asOf);
+  const composition = releaseComponentSummary(release);
   return (
     <article style={{ ...panel, overflow: "hidden" }}>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(230px, 1.5fr) minmax(170px, .8fr) minmax(210px, 1fr) auto",
@@ -615,8 +677,19 @@ function ReleaseSummaryRow({ release, asOf }) {
           </button>
         </div>
       </div>
+      {/* The composition, readable without opening anything. */}
+      <div style={{ padding: "0 10px 7px", display: "flex", gap: 10, flexWrap: "wrap",
+        color: C.slateM, fontSize: 9.2 }}>
+        {composition.map(part => (
+          <span key={part.key} style={{ color: part.available ? C.slateM : C.slateL }}>
+            <span style={{ color: C.slateL, fontWeight: 700 }}>{part.label}</span>{" "}
+            {part.name ? `${part.name} · ` : ""}
+            <span style={{ fontFamily: mono }}>{part.version}</span>
+          </span>
+        ))}
+      </div>
       {expanded && <div style={{ padding: "0 8px 8px", background: C.cream }}>
-        <ReleaseCard release={release} asOf={asOf} />
+        <ReleaseCard release={release} asOf={asOf} defaultRelease={defaultRelease} />
       </div>}
     </article>
   );
@@ -624,6 +697,8 @@ function ReleaseSummaryRow({ release, asOf }) {
 
 export default function PricingBasisScreen({ fixtureOnly = false, onExitFixture }) {
   const { isActive } = useAuth();
+  // Only the localhost-only Batch pricing card reads these.
+  const { batchProfile, u3PricingBasisDraft, setU3PricingBasisDraft, showToast } = useAppState();
   const [state, setState] = useState({ status: fixtureOnly ? "ready" : "loading", releases: [], partial: false });
   const [reloadKey, setReloadKey] = useState(0);
   const [readAt, setReadAt] = useState(null);
@@ -710,6 +785,12 @@ export default function PricingBasisScreen({ fixtureOnly = false, onExitFixture 
           <div style={{ marginTop: 4, fontSize: 10.5, color: C.slateL, lineHeight: 1.45 }}>
             See which governed Rate, Freight, Sector and Calculation versions form each release—and why it is eligible for a plant and date.
           </div>
+          {/* Said once, for every card below: it was repeated inside each one. */}
+          <div style={{ marginTop: 3, fontSize: 9.2, color: C.slateL, lineHeight: 1.45 }}>
+            Same-plant composition is database-enforced — the Release, Rate version and Freight version share
+            composite plant foreign keys, so this is not frontend filtering. No replacement link exists in the
+            current schema, so this screen does not assert replacement lineage between Releases.
+          </div>
         </div>
         <span style={{ fontSize: 9, fontWeight: 800, color: C.green, background: C.greenL,
           borderRadius: 10, padding: "4px 8px" }}>GOVERNED READ · NO MUTATIONS</span>
@@ -731,9 +812,15 @@ export default function PricingBasisScreen({ fixtureOnly = false, onExitFixture 
         </div>
       )}
 
-      {fixtureOnly && <div style={{ marginBottom: 10, border: `1px solid ${C.border}`, borderRadius: 8,
-        overflow: "hidden" }}>
-        <BatchPricingCard fixtureOnly fallbackPlantCode="NAG" />
+      {/* PO ruling 2026-09-22: the Batch pricing card belongs on localhost only,
+          never on the deployed application. import.meta.env.DEV is false under
+          vite build, so a production bundle has no path to it. */}
+      {import.meta.env.DEV && <div style={{ marginBottom: 10, border: `1px solid ${C.border}`,
+        borderRadius: 8, overflow: "hidden" }}>
+        {fixtureOnly
+          ? <BatchPricingCard fixtureOnly fallbackPlantCode="NAG" />
+          : <BatchPricingCard fallbackPlantCode={batchProfile?.plant}
+              draft={u3PricingBasisDraft} setDraft={setU3PricingBasisDraft} showToast={showToast} />}
       </div>}
 
       {state.partial && !illustrating && (
@@ -829,7 +916,8 @@ export default function PricingBasisScreen({ fixtureOnly = false, onExitFixture 
                 </span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                {group.releases.map(release => <ReleaseSummaryRow key={release.id} release={release} asOf={asOf} />)}
+                {group.releases.map(release => <ReleaseSummaryRow key={release.id} release={release}
+                  asOf={asOf} defaultRelease={defaultReleaseOn(source, group.code, asOf)} />)}
               </div>
             </section>)}
           </div>

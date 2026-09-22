@@ -119,6 +119,99 @@ export function filterPricingBasisReleases(releases = [], {
 
 const present = value => value !== null && value !== undefined && value !== "";
 
+// ── the four governed components, in the order the screen reads them ───────
+const COMPONENT_PARTS = Object.freeze([
+  { key: "rate", label: "Rate", nameField: "set_name" },
+  { key: "freight", label: "Freight", nameField: "set_name" },
+  { key: "sector", label: "Sector", nameField: "name" },
+  { key: "calculation_defaults", label: "Calculation", nameField: null },
+]);
+
+// Values worth naming when two Releases differ. Version identity is the
+// verdict; these say what the difference means in commercial terms.
+const COMPARED_VALUES = Object.freeze({
+  sector: [
+    { field: "margin_pct", label: "Target margin", unit: "%" },
+    { field: "waste_cbb_pct", label: "Waste · Box", unit: "%" },
+    { field: "waste_pp_pct", label: "Waste · PP", unit: "%" },
+    { field: "conv_box_rate", label: "Conversion · Box", unit: "/kg" },
+    { field: "conv_pp_rate", label: "Conversion · PP", unit: "/kg" },
+  ],
+  calculation_defaults: [
+    { field: "annual_interest_pct", label: "Annual interest", unit: "%" },
+    { field: "day_count_basis", label: "Day count", unit: " days" },
+    { field: "rounding_step", label: "Rounding", unit: "" },
+  ],
+});
+
+const versionText = component => !component ? "unavailable"
+  : present(component.version_no) ? `v${component.version_no}` : "version unavailable";
+
+// Identity, never the label: two versions are the same one only when the
+// governed row id matches. Version numbers alone are not identity across sets.
+const componentIdentity = component => !component ? null
+  : present(component.id) ? `id:${component.id}`
+    : present(component.version_no) ? `no-id:v${component.version_no}` : null;
+
+// One compact line per Release for the catalogue row, so the composition is
+// readable without opening anything.
+export function releaseComponentSummary(release) {
+  const parts = release?.components || {};
+  return COMPONENT_PARTS.map(({ key, label, nameField }) => {
+    const component = parts[key];
+    const name = component && nameField ? component[nameField] : null;
+    return {
+      key,
+      label,
+      name: present(name) ? name : null,
+      version: versionText(component),
+      available: !!component,
+      text: [present(name) ? name : null, versionText(component)].filter(Boolean).join(" "),
+    };
+  });
+}
+
+// What differs between a Release and the Release that is the automatic default
+// on the chosen date. A component the caller cannot see is reported as
+// "cannot compare", never as same and never as different.
+export function compareReleaseComponents(release, baseline) {
+  if (!release || !baseline || String(release.id) === String(baseline.id)) return null;
+  const mineParts = release.components || {};
+  const baseParts = baseline.components || {};
+  const rows = COMPONENT_PARTS.map(({ key, label }) => {
+    const mine = mineParts[key];
+    const theirs = baseParts[key];
+    const comparable = !!mine && !!theirs
+      && componentIdentity(mine) !== null && componentIdentity(theirs) !== null;
+    const differs = comparable ? componentIdentity(mine) !== componentIdentity(theirs) : null;
+    const values = (differs && COMPARED_VALUES[key] ? COMPARED_VALUES[key] : [])
+      .map(({ field, label: valueLabel, unit }) => ({
+        label: valueLabel,
+        baseline: present(theirs[field]) ? `${theirs[field]}${unit}` : "not set",
+        current: present(mine[field]) ? `${mine[field]}${unit}` : "not set",
+        changed: String(theirs[field] ?? "") !== String(mine[field] ?? ""),
+      }))
+      .filter(value => value.changed);
+    return { key, label, comparable, differs, values,
+      current: versionText(mine), baseline: versionText(theirs) };
+  });
+  return {
+    baselineId: baseline.id,
+    baselineName: release.release_name && baseline.release_name === release.release_name
+      ? `Release #${baseline.id}` : (baseline.release_name || `Release #${baseline.id}`),
+    rows,
+    differing: rows.filter(row => row.differs === true).length,
+    incomparable: rows.filter(row => row.comparable === false).length,
+  };
+}
+
+// The Release a Batch at this plant would price with on this date: the single
+// eligible automatic default. None, or more than one, yields null rather than
+// a guess.
+export function defaultReleaseOn(releases = [], plantCode, asOf) {
+  return automaticPricingBasisSuggestion(pricingBasisOptions(releases, plantCode, asOf));
+}
+
 const FIELD_RULES = Object.freeze([
   { key: "waste_cbb", label: "Waste · Box / CBB", unit: "%",
     sector: "waste_cbb_pct", system: "waste_cbb_fallback_pct" },
