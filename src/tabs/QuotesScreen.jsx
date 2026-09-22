@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { apiFetch } from "../lib/apiClient.js";
+import { isFeatureEnabled } from "../lib/featureFlags.js";
 import { classifyResponse } from "../lib/backendError.js";
 import {
   orderedQuoteRevisions, quoteActor, quoteRevisionLabel, U5_QUOTE_ILLUSTRATION,
@@ -261,6 +262,36 @@ export default function QuotesScreen({
     }
   };
 
+  // The governed Quote document (Product Owner, 2026-09-22): the SAME master
+  // workbook as the working export, and the only one that carries the permanent
+  // reference. The backend refuses anything before approval, so this button is
+  // offered only where a document may legitimately exist.
+  const exportable = ["approved", "issued"].includes(selectedRevision?.workflow_status);
+  const exportQuote = async () => {
+    if (fixtureOnly || !selectedRevision) return;
+    setWorkflow({ status: "busy", message: "Building the governed Quote workbook…" });
+    try {
+      const response = await apiFetch(
+        `/quotes/revisions/${encodeURIComponent(selectedRevision.id)}/export?beta=${isFeatureEnabled("limited_beta")}`);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const result = classifyResponse({ ok: false, status: response.status, data });
+        return setWorkflow({ status: "error", message: result.message });
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Quote_${(state.quote?.quote_reference || selectedRevision.id).replaceAll("/", "-")}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => { document.body.removeChild(link); URL.revokeObjectURL(url); }, 200);
+      setWorkflow({ status: "success", message: "Governed Quote workbook downloaded." });
+    } catch {
+      setWorkflow({ status: "error", message: "The export service could not be reached. No workbook was produced." });
+    }
+  };
+
   // The TopBar already says "Quotes", so there is no page header here: one
   // toolbar at the shared height carries the reference lookup and the
   // backend-reported governed actions, and the evidence takes the rest of the height.
@@ -284,6 +315,13 @@ export default function QuotesScreen({
       </form>
       <GovernedActions actions={selectedRevision?.actions || state.quote?.actions} onAction={runWorkflow}
         busy={workflow.status === "busy"} label="Backend-reported Quote workflow actions" />
+      <button type="button" onClick={exportQuote} disabled={fixtureOnly || !exportable || workflow.status === "busy"}
+        title={exportable ? "Download the governed Quote workbook, carrying its permanent reference"
+          : "A Quote can be exported once it is approved; before that it has no permanent reference"}
+        style={{ ...control, fontSize: T.label, fontWeight: 700, whiteSpace: "nowrap",
+          cursor: exportable ? "pointer" : "not-allowed",
+          borderColor: exportable ? C.green : C.border, color: exportable ? C.green : C.slateL }}>
+        ↓ Quote workbook</button>
       <span style={{ flex: "1 1 auto" }} />
     </div>
     <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "10px 12px 16px" }}>
