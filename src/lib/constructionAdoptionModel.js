@@ -46,6 +46,19 @@ export function adoptionStatusForPlant(version, plantId, adoptionReadPartial = f
   return adoption.status === "withdrawn" ? ADOPTION_STATUS.withdrawn : ADOPTION_STATUS.adopted;
 }
 
+// A Construction is "Ready" (Product Owner ruling 2026-09-22, beta issue log
+// 2026-09-19 item 4) when it is published, has at least one approved
+// version, and that version is adopted (not withdrawn) by at least one
+// plant the caller can see. This is a display-only aggregate over data the
+// route already sent - it is never the authoritative `status` column, which
+// stays exactly what the database says (proposed/published/merged).
+export function constructionIsReady(construction) {
+  if (construction?.status !== "published") return false;
+  return (construction.versions || []).some(version =>
+    version?.approved === true
+    && (version.adoptions || []).some(a => a?.status !== "withdrawn"));
+}
+
 export function constructionVersionSummary(version) {
   const parts = [`${version?.ply ?? "?"}-ply`];
   if (version?.flute_f1) parts.push(`F1 ${version.flute_f1}`);

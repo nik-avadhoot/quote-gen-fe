@@ -46,12 +46,13 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
-import { hasCapability } from "../lib/capabilities.js";
+import { hasCapability, hasCapabilityAtPlant } from "../lib/capabilities.js";
 import { CONSTRUCTION_ADOPTION_FIXTURE } from "../lib/constructionAdoptionFixture.js";
 import {
   ADOPTION_STATUS,
   adoptionStatusForPlant,
   callerAccessiblePlants,
+  constructionIsReady,
   constructionVersionSummary,
   publishedApprovedConstructionVersions,
 } from "../lib/constructionAdoptionModel.js";
@@ -125,6 +126,174 @@ function AdoptionMatrix({ constructions, plantState, profile, partial }) {
   </div>;
 }
 
+const LAYER_FIELDS = [
+  ["TOP", "layer_top_code", "layer_top_gsm"],
+  ["F1", "layer_f1_code", "layer_f1_gsm"],
+  ["L1", "layer_l1_code", "layer_l1_gsm"],
+  ["F2", "layer_f2_code", "layer_f2_gsm"],
+  ["L2", "layer_l2_code", "layer_l2_gsm"],
+];
+
+const EMPTY_ADMIN_FORM = {
+  plant_id: "", name: "", ply: "", flute_f1: "", flute_f2: "", board_gsm: "",
+  layer_top_code: "", layer_top_gsm: "",
+  layer_f1_code: "", layer_f1_gsm: "",
+  layer_l1_code: "", layer_l1_gsm: "",
+  layer_f2_code: "", layer_f2_gsm: "",
+  layer_l2_code: "", layer_l2_gsm: "",
+};
+
+const adminFieldLabelStyle = { display: "flex", flexDirection: "column", gap: 2, fontSize: 9.5, color: C.slateM, fontWeight: 600 };
+const adminInputStyle = { fontSize: 11, padding: "4px 7px", borderRadius: 4, border: `1px solid ${C.border}`, fontFamily: sans, background: C.white };
+
+// S4-7: the single-step Admin shortcut (beta issue log 2026-09-19 item 2,
+// Product Owner ruling 2026-09-22). A manage_construction_library holder
+// creates, approves, publishes and adopts a Construction in one call - no
+// separate propose/approve steps. The multi-role propose->approve->publish
+// ->adopt lifecycle is UNCHANGED and remains the path for a Maker's proposal;
+// this is an additional entry point, not a replacement.
+//
+// `plants` is pre-filtered by the caller: only plants where this caller
+// holds BOTH manage_construction_library (group-wide, checked by the parent
+// before rendering this form at all) AND adopt_construction_for_plant at
+// that specific plant - the same two checks the backend RPC makes before
+// writing anything. A caller who cannot see a plant here could not have
+// used it anyway, so an empty list renders nothing rather than a dead form.
+function AdminPublishAdoptForm({ plants, onDone }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY_ADMIN_FORM);
+  const [submitState, setSubmitState] = useState({ status: "idle" });
+
+  const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const plantId = Number(form.plant_id);
+    const ply = Number(form.ply);
+    if (!plantId || !form.name.trim() || !Number.isInteger(ply) || ply < 1 || ply > 11) {
+      setSubmitState({ status: "error", message: "Plant, name and a ply count from 1 to 11 are required." });
+      return;
+    }
+    const numeric = (v) => {
+      if (v === "" || v == null) return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const text = (v) => (v && v.trim() ? v.trim() : null);
+    const body = {
+      plant_id: plantId, name: form.name.trim(), ply,
+      flute_f1: text(form.flute_f1), flute_f2: text(form.flute_f2),
+      board_gsm: numeric(form.board_gsm),
+      layer_top_code: text(form.layer_top_code), layer_top_gsm: numeric(form.layer_top_gsm),
+      layer_f1_code: text(form.layer_f1_code), layer_f1_gsm: numeric(form.layer_f1_gsm),
+      layer_l1_code: text(form.layer_l1_code), layer_l1_gsm: numeric(form.layer_l1_gsm),
+      layer_f2_code: text(form.layer_f2_code), layer_f2_gsm: numeric(form.layer_f2_gsm),
+      layer_l2_code: text(form.layer_l2_code), layer_l2_gsm: numeric(form.layer_l2_gsm),
+    };
+
+    setSubmitState({ status: "busy" });
+    const resp = await apiFetch("/masters/constructions/publish-and-adopt", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const data = await resp.json().catch(() => ({}));
+    const verdict = classifyResponse({ ok: resp.ok, status: resp.status, data });
+    if (verdict.kind !== "ok") {
+      setSubmitState({ status: "error", message: verdict.message || "The publish and adopt request did not succeed." });
+      return;
+    }
+    setSubmitState({ status: "success", message: `Published and adopted ${data.construction_code || "the new Construction"}.` });
+    setForm(EMPTY_ADMIN_FORM);
+    onDone?.();
+  };
+
+  if (plants.length === 0) return null;
+
+  return (
+    <div style={{ border: `1px solid ${C.amber}55`, borderRadius: 7, background: "#FFF8ED", marginBottom: 12 }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "9px 12px",
+          border: "none", background: "transparent", cursor: "pointer", textAlign: "left", fontFamily: sans }}>
+        <span style={{ fontSize: 9, color: C.amberD, width: 10 }}>{open ? "▾" : "▸"}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: C.amberD, flex: 1 }}>
+          Publish and adopt a Construction (Admin)
+        </span>
+        <span style={{ fontSize: 9.5, color: C.amberD }}>
+          One step: creates, approves, publishes and adopts
+        </span>
+      </button>
+
+      {open && (
+        <form onSubmit={submit} style={{ padding: "4px 12px 14px 30px", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <label style={adminFieldLabelStyle}>
+              Name
+              <input value={form.name} onChange={set("name")} required
+                style={adminInputStyle} placeholder="e.g. 3-ply 20BF Kraft" />
+            </label>
+            <label style={adminFieldLabelStyle}>
+              Ply
+              <input type="number" min={1} max={11} value={form.ply} onChange={set("ply")} required
+                style={{ ...adminInputStyle, width: 60 }} />
+            </label>
+            <label style={adminFieldLabelStyle}>
+              Plant (adopt at)
+              <select value={form.plant_id} onChange={set("plant_id")} required style={adminInputStyle}>
+                <option value="">Select…</option>
+                {plants.map(p => <option key={p.id} value={p.id}>{p.plant_code} · {p.name}</option>)}
+              </select>
+            </label>
+            <label style={adminFieldLabelStyle}>
+              Flute F1
+              <input value={form.flute_f1} onChange={set("flute_f1")} style={{ ...adminInputStyle, width: 70 }} />
+            </label>
+            <label style={adminFieldLabelStyle}>
+              Flute F2
+              <input value={form.flute_f2} onChange={set("flute_f2")} style={{ ...adminInputStyle, width: 70 }} />
+            </label>
+            <label style={adminFieldLabelStyle}>
+              Board GSM
+              <input type="number" min={0} value={form.board_gsm} onChange={set("board_gsm")} style={{ ...adminInputStyle, width: 80 }} />
+            </label>
+          </div>
+
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {LAYER_FIELDS.map(([label, codeKey, gsmKey]) => (
+              <div key={label} style={{ display: "flex", alignItems: "flex-end", gap: 4, padding: "5px 7px",
+                border: `1px solid ${C.border}`, borderRadius: 5, background: C.white }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: C.slateL, width: 20 }}>{label}</span>
+                <label style={adminFieldLabelStyle}>
+                  Code
+                  <input value={form[codeKey]} onChange={set(codeKey)} style={{ ...adminInputStyle, width: 60 }} />
+                </label>
+                <label style={adminFieldLabelStyle}>
+                  GSM
+                  <input type="number" min={0} value={form[gsmKey]} onChange={set(gsmKey)} style={{ ...adminInputStyle, width: 60 }} />
+                </label>
+              </div>
+            ))}
+          </div>
+
+          {submitState.status === "error" && (
+            <div role="alert" style={{ fontSize: 10.5, color: C.red }}>{submitState.message}</div>
+          )}
+          {submitState.status === "success" && (
+            <div role="status" style={{ fontSize: 10.5, color: C.green }}>{submitState.message}</div>
+          )}
+
+          <div>
+            <button type="submit" disabled={submitState.status === "busy"}
+              style={{ fontSize: 11, fontWeight: 700, padding: "6px 14px", borderRadius: 5,
+                border: `1px solid ${C.amberD}`, background: C.amberD, color: C.white,
+                cursor: submitState.status === "busy" ? "wait" : "pointer" }}>
+              {submitState.status === "busy" ? "Publishing…" : "Publish and adopt"}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function ConstructionLibraryScreen({ initialView = "library", fixtureOnly = false, onExitFixture }) {
   const { isActive, profile } = useAuth();
   const effectiveProfile = fixtureOnly ? CONSTRUCTION_ADOPTION_FIXTURE.profile : profile;
@@ -140,6 +309,10 @@ export default function ConstructionLibraryScreen({ initialView = "library", fix
   const [reloadKey, setReloadKey] = useState(0);
 
   const mayRead = hasCapability(effectiveProfile, "read_construction_library");
+  const mayAdminPublish = hasCapability(effectiveProfile, "manage_construction_library");
+  const adoptablePlants = plantState.status === "ready"
+    ? plantState.rows.filter(p => hasCapabilityAtPlant(effectiveProfile, "adopt_construction_for_plant", p.plant_code))
+    : [];
 
   useEffect(() => {
     if (fixtureOnly || !isActive) return; // fixture mode never issues a request
@@ -281,10 +454,14 @@ export default function ConstructionLibraryScreen({ initialView = "library", fix
           proposing, approving and withdrawing adoption remain outside this slice.
         </div>
         <AdoptionMatrix constructions={constructions} plantState={plantState} profile={effectiveProfile} partial={partial} />
-      </> : constructions.length === 0
-        ? <EmptyState title="No constructions have been created yet."
-            hint="Constructions are proposed from Batch Entry and published by the Construction Library owner." />
-        : (
+      </> : <>
+        {mayAdminPublish && !fixtureOnly && (
+          <AdminPublishAdoptForm plants={adoptablePlants} onDone={() => setReloadKey(k => k + 1)} />
+        )}
+        {constructions.length === 0
+          ? <EmptyState title="No constructions have been created yet."
+              hint="Constructions are proposed from Batch Entry and published by the Construction Library owner." />
+          : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {constructions.map(c => {
               const open = !!expanded[c.id];
@@ -301,6 +478,14 @@ export default function ConstructionLibraryScreen({ initialView = "library", fix
                       {c.name}
                     </span>
                     <LifecycleBadge status={c.status} />
+                    {!partial && constructionIsReady(c) && (
+                      <span title="Published, approved and adopted by at least one plant you can see"
+                        style={{ display: "inline-flex", alignItems: "center", fontSize: 9, fontWeight: 700,
+                          color: C.green, background: C.greenL, border: `1px solid ${C.green}55`,
+                          borderRadius: 10, padding: "2px 7px" }}>
+                        Ready
+                      </span>
+                    )}
                     <span style={{ fontSize: 10, color: C.slateL }}>
                       {c.versions.length} version{c.versions.length === 1 ? "" : "s"}
                     </span>
@@ -376,6 +561,7 @@ export default function ConstructionLibraryScreen({ initialView = "library", fix
             })}
           </div>
         )}
+      </>}
     </div>
   );
 }
