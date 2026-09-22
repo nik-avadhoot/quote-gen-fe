@@ -33,7 +33,7 @@ import {
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useCostingBatchBridge(st){
-  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, sectors, setAutoFill, setBatchProfile, setDurableBatch, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setNewBatchDialogOpen, setSetAutoFill, setSpec, setTab, showToast, spec, specRaw } = st;
+  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionCatalogue, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, sectors, setAutoFill, setBatchProfile, setDurableBatch, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setNewBatchDialogOpen, setSetAutoFill, setSpec, setTab, showToast, spec, specRaw } = st;
   const batchCommercialDefaults=resolveBatchCommercialDefaults(batchProfile,
     sectors.find(sector=>sector.code===batchProfile.sector));
 
@@ -43,7 +43,7 @@ export function useCostingBatchBridge(st){
       showToast(`⚠️ Confirm SET Code [${row.setCode||"?"}] on this row before deep-dive`,'error',4000);
       return;
     }
-    const constEntry=constructionLib.find(c=>c.code===row.constructionCode);
+    const constEntry=constructionCatalogue.find(c=>c.code===row.constructionCode);
     if(!constEntry)return;
     const dimRow=autoCalcPPDims(row);
     const isPP=isPPType(dimRow.itemType); // R-2
@@ -228,7 +228,7 @@ export function useCostingBatchBridge(st){
     // calcBatchRow and loadBatchRowIntoCosting) then compare with spec's actual
     // values. If they differ, record the override so Calculate All reproduces
     // the same result the professional saw and approved in the Costing tab.
-    const constEntry=constructionLib.find(c=>c.code===row.constructionCode);
+    const constEntry=constructionCatalogue.find(c=>c.code===row.constructionCode);
     const profWaste=isPPRowType?batchCommercialDefaults.wastePP:batchCommercialDefaults.waste;
     const profConv=isPPRowType?batchCommercialDefaults.convRatePP:batchCommercialDefaults.convRate;
     // A1: Use resolveSpecWasteConv (declared beside _calcSpec) so blank is treated
@@ -638,7 +638,7 @@ export function useCostingBatchBridge(st){
     // changed any construction-defining field it is no longer exact, so normal
     // matching creates/reuses the correct construction without editing the
     // originally selected shared entry.
-    const selectableConstructionLib=constructionLib.filter(c=>(c.status||'active')==='active');
+    const selectableConstructionLib=constructionCatalogue.filter(c=>(c.status||'active')==='active');
     const selectedFull=selectableConstructionLib.find(c=>c.code===spec.constructionCode&&
       isUsableConstruction(c)&&sameConstruction(c,spec));
     const existingFull=selectedFull||findUsableConstructionMatch(selectableConstructionLib,spec);

@@ -69,7 +69,7 @@ function DeliverySectionHeader({ section, colSpan, onManage, onWorkspace }) {
 
 export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
   const {activeBatchRowId,addBatchRow,autoCalcPPDims,autoCodeEnabled,autoCodeSeq,
-    batchProfile,batchResults,batchRows,calculateAll,constructionLib,copyCostingToProfile,durableBatch,expandedRows,freight,
+    batchProfile,batchResults,batchRows,calculateAll,constructionCatalogue,copyCostingToProfile,durableBatch,expandedRows,freight,
     generateCode,generateMissingCodes,getBatchRowStatus,invalidateAllBatchResults,
     invalidateBatchRow,loadBatchRowIntoCosting,partitionsMaster,pinnedAddOns,sectors,
     sendAllToQuoteItems,setAutoCodeEnabled,setBatchConstrOverlay,
@@ -171,7 +171,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
         {/* Grid toolbar */}
         <div role="toolbar" aria-label="Batch Builder grid controls" style={{...toolbar,gap:8,lineHeight:1.3}}>
           <Btn ch="⚡ Calculate All" v="primary" sm onClick={calculateAll}
-            disabled={batchRows.length===0||constructionLib.length===0}
+            disabled={batchRows.length===0||constructionCatalogue.length===0}
             style={{whiteSpace:"nowrap",flexShrink:0}}/>
           {/* §2.5: the disabled reason is stated on the button, not only by its greyed state. */}
           <Btn ch={Object.keys(batchResults).length===0?"→ Send All to Quote Items (calculate first)":"→ Send All to Quote Items"}
@@ -217,7 +217,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
             style={{padding:"3px 10px",borderRadius:5,border:`1px solid ${C.amber}`,
               background:C.amberL,color:C.amberD,fontSize:T.body,cursor:"pointer",fontWeight:700,
               whiteSpace:"nowrap",flexShrink:0}}>
-            📚 Construction Library ({constructionLib.filter(c=>(c.status||'active')==='active').length} active)
+            📚 Construction Library ({constructionCatalogue.filter(c=>(c.status||'active')==='active').length} active)
           </button>
           <div style={{borderLeft:`1px solid ${C.border}`,paddingLeft:8,display:"flex",gap:6,flexShrink:0}}>
             {["Box","Plate","Part-L","Part-W"].map(t=>(
@@ -381,8 +381,8 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                     invalidateAllBatchResults();
                   };
                   const dimRow=autoCalcPPDims(row);
-                  const comp=res&&buildSpecFromRow(dimRow,constructionLib.find(c=>c.code===row.constructionCode),batchProfile)
-                    ?checkSpecCompliance(buildSpecFromRow(dimRow,constructionLib.find(c=>c.code===row.constructionCode),batchProfile),res):[];
+                  const comp=res&&buildSpecFromRow(dimRow,constructionCatalogue.find(c=>c.code===row.constructionCode),batchProfile)
+                    ?checkSpecCompliance(buildSpecFromRow(dimRow,constructionCatalogue.find(c=>c.code===row.constructionCode),batchProfile),res):[];
                   return(<Fragment key={`${section.key}:row:${row.id}`}>
                     {sectionHeader}
                     <tr style={{...compactGridRowSt,background:isActive?"#EEF4FB":ri%2?C.cream:C.white,
@@ -534,7 +534,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                       {/* Paper Construction — opens slide-over overlay for selection */}
                       <td style={{padding:"2px 4px",minWidth:164}}>
                         {(()=>{
-                          const ce=row.constructionCode?constructionLib.find(c=>c.code===row.constructionCode):null;
+                          const ce=row.constructionCode?constructionCatalogue.find(c=>c.code===row.constructionCode):null;
                           const autoN=ce?constrAutoName(ce):"";
                           const constructionUsable=!!ce&&isUsableConstruction(ce);
                           return(
@@ -726,7 +726,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                           const hasSpecs=row.spec_bs||row.spec_bct||row.spec_ect||row.board_gsm||row.reqBoxWt;
                           if(!hasSpecs)return<span title="No customer specs entered — nothing to check" style={{color:C.slateL,fontSize:11}}>—</span>;
                           if(!res)return<span title="Not calculated — run Calculate All first">⚪</span>;
-                          const sp2=buildSpecFromRow(autoCalcPPDims(row),constructionLib.find(c=>c.code===row.constructionCode),batchProfile);
+                          const sp2=buildSpecFromRow(autoCalcPPDims(row),constructionCatalogue.find(c=>c.code===row.constructionCode),batchProfile);
                           if(!sp2)return"—";
                           const aC=checkSpecCompliance(sp2,res);
                           const wtOk=(!row.reqBoxWt||!+row.reqBoxWt)||Math.abs(res.wtSheet*1000*0.98-(+row.reqBoxWt))/(+row.reqBoxWt)<=0.015;

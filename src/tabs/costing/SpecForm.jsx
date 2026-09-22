@@ -35,7 +35,7 @@ export default function SpecForm({onChooseConstruction}){
     spec, s, setAutoFill, setSetAutoFill, activeBatchRowId,
     aiNotes, setAiNotes, showToast, card,
     gradeCodes, partitionsMaster, freight,
-    constructionLib, batchDefaults, batchRows, items,
+    constructionCatalogue, batchDefaults, batchRows, items,
     r, _sendReady, _wasteDefBox, _wasteDefPP, _convDefBox, _convDefPP,
     pushCostingToBatchRow,
   } = useAppState();
@@ -68,7 +68,7 @@ export default function SpecForm({onChooseConstruction}){
   const _intFromRow=!!activeBatchRowId
     &&+(spec.interest??0.5)!==+(_bdC.interest??0.5);
   const _selectedConstruction=spec.constructionCode
-    ?constructionLib.find(c=>c.code===spec.constructionCode):null;
+    ?constructionCatalogue.find(c=>c.code===spec.constructionCode):null;
   const _selectedConstructionExact=!!_selectedConstruction&&sameConstruction(_selectedConstruction,spec);
   const _constructionStatusTitle=_selectedConstruction
     ?_selectedConstructionExact
@@ -704,7 +704,7 @@ export default function SpecForm({onChooseConstruction}){
             // BH-1: detect if construction fields in Costing differ from the library entry
             // for the active batch row. If so, warn the Maker before they navigate away.
             const _activeRow=batchRows.find(r=>r.id===activeBatchRowId);
-            const _libEntry=_activeRow?constructionLib.find(c=>c.code===_activeRow.constructionCode):null;
+            const _libEntry=_activeRow?constructionCatalogue.find(c=>c.code===_activeRow.constructionCode):null;
             const _constrChanged=_libEntry&&(
               +spec.ply!==+_libEntry.ply||
               spec.boxType!==_libEntry.boxType||

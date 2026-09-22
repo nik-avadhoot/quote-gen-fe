@@ -25,7 +25,7 @@ import { C } from "../theme.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useQuoteActions(st){
-  const { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchFreight, batchProfile, batchResults, batchRows, boxTrim, constructionLib, freight, items, locations, missing, partitionsMaster, r, rates, restoreRef, sectors, setAiNotes, setAutoCodeSeq, setBatchFreight, setBatchResults, setBatchRows, setConstructionLib, setItems, setQuoteView, setSavedQuotes, setTab, setTemplateB64, setTemplateLoaded, showToast, spec } = st;
+  const { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchFreight, batchProfile, batchResults, batchRows, boxTrim, constructionCatalogue, constructionLib, freight, items, locations, missing, partitionsMaster, r, rates, restoreRef, sectors, setAiNotes, setAutoCodeSeq, setBatchFreight, setBatchResults, setBatchRows, setConstructionLib, setItems, setQuoteView, setSavedQuotes, setTab, setTemplateB64, setTemplateLoaded, showToast, spec } = st;
   const batchCommercialDefaults=resolveBatchCommercialDefaults(batchProfile,
     sectors.find(sector=>sector.code===batchProfile.sector));
 
@@ -227,7 +227,7 @@ export function useQuoteActions(st){
   // costed at the derived rate on screen but exported at 0.5%.
   const batchInterestPct=()=>resolveBatchInterest(batchProfile).value;
   const calcBatchRow=(row)=>{
-    const constEntry=constructionLib.find(c=>c.code===row.constructionCode);
+    const constEntry=constructionCatalogue.find(c=>c.code===row.constructionCode);
     if(!constEntry||!isUsableConstruction(constEntry))return null;
     const dimRow=autoCalcPPDims(row);
     const isPP=isPPType(dimRow.itemType); // R-2
@@ -282,7 +282,7 @@ export function useQuoteActions(st){
       return;
     }
     const incompleteConstructions=batchRows.filter(row=>{
-      const entry=constructionLib.find(c=>c.code===row.constructionCode);
+      const entry=constructionCatalogue.find(c=>c.code===row.constructionCode);
       return entry&&!isUsableConstruction(entry);
     });
     if(incompleteConstructions.length>0){
@@ -307,7 +307,7 @@ export function useQuoteActions(st){
   const getBatchRowStatus=(row)=>{
     const dimRow=autoCalcPPDims(row);
     if(!dimRow.L||!dimRow.W||!row.constructionCode)return"incomplete";
-    const constEntry=constructionLib.find(c=>c.code===row.constructionCode);
+    const constEntry=constructionCatalogue.find(c=>c.code===row.constructionCode);
     if(!constEntry||!isUsableConstruction(constEntry))return"incomplete";
     // Plate/Partition rows are flat pieces — H not required
     const isFlatPiece=isPPType(row.itemType); // R-2
@@ -330,7 +330,7 @@ export function useQuoteActions(st){
       return;
     }
     const incompleteConstructions=batchRows.filter(row=>{
-      const entry=constructionLib.find(c=>c.code===row.constructionCode);
+      const entry=constructionCatalogue.find(c=>c.code===row.constructionCode);
       return entry&&!isUsableConstruction(entry);
     });
     if(incompleteConstructions.length>0){
@@ -395,7 +395,7 @@ export function useQuoteActions(st){
         const _fr=batchFreight?.[row.id];
         const _why=_fr&&_fr.source==="unresolved"?` — ${freightBlockerText(spec,_fr)}`:"";
         skippedRows.push(`Row ${ri+1}${row.matCode?` [${row.matCode}]`:""}${_why}`);return;}
-      const constEntry=constructionLib.find(c=>c.code===row.constructionCode);
+      const constEntry=constructionCatalogue.find(c=>c.code===row.constructionCode);
       if(!constEntry){skippedRows.push(`Row ${ri+1}${row.matCode?` [${row.matCode}]`:""} (no construction)`);return;}
       const dimRow=autoCalcPPDims(row); // A1-01: use SET-Code-aware dim resolution
       const sp=buildSpecFromRow(dimRow,constEntry,batchProfile);

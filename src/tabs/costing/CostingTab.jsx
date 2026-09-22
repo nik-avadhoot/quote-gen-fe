@@ -54,7 +54,7 @@ const Subtab=({label,active,onClick,title})=>(
 export default function CostingTab(){
   const {
     activeBatchRowId, batchRows, discardNewDraft, exitReview,
-    constructionLib, newDraftKeepClient, newDraftNewClient, profileDraft, reviewDirty,
+    constructionCatalogue, newDraftKeepClient, newDraftNewClient, profileDraft, reviewDirty,
     sendCostingToBatch, setSpec, setTab, showToast, spec, startNewSku, _sendReady,
   } = useAppState();
   const inReview=!!activeBatchRowId;
@@ -70,7 +70,7 @@ export default function CostingTab(){
     setConstructionQuery('');
   };
   const openConstructionPicker=()=>{
-    const candidates=constructionLib.filter(c=>(c.status||'active')==='active'&&isUsableConstruction(c));
+    const candidates=constructionCatalogue.filter(c=>(c.status||'active')==='active'&&isUsableConstruction(c));
     const sector=spec.sector&&candidates.some(c=>(c.sector||'')===spec.sector)?spec.sector:'';
     const clientPool=sector?candidates.filter(c=>(c.sector||'')===sector):candidates;
     const client=spec.client&&clientPool.some(c=>(c.client||'')===spec.client)?spec.client:'';
@@ -185,7 +185,7 @@ export default function CostingTab(){
             onClick={activeBatchRowId?undefined:discardNewDraft}/>}
         </div>
       </div>
-      <ConstructionPicker open={constructionPickerOpen&&!inReview} constructions={constructionLib}
+      <ConstructionPicker open={constructionPickerOpen&&!inReview} constructions={constructionCatalogue}
         query={constructionQuery} onQueryChange={setConstructionQuery}
         filter={constructionFilter} onFilterChange={setConstructionFilter}
         selectedCode={spec.constructionCode||''}

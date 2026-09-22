@@ -10,6 +10,10 @@ import { C, mono } from "../theme.js";
 export default function ConstructionPicker({
   open, constructions, query, onQueryChange, filter, onFilterChange,
   selectedCode, contextLabel, onClose, onOpenLibrary, onSelect,
+  // Optional in-place creation. `onCreate` is absent wherever the caller may
+  // not create one, and `createPanel` is what that caller renders in its place
+  // — the picker itself decides nothing about authority or destination.
+  onCreate, createPanel,
 }){
   if(!open)return null;
   const oq=(query||'').toLowerCase();
@@ -52,6 +56,11 @@ export default function ConstructionPicker({
           {contextLabel&&<div style={{fontSize:10,color:"rgba(255,255,255,.6)",marginTop:1,
             overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>↳ {contextLabel}</div>}
         </div>
+        {onCreate&&<button onClick={onCreate} title="Add a governed Construction for this Batch's plant"
+          style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${C.green}`,
+            background:"transparent",color:C.green,fontSize:10,fontWeight:700,cursor:"pointer"}}>
+          + New
+        </button>}
         <button onClick={onOpenLibrary} title="Open full Construction Library tab"
           style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${C.amber}`,
             background:"transparent",color:C.amber,fontSize:10,fontWeight:700,cursor:"pointer"}}>
@@ -61,6 +70,9 @@ export default function ConstructionPicker({
           style={{background:"none",border:"none",color:"rgba(255,255,255,.6)",cursor:"pointer",
             fontSize:18,lineHeight:1,padding:"0 2px"}}>×</button>
       </div>
+
+      {createPanel&&<div style={{padding:"8px 12px",borderBottom:`1px solid ${C.border}`,
+        background:C.cream,flexShrink:0,maxHeight:"60%",overflow:"auto"}}>{createPanel}</div>}
 
       <div style={{padding:"8px 12px",borderBottom:`1px solid ${C.border}`,background:C.cream,flexShrink:0}}>
         <input value={query||''} onChange={e=>onQueryChange(e.target.value)}

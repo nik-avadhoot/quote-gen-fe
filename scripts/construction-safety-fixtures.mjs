@@ -71,7 +71,11 @@ applied.layers.TOP.gsm=999;
 check(complete5.layers.TOP.gsm===180,
   "CON-SAFE-6c Costing selection deep-copies layers instead of mutating the shared library entry");
 check(bridge.includes("constructionLayerIssues(spec)")
-  && bridge.includes("selectableConstructionLib=constructionLib.filter")
+  // 2026-09-22: the source is the governed catalogue (published + adopted at the
+  // Batch's plant, with legacy A-Z entries behind it), not the browser library.
+  // The boundary this check exists for — active-only, shared completeness,
+  // safe matching — is unchanged; only where the candidates come from moved.
+  && bridge.includes("selectableConstructionLib=constructionCatalogue.filter")
   && bridge.includes("findUsableConstructionMatch(selectableConstructionLib,spec)")
   && bridge.includes("findUsableStandardConstructionMatch(selectableConstructionLib,spec)"),
   "CON-SAFE-7 Start Costing send uses the shared completeness, active-only and safe-match boundary");

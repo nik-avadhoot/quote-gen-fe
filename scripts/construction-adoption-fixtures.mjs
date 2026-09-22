@@ -49,9 +49,16 @@ check(screen.includes('apiFetch("/masters/constructions")')
   && screen.includes("callerAccessiblePlants(plantState.rows, profile)")
   && screen.includes("Published, approved Construction versions by the caller's exact Producing Plant scope"),
   "U2-PCA-FE-7 the screen composes only the existing caller-scoped governed reads");
-check(!screen.includes("runMutation(") && !screen.includes('method: "POST"')
-  && screen.includes("proposing, approving and withdrawing adoption remain outside this slice"),
-  "U2-PCA-FE-8 the increment exposes no adoption mutation path");
+// 2026-09-22 (Product Owner): the read-only slice gained EXACTLY ONE mutation —
+// the Admin single-step publish-and-adopt. The claim under test is therefore no
+// longer "no mutation exists" but "only that one exists, and only for a caller
+// holding BOTH capabilities". Proposing, approving and withdrawing adoption are
+// still outside this screen, and this check fails if any of them appears.
+check(screen.includes('apiFetch("/masters/constructions/publish-and-adopt"')
+  && screen.includes('hasCapability(effectiveProfile, "manage_construction_library")')
+  && screen.includes('hasCapabilityAtPlant(effectiveProfile, "adopt_construction_for_plant"')
+  && !screen.includes("/withdraw") && !screen.includes("propose_construction"),
+  "U2-PCA-FE-8 the only mutation is the capability-gated Admin publish-and-adopt");
 check(sidebar.includes('item("conadoption","PA","Plant Construction Adoption"')
   && app.includes('fixtureIllustration === "u2-constructions"')
   && app.includes('<ConstructionLibraryScreen fixtureOnly initialView="adoption"'),

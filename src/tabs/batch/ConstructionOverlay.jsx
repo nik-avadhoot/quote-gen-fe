@@ -1,16 +1,28 @@
 // Batch Builder's thin adapter around the shared Construction picker.
+//
+// It also hosts the in-place "New construction" window (beta issue log item 2):
+// the Maker no longer leaves Batch Entry for another screen and comes back. The
+// new Construction is created in the GOVERNED library (Product Owner ruling
+// 2026-09-22), so the picker reloads and applies it by its permanent CON- code.
+import { useState } from "react";
 import ConstructionPicker from "../../components/ConstructionPicker.jsx";
+import GovernedConstructionCreate from "./GovernedConstructionCreate.jsx";
 import { constrAutoName } from "../../lib/constructionName.js";
+import { hasCapability, hasCapabilityAtPlant } from "../../lib/capabilities.js";
 import { useAppState } from "../../state/AppStateContext.js";
 
 export default function ConstructionOverlay(){
   const {batchConstrOverlay,batchConstrOverlayFilter,batchConstrOverlayQuery,
-    batchConstrTargetRowId,batchRows,constructionLib,invalidateBatchRow,
+    batchConstrTargetRowId,batchRows,constructionCatalogue,gradeCodes,
+    governedConstructionBatchPlant,invalidateBatchRow,profile,
+    refreshGovernedConstructions,
     setBatchConstrOverlay,setBatchConstrOverlayFilter,setBatchConstrOverlayQuery,
     setBatchConstrTargetRowId,setBatchRows,setTab,showToast}=useAppState();
+  const[creating,setCreating]=useState(false);
   const targetRow=batchConstrTargetRowId
     ?batchRows.find(row=>row.id===batchConstrTargetRowId):null;
   const close=()=>{
+    setCreating(false);
     setBatchConstrOverlay(false);
     setBatchConstrTargetRowId(null);
     setBatchConstrOverlayQuery('');
@@ -40,9 +52,35 @@ export default function ConstructionOverlay(){
     showToast(`✅ [${construction.code}] ${constrAutoName(construction)} applied`,'success');
     close();
   };
-  const openLibrary=()=>{close();setTab('constrlib');};
+  // The governed library is the destination now; the browser-held legacy list
+  // keeps its own screen for the entries already stored against A-Z codes.
+  const openLibrary=()=>{close();setTab('conlib');};
+  // Courtesy only — the database checks both capabilities again (S4-7).
+  const mayCreate=hasCapability(profile,"manage_construction_library")
+    &&!!governedConstructionBatchPlant
+    &&hasCapabilityAtPlant(profile,"adopt_construction_for_plant",
+      governedConstructionBatchPlant.plant_code);
+  // The created Construction is published and adopted, so it is in the caller's
+  // next catalogue read. Apply it only after that read, never from the response
+  // alone: the row must point at what the library actually holds.
+  const created=async data=>{
+    setCreating(false);
+    await refreshGovernedConstructions();
+    showToast(`✅ [${data?.construction_code||"CON-?"}] published and adopted`,'success',5000);
+    if(data?.construction_code&&targetRow){
+      invalidateBatchRow(targetRow.id);
+      setBatchRows(prev=>prev.map(row=>row.id===targetRow.id
+        ?{...row,constructionCode:data.construction_code}:row));
+      close();
+    }
+  };
 
-  return <ConstructionPicker open={batchConstrOverlay} constructions={constructionLib}
+  return <ConstructionPicker open={batchConstrOverlay} constructions={constructionCatalogue}
+    createPanel={creating&&mayCreate
+      ?<GovernedConstructionCreate plant={governedConstructionBatchPlant} gradeCodes={gradeCodes}
+         onCancel={()=>setCreating(false)} onCreated={created}/>
+      :null}
+    onCreate={mayCreate?()=>setCreating(true):null}
     query={batchConstrOverlayQuery} onQueryChange={setBatchConstrOverlayQuery}
     filter={batchConstrOverlayFilter} onFilterChange={setBatchConstrOverlayFilter}
     selectedCode={targetRow?.constructionCode||''}
