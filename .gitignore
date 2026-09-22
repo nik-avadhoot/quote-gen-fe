@@ -28,3 +28,6 @@ pnpm-debug.log*
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# Tool-managed agent worktrees — never repository content
+.claude/worktrees/
