@@ -243,10 +243,12 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
 
   // ── Update RATE MASTER prices and discounts ─────────────────────────────
   // MIRRORS quote-gen-be/server.py "Update RATE MASTER" — change one, change
-  // both. Grades live in A7:G24; A25:C29 is the GSM surcharge table that CBB+PP
-  // reads on the FIXED range $A$26:$C$29, so nothing is written there. Grade
-  // lookups are whole-column ($A:$G, exact), so grades added in the app are
-  // appended below the sheet notes instead of being dropped.
+  // both. Grades live in A7:G24 (A7:G23 when this landed; the Product Owner
+  // added one by hand and filled the block). The GSM surcharge table moved in
+  // that same hand-edit from A26:C29 to $K$7:$M$10, so check the live template
+  // before touching anything below the grades. Grade lookups are whole-column
+  // ($A:$G, exact), so grades added in the app are appended below the notes
+  // instead of being dropped.
   if(ws_rm){
     const _num=(v,d)=>{if(v===null||v===undefined||v==='')return d;const n=+v;return Number.isNaN(n)?d:n;};
     const setFormula=(addr,f)=>{ws_rm[addr]={...(ws_rm[addr]||{}),t:'n',f};delete ws_rm[addr].v;delete ws_rm[addr].w;};
@@ -256,6 +258,10 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
       if(codeCell?.v!==undefined&&codeCell.v!=='')templateRows.set(String(codeCell.v).trim(),r);
     }
     const writeRateRow=(r,appRate)=>{
+      // The code cell must be TEXT: CBB+PP writes layer grades as text and
+      // VLOOKUP(...,0) never matches text against a number, so a hand-typed
+      // numeric code (A12 arrived as the number 25) exported a blank rate.
+      sc(ws_rm,`A${r}`,String(appRate.code??'').trim());
       sc(ws_rm,`C${r}`,_num(appRate.price,0));   // Paper Price
       sc(ws_rm,`E${r}`,_num(appRate.disc,1.5));
       sc(ws_rm,`F${r}`,_num(appRate.freight,0)); // Incoming Freight (col F)
@@ -275,7 +281,6 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
       'ABCDEFGH'.split('').forEach(col=>{
         if(ws_rm[`${col}23`]?.s)ws_rm[`${col}${r}`]={...(ws_rm[`${col}${r}`]||{}),s:ws_rm[`${col}23`].s};
       });
-      sc(ws_rm,`A${r}`,code);
       sc(ws_rm,`B${r}`,appRate.desc||'');
       writeRateRow(r,appRate);
       setFormula(`G${r}`,`C${r}+D${r}-E${r}+F${r}`);
