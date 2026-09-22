@@ -60,9 +60,14 @@ check(Object.values(screens).every(src => src.includes("denseTable") && src.incl
   "SS-4 every table is dense with a frozen identity column and 26px rows");
 check(Object.values(screens).every(src => src.includes("<ScreenFooter") && src.includes("<ProvenanceTag kind=")),
   "SS-5 provenance is stated once, in the footer");
-check([policies, rates, freight].every(src => src.includes('<ProvenanceTag kind="local" />'))
+// SS-6 CHANGED, 2026-09-22: Sector Defaults is no longer browser state, so
+// Commercial Policies states provenance PER SECTION - governed for Sectors,
+// local for Box Trim and Partitions, which still have no governed table.
+check(policies.includes('<ProvenanceTag kind={active.provenance} />')
+  && policies.includes('provenance: "governed"') && policies.includes('provenance: "local"')
+  && [rates, freight].every(src => src.includes('<ProvenanceTag kind="local" />'))
   && users.includes('<ProvenanceTag kind="governed" />') && plants.includes('<ProvenanceTag kind="governed" />'),
-  "SS-6 the three commercial masters say Local (browser state); Users and Plants say Governed");
+  "SS-6 Commercial Policies states provenance per section; Rates and Freight say Local; Users and Plants say Governed");
 check([policies, rates, freight, plants].every(src => !/fontSize: ?(?!T\.)[0-9]/.test(src)),
   "SS-7 type sizes on the four rewritten masters are T tokens, never hardcoded pixels");
 check([policies, rates, freight, users].every(src => src.includes("<PanelFocusToggle") && src.includes("usePanelFocus()")
@@ -76,11 +81,26 @@ check(policies.includes('role="tablist" aria-label="Commercial policy sections"'
   && policies.includes('{section==="partitions-master"&&partitionsTable()}')
   && !policies.includes('href={`#${id}`}'),
   "SS-9 Commercial Policies shows one section at a time behind a switch, replacing the stacked jump-link page");
-check(policies.includes("const isReferenced=batchProfile.sector===row.code||")
-  && policies.includes("Code locked — referenced by")
-  && policies.includes('+"\\nThis cannot be undone.";')
-  && policies.includes("if(window.confirm(msg))setSectors(prev=>prev.filter((_,j)=>j!==i));"),
-  "SS-10 the sector code-rename lock and the sector delete confirm are unchanged");
+// SS-10 CHANGED, 2026-09-22: Commercial Policies became the GOVERNED Sector
+// master. The two behaviours this gate used to assert were properties of the
+// retired browser-local list and cannot exist any more:
+//   * the code-rename lock ("editable while unreferenced") - a governed Sector
+//     code is PERMANENT, because Costing resolves a Sector by it and there is
+//     no governed rename-the-code operation to expose;
+//   * the delete confirm - no Family D table has a DELETE policy (CDM-31), so
+//     deactivation is the only exit.
+// The gate now asserts the governed invariants that replaced them, including
+// that no local sector mutation survives anywhere on the screen.
+check(policies.includes("A Sector code is permanent.")
+  && policies.includes("deactivateSectorConfirmMessage")
+  && policies.includes("Deactivate") && policies.includes("Reactivate")
+  && !policies.includes("setSectors(")
+  && !policies.includes("Code locked"),
+  "SS-10 the Sector code is permanent and a Sector is deactivated, never deleted");
+check(policies.includes('runMutation("/masters/sectors"')
+  && policies.includes("/masters/sectors/${row.id}/commercials")
+  && !policies.includes(".table(") && !policies.includes(".rpc("),
+  "SS-10b every Sector write goes through a governed backend route, never direct SQL");
 check(policies.includes("Reset every box-type trim margin to the shipped defaults?")
   && policies.indexOf("if(!window.confirm(\"Reset every box-type trim") < policies.indexOf("setBoxTrim(fresh);")
   && policies.includes("setItem('cbb_boxtrim',JSON.stringify(fresh));")
@@ -182,7 +202,12 @@ check(count(pricingBasis, /\.\.\.denseTable, minWidth/g) === 3 && pricingBasis.i
 // Browser-measured at 1440x900, fixture-browser: rows 41 -> 26px, grid toolbar
 // 53 -> 43px, table header 39 -> 20px, Delivery Group band 33 -> 27px. The
 // Batch Profile bar above the grid is deliberately untouched.
-check(batchGrid.includes('role="toolbar" aria-label="Batch Builder grid controls" style={{...toolbar,gap:8,lineHeight:1.3}}')
+// 2026-09-22: the local `gap:8` override is gone. The shared toolbar's own gap
+// is 6, and at the beta 1366px width those two extra pixels across seven gaps
+// were part of what wrapped this toolbar onto a second row. Only the override
+// was dropped; the shared token and the pinned line-height are unchanged.
+check(batchGrid.includes('role="toolbar" aria-label="Batch Builder grid controls" style={{...toolbar,lineHeight:1.3}}')
+  && !batchGrid.includes("{...toolbar,gap:8")
   && batchGrid.includes('import { iconButton, toolbar } from "../../ui/screenStandards.js"')
   && !batchGrid.includes('padding:"8px 12px"'),
   "SS-31 Batch Builder: the grid toolbar is the shared 43px toolbar, with its line-height pinned");

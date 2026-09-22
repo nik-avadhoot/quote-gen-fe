@@ -467,7 +467,12 @@ check(workspacePanel.includes("fixtureMutation")
 check(pricingState.includes("durableBatch")
   && batchEntry.includes("key={durableBatch?.id || \"unbound\"}")
   && costingBridge.includes("const startNewBatch=()=>setNewBatchDialogOpen(true)")
-  && costingBridge.includes("const completeNewBatchStart=(governedBatch=null)=>")
+  // 2026-09-22: completeNewBatchStart gained a second, DEFAULTED argument for
+  // the Quick-to-Customer-quote promotion path. The sector inheritance this
+  // check is about is unchanged — `freshBatchProfileValues(governedBatch)` still
+  // supplies it on both paths — so the signature is matched by its stable
+  // prefix rather than being pinned to an exact arity.
+  && costingBridge.includes("const completeNewBatchStart=(governedBatch=null,")
   && costingBridge.includes("freshBatchProfileValues(governedBatch)")
   && batchGrid.includes("resolveBatchCommercialDefaults(batchProfile")
   && quoteActions.includes("batchCommercialDefaults.wastePP")

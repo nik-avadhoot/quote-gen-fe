@@ -19,8 +19,9 @@ export default function NewGovernedBatchPanel({
   currentFixtureBatch = null,
   onFixtureCreated = null,
 }) {
-  const { batchProfile, completeNewBatchStart, durableBatch, newBatchDialogOpen,
-    profileDraft, setNewBatchDialogOpen, showToast } = useAppState();
+  const { batchProfile, bindGovernedBatch, completeNewBatchStart, durableBatch,
+    isPromoting, newBatchDialogOpen, profileDraft, returnToQuickCalculation,
+    setNewBatchDialogOpen, showToast } = useAppState();
   const [state, setState] = useState(() => fixtureOnly
     ? { status: "ready", families: fixtureOptions?.families || [],
       plants: fixtureOptions?.plants || [], sectors: fixtureOptions?.sectors || [] }
@@ -133,7 +134,13 @@ export default function NewGovernedBatchPanel({
     }, { showToast, successMessage: "Governed Batch created" });
     if (data?.batch) {
       await releasePriorLock();
-      completeNewBatchStart(data.batch);
+      // A PROMOTION keeps the local rows as inputs; an ordinary + New Batch
+      // clears them exactly as it always did.
+      completeNewBatchStart(data.batch, { keepLocalInputs: isPromoting?.() === true });
+      // The ONE place a Customer-quote selection becomes governed. Until this
+      // line runs the lane reads `customer_pending` and the interface does not
+      // claim governed authority for anything (lib/quoteJourney.js).
+      bindGovernedBatch?.(data.batch);
     }
     setBusy(false);
   };
@@ -148,6 +155,11 @@ export default function NewGovernedBatchPanel({
     }
     await releasePriorLock();
     completeNewBatchStart(null);
+    // Cleared the local draft and unbound the Batch without creating one, so
+    // the customer-quote intent recorded when this panel opened is no longer
+    // true. Fall back to the private lane rather than leaving a pending
+    // selection that claims a workflow the user backed out of.
+    returnToQuickCalculation?.();
     setBusy(false);
   };
 
@@ -179,7 +191,9 @@ export default function NewGovernedBatchPanel({
             <span>Replaces only this labelled, in-memory fixture workspace.</span>
             <span>Creates no Batch reference, database record, calculation, Quote or workflow action.</span>
           </> : <>
-            <span>Clears the current local profile, SKU rows, results and Quote Items.</span>
+            <span>{isPromoting?.()
+              ? "Keeps your SKU rows as inputs and keeps the customer and route. Clears every local price and the Quote Items — governed Calculate produces the real prices."
+              : "Clears the current local profile, SKU rows, results and Quote Items."}</span>
             <span>{profileDraft !== null
               ? "Keeps the independent new-Batch Costing draft."
               : "Discards the same-Batch Costing draft because it belongs to the Batch being left."}</span>

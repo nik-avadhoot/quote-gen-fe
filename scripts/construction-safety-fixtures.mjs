@@ -18,6 +18,10 @@ const costingTab = fs.readFileSync(path.join(root, "src/tabs/costing/CostingTab.
 const specForm = fs.readFileSync(path.join(root, "src/tabs/costing/SpecForm.jsx"), "utf8");
 const batchGrid = fs.readFileSync(path.join(root, "src/tabs/batch/BatchGrid.jsx"), "utf8");
 const quoteActions = fs.readFileSync(path.join(root, "src/state/useQuoteActions.js"), "utf8");
+// 2026-09-22: the Calculate/Send refusals moved into one shared register so the
+// Batch Builder toolbar can show them BEFORE the click. The guard is unchanged
+// and is still asserted below - it is simply read from where it now lives.
+const journey = fs.readFileSync(path.join(root, "src/lib/quoteJourney.js"), "utf8");
 
 let passes = 0;
 const failures = [];
@@ -99,7 +103,11 @@ check(calcCosting({
 }, [], {}, undefined) === null,
   "CON-SAFE-11 the engine refuses partial-layer arithmetic even when called directly");
 check(quoteActions.includes("!isUsableConstruction(constEntry)")
-  && quoteActions.includes("Cannot send: incomplete construction")
+  && journey.includes("entry && !isUsableConstruction(entry)")
+  && journey.includes("Cannot send: incomplete construction")
+  && journey.includes('code: "construction_incomplete", gate: "calculate"')
+  && quoteActions.includes('firstRefusal(localWorkBlockers({batchRows,batchProfile,')
+  && quoteActions.includes('firstRefusal(localBlockers(),"send")')
   && batchGrid.includes("constructionUsable=!!ce&&isUsableConstruction(ce)")
   && batchGrid.includes("incomplete`"),
   "CON-SAFE-12 existing incomplete row links cannot calculate or reach Quote Items and are visibly flagged");

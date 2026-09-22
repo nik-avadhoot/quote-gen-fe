@@ -863,7 +863,14 @@ export function useCostingBatchBridge(st){
   // `+ New Batch` now opens the governed creation surface. Nothing is cleared
   // until public.create_batch has succeeded and its complete workspace has
   // been read back. This function performs that post-success transition only.
-  const completeNewBatchStart=(governedBatch=null)=>{
+  // `keepLocalInputs` is the PROMOTION path: Quick-calculation work being
+  // carried into a Customer quote. It keeps the local rows as INPUTS and the
+  // customer/route context the governed Batch does not itself carry, and it
+  // still clears every local RESULT. That split is the whole point: inputs may
+  // be reused, a browser-local price may not become governed evidence by being
+  // looked at inside a governed Batch (CDM-02, CDM-22). Default false, so the
+  // ordinary + New Batch path is byte-for-byte what it was.
+  const completeNewBatchStart=(governedBatch=null,{keepLocalInputs=false}={})=>{
             // Fix 5: also clear Quote Items on New Batch so prior customer's data cannot leak
             // ── D-2: name what CHANGES, not four of ten things ───────────────
             // The old confirm named the profile, rows, results and Quote Items —
@@ -939,13 +946,23 @@ export function useCostingBatchBridge(st){
                   setItem('cbb_batch_previous',JSON.stringify({..._prev,archivedAt:Date.now()}));
               }
             }catch{ /* unparseable autosave — leave any existing archive intact */ }
-            const fresh=freshBatchProfileValues(governedBatch);
+            const _freshProfile=freshBatchProfileValues(governedBatch);
+            // On a promotion the governed Batch supplies sector and plant; the
+            // customer, route and payment context came with the work and would
+            // otherwise be silently dropped, leaving kept rows with no customer.
+            const fresh=keepLocalInputs
+              ?{..._freshProfile,client:batchProfile.client,delivery:batchProfile.delivery,
+                customerType:batchProfile.customerType,priceContext:batchProfile.priceContext,
+                paymentDisc:batchProfile.paymentDisc}
+              :_freshProfile;
             setBatchProfile(fresh);
             // C5 · B2: seed the draft from the `fresh` object we just built, NOT
             // from batchProfile - that state does not update until the next
             // render, so reading it here would seed from the batch being cleared.
             if(!_isNewBatchDraft)resetDraft(specContextOnly(fresh),null);
-            setBatchRows([]);
+            if(!keepLocalInputs)setBatchRows([]);
+            // ALWAYS cleared, including on a promotion. This is what makes
+            // "copy the inputs, require governed recalculation" true.
             setBatchResults({});
             setExpandedRows(new Set());
             exitReview(); // C4: leaves REVIEW and restores START's workspace flags
@@ -974,7 +991,9 @@ export function useCostingBatchBridge(st){
             setDurableBatch(governedBatch);
             setNewBatchDialogOpen(false);
             showToast(governedBatch
-              ?`✅ Governed Batch ${governedBatch.batch_reference} started — Costing spec kept`
+              ?(keepLocalInputs
+                ?`✅ Governed Batch ${governedBatch.batch_reference} started — rows kept as inputs, Costing spec kept`
+                :`✅ Governed Batch ${governedBatch.batch_reference} started — Costing spec kept`)
               :"✅ Local Batch draft cleared and durable Batch unbound — Costing spec kept",'success');
   };
 

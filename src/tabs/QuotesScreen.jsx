@@ -2,12 +2,13 @@ import { useMemo, useState } from "react";
 import { apiFetch } from "../lib/apiClient.js";
 import { isFeatureEnabled } from "../lib/featureFlags.js";
 import { classifyResponse } from "../lib/backendError.js";
+import { revisionShareability } from "../lib/quoteJourney.js";
 import {
   orderedQuoteRevisions, quoteActor, quoteRevisionLabel, U5_QUOTE_ILLUSTRATION,
 } from "../lib/quoteEvidenceModel.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag } from "../ui/dataDisplay.jsx";
-import { GovernedActions, ScreenFooter } from "../ui/screenChrome.jsx";
+import { GovernedActions, ScreenFooter, ShareabilityNote } from "../ui/screenChrome.jsx";
 import { control, toolbar } from "../ui/screenStandards.js";
 import { C, T, mono, sans } from "../theme.js";
 
@@ -149,7 +150,14 @@ export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, 
       {revision ? <main className="quote-revision-detail">
         <header className="quote-revision-heading">
           <div><span>Immutable Quote evidence</span><h2>{quoteRevisionLabel(revision)}</h2></div>
-          <div><LifecycleBadge status={revision.workflow_status} />{revision.standing && <LifecycleBadge status={revision.standing} />}</div>
+          {/* This revision's own authority, not the lane of any current Batch
+              Builder work. Approval makes it shareable; Issue records that it
+              was actually sent (CDM-24). */}
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            <LifecycleBadge status={revision.workflow_status} />
+            {revision.standing && <LifecycleBadge status={revision.standing} />}
+            <ShareabilityNote {...revisionShareability(revision)} />
+          </div>
         </header>
         <section className="quote-revision-facts">
           <EvidencePair label="Revision identity" mono>{identity(revision.id)}</EvidencePair>

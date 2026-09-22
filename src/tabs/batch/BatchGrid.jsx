@@ -19,7 +19,7 @@
 //
 // Never reflow this file, never run Prettier or eslint --fix over it.
 // ═══════════════════════════════════════════════════════════════════════════
-import { Fragment, useMemo, useRef } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { BOX_TYPES, PRINTING_TECHNOLOGIES } from "../../data/defaults.js";
 import { buildSpecFromRow, checkSpecCompliance } from "../../engine/costing.js";
 import { resolveBatchCommercialDefaults } from "../../engine/resolveAuthority.js";
@@ -32,12 +32,138 @@ import { STATUS_DISPLAY, constrAutoName } from "../../lib/constructionName.js";
 import { canPinAddOn, MAX_PINNED_ADD_ONS } from "../../lib/pinnedAddOns.js";
 import { batchDeliveryGridEntries, deliverySectionItemCount } from "../../lib/batchDeliverySections.js";
 import { durableRowToLocalPreview } from "../../lib/batchRowModel.js";
+import { FOCUS, LANE_CHOICES } from "../../lib/quoteJourney.js";
 import { C, T, mono, sans } from "../../theme.js";
 import { CollapseIcon, ExpandIcon } from "../../ui/icons.jsx";
 import { iconButton, toolbar } from "../../ui/screenStandards.js";
 import { useAppState } from "../../state/AppStateContext.js";
 
 const BASE_GRID_COLUMN_COUNT=37;
+
+// ── Consequence, on the control ────────────────────────────────────────────
+// The review's second highest-leverage finding is that the verbs here describe
+// mechanics, not consequence, and that the consequence only appears in hover
+// text somewhere else. These two put it on the control itself.
+
+// The authority of a button's outcome, in the app's existing provenance
+// vocabulary (ui/dataDisplay.jsx). Inside a coloured button rather than beside
+// it, so the pairing cannot be misread as a separate status chip.
+const AuthorityTag=()=>(
+  <span title="Runs in this browser only. It is not the governed Batch calculation and is not saved as evidence."
+    style={{fontSize:T.micro,fontWeight:800,letterSpacing:"0.05em",textTransform:"uppercase",
+      padding:"1px 5px",borderRadius:999,lineHeight:1.4,whiteSpace:"nowrap",
+      color:"rgba(255,255,255,.95)",background:"rgba(0,0,0,.22)",
+      border:"1px dashed rgba(255,255,255,.55)"}}>Local</span>);
+
+// What is still standing between this batch and Send — named before the click,
+// and staying on screen until it is fixed. `blockers` comes from
+// lib/quoteJourney.js, which is also what sendAllToQuoteItems refuses on.
+//
+// "Nothing is calculated yet" is added HERE rather than in the model: it is not
+// a refusal Send raises, it is the condition that DISABLES Send. Stating it in
+// this list is what lets the Send button drop its "(calculate first)"
+// parenthetical without losing the §2.5 promise that a disabled control says
+// why — the reason simply moved to the control that carries all the others.
+// What Send is permitted to do, in the readiness verdict's own words. Three
+// states, not two: "ready" is green, a refusal is red, and a PARTIAL batch is
+// amber and says how many rows it would leave behind. A batch with one price
+// and two rows used to read "✓ Ready to send" and then drop a row into a toast
+// after the click - the readiness label and the action's real behaviour have to
+// be the same sentence.
+function SendReadiness({readiness}){
+  if(readiness.state==="empty")return null;
+  const tone=readiness.state==="ready"
+    ?{border:`${C.green}55`,background:C.greenL,color:C.green}
+    :readiness.state==="partial"
+      ?{border:C.amber,background:C.amberL,color:C.amberD}
+      :{border:C.red,background:C.redL,color:C.red};
+  if(readiness.state==="ready")return(
+    <span title="Every check Send runs has passed, and every row in this batch has a current price."
+      style={{display:"inline-flex",alignItems:"center",gap:4,height:26,padding:"0 8px",
+        borderRadius:5,border:`1px solid ${tone.border}`,background:tone.background,color:tone.color,
+        fontSize:T.label,fontWeight:700,whiteSpace:"nowrap",flexShrink:0,fontFamily:sans}}>
+      ✓ {readiness.summary}</span>);
+  return(
+    <details style={{position:"relative",flexShrink:0}}>
+      <summary style={{display:"inline-flex",alignItems:"center",gap:5,height:26,padding:"0 8px",
+        boxSizing:"border-box",borderRadius:5,border:`1px solid ${tone.border}`,
+        background:tone.background,color:tone.color,fontSize:T.label,fontWeight:700,
+        whiteSpace:"nowrap",cursor:"pointer",listStyle:"none",fontFamily:sans}}>
+        {readiness.state==="partial"?`⚠ ${readiness.summary}`:readiness.summary} ▾</summary>
+      <div style={{position:"absolute",left:0,top:"calc(100% + 6px)",zIndex:25,width:340,
+        padding:9,border:`1px solid ${C.border}`,borderRadius:7,background:C.white,
+        boxShadow:"0 8px 22px rgba(28,43,58,.18)",display:"grid",gap:8}}>
+        {readiness.items.map(item=>(
+          <div key={item.code} style={{display:"grid",gap:2}}>
+            <strong style={{fontSize:T.body,color:C.slate,fontWeight:700}}>{item.title}</strong>
+            <span style={{fontSize:T.label,color:C.slateL,lineHeight:1.5,whiteSpace:"normal"}}>
+              {item.message}</span>
+          </div>))}
+        <span style={{fontSize:T.micro,color:C.slateL,letterSpacing:"0.04em",
+          textTransform:"uppercase",fontWeight:800}}>
+          {readiness.canSend
+            ?"Send is allowed — the rows above are left out"
+            :"Send refuses on the first of these"}</span>
+      </div>
+    </details>);
+}
+
+// ── The lane control ───────────────────────────────────────────────────────
+// The one place the user says what this work IS. Asked once: after an answer
+// it collapses to a chip that states the current lane and reopens on click, so
+// it is always reachable and never a confirmation before every action.
+function LaneControl({lane,laneSelection,onChooseQuick,onChooseCustomer,onReturnToQuick,
+  durableBatch,rowCount}){
+  const [open,setOpen]=useState(!laneSelection?.lane);
+  const undecided=!laneSelection?.lane;
+  // Promotion, not a plain create: there is local work to carry over.
+  const promoting=laneSelection?.lane!=="customer"&&rowCount>0;
+  const tone=lane.governed
+    ?{border:C.slateL,background:C.white,color:C.slateM}
+    :undecided||lane.id==="customer_pending"
+      ?{border:C.red,background:C.redL,color:C.red}
+      :{border:C.amber,background:C.amberL,color:C.amberD};
+  return(
+    <div style={{position:"relative",flexShrink:0}}>
+      <button type="button" id={FOCUS.lane} onClick={()=>setOpen(v=>!v)}
+        aria-expanded={open} title={lane.authority}
+        style={{display:"inline-flex",alignItems:"center",gap:5,height:26,padding:"0 8px",
+          boxSizing:"border-box",borderRadius:5,border:`1px ${lane.governed?"solid":"dashed"} ${tone.border}`,
+          background:tone.background,color:tone.color,fontSize:T.label,fontWeight:700,
+          whiteSpace:"nowrap",cursor:"pointer",fontFamily:sans}}>
+        {undecided?"Choose: quick or customer quote":lane.label}
+        {lane.governed&&durableBatch?.batch_reference
+          ?<span style={{fontFamily:mono,fontWeight:600}}>· {durableBatch.batch_reference}</span>:null} ▾
+      </button>
+      {open&&<div role="dialog" aria-label="How this work is saved"
+        style={{position:"absolute",left:0,top:"calc(100% + 6px)",zIndex:40,width:420,
+          padding:11,border:`1px solid ${C.border}`,borderRadius:7,background:C.white,
+          boxShadow:"0 8px 22px rgba(28,43,58,.18)",display:"grid",gap:9}}>
+        <strong style={{fontSize:T.value,color:C.slate}}>How is this work saved?</strong>
+        {LANE_CHOICES.map(choice=>{
+          const active=laneSelection?.lane===choice.id;
+          const isCustomer=choice.id==="customer";
+          return <button key={choice.id} type="button"
+            onClick={()=>{setOpen(false);
+              if(isCustomer)onChooseCustomer({promote:promoting});
+              else if(laneSelection?.lane==="customer")onReturnToQuick();
+              else onChooseQuick();}}
+            style={{textAlign:"left",display:"grid",gap:2,padding:"8px 10px",borderRadius:6,
+              border:`1px solid ${active?C.amber:C.border}`,background:active?C.amberL:C.white,
+              cursor:"pointer",fontFamily:sans}}>
+            <span style={{fontSize:T.value,fontWeight:700,color:C.slate}}>
+              {choice.label}{active?" · current":""}</span>
+            <span style={{fontSize:T.body,color:C.slateM}}>{choice.summary}</span>
+            <span style={{fontSize:T.label,color:C.slateL,lineHeight:1.5}}>{choice.detail}</span>
+            {isCustomer&&promoting&&<span style={{fontSize:T.label,color:C.amberD,fontWeight:700}}>
+              Your {rowCount} row{rowCount===1?"":"s"} {rowCount===1?"is":"are"} kept as inputs.
+              Local prices are cleared — governed Calculate produces the real ones.</span>}
+          </button>;})}
+        {lane.id==="customer_pending"&&<span style={{fontSize:T.label,color:C.red,lineHeight:1.5}}>
+          {lane.authority}.</span>}
+      </div>}
+    </div>);
+}
 
 function DeliverySectionHeader({ section, colSpan, onManage, onWorkspace }) {
   const itemCount = deliverySectionItemCount(section);
@@ -74,6 +200,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
     invalidateBatchRow,loadBatchRowIntoCosting,partitionsMaster,pinnedAddOns,sectors,
     sendAllToQuoteItems,setAutoCodeEnabled,setBatchConstrOverlay,
     setBatchConstrOverlayFilter,setBatchConstrOverlayQuery,setBatchConstrTargetRowId,
+    chooseCustomerQuote,chooseQuick,journey,laneSelection,quoteReadiness,returnToQuickCalculation,
     setBatchProfile,setBatchRows,setBatchWorkspaceRequest,showToast,startNewBatch,togglePinAddOn,toggleRowExpand}=useAppState();
   // D-26: the SET Code value as it stood when the input took focus, so blur can
   // tell an edit from a tab-through and only re-resolve Nos/Set on a real change.
@@ -169,28 +296,67 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
             2. The standalone Construction Library tab */}
         {/* ↓↓↓ old LEFT panel content REMOVED ↓↓↓ */}
         {/* Grid toolbar */}
-        <div role="toolbar" aria-label="Batch Builder grid controls" style={{...toolbar,gap:8,lineHeight:1.3}}>
-          <Btn ch="⚡ Calculate All" v="primary" sm onClick={calculateAll}
+        <div role="toolbar" aria-label="Batch Builder grid controls" style={{...toolbar,lineHeight:1.3}}>
+          {/* CC-03 / CC-04: "Calculate" and "Send" each mean three different
+              things across this application, and the difference that matters is
+              AUTHORITY, not the verb. Both buttons here are the browser-local
+              ones (CDM-02: Batch Entry's local preview is not the governed
+              persisted calculation), so each carries the same LOCAL tag the
+              shell and the Quotes screen already use. The verbs are unchanged -
+              beta testers know them - and the tag is what stops them reading as
+              the governed pair in the Batch workspace. */}
+          {/* The lane comes FIRST, because it is the question every control to
+              its right depends on. Asked once; afterwards it is a chip stating
+              the current lane, which reopens on click. */}
+          <LaneControl lane={journey.lane} laneSelection={laneSelection}
+            durableBatch={durableBatch} rowCount={batchRows.length}
+            onChooseQuick={chooseQuick} onChooseCustomer={chooseCustomerQuote}
+            onReturnToQuick={returnToQuickCalculation}/>
+          <Btn id={FOCUS.calculate}
+            ch={<><span>⚡ Calculate All</span><AuthorityTag/></>} v="primary" sm onClick={calculateAll}
             disabled={batchRows.length===0||constructionCatalogue.length===0}
-            style={{whiteSpace:"nowrap",flexShrink:0}}/>
-          {/* §2.5: the disabled reason is stated on the button, not only by its greyed state. */}
-          <Btn ch={Object.keys(batchResults).length===0?"→ Send All to Quote Items (calculate first)":"→ Send All to Quote Items"}
+            style={{whiteSpace:"nowrap",flexShrink:0,display:"inline-flex",alignItems:"center",gap:6}}/>
+          {/* §2.5: the disabled reason is stated on the button, not only by its
+              greyed state — and `canSend` is the SAME verdict the readiness chip
+              beside it renders, so a button that looks available and a label
+              that says "2 to fix" can no longer appear together. Never
+              `Object.keys(batchResults).length`: that counts refused rows and
+              rows that have since been deleted. */}
+          <Btn id={FOCUS.send}
+            ch={<><span>→ Send All to Quote Items</span><AuthorityTag/></>}
             v="success" sm onClick={sendAllToQuoteItems}
-            disabled={Object.keys(batchResults).length===0}
-            style={{whiteSpace:"nowrap",flexShrink:0}}/>
+            disabled={!quoteReadiness.canSend}
+            title={quoteReadiness.canSend
+              ?(quoteReadiness.state==="partial"
+                ?`${quoteReadiness.summary} — the rows without a price are left out of the customer document`
+                :"Build the working Quote Items every row's price feeds into")
+              :quoteReadiness.summary}
+            style={{whiteSpace:"nowrap",flexShrink:0,display:"inline-flex",alignItems:"center",gap:6}}/>
+          {/* CC-10 / CC-29: the reasons Send will refuse, BEFORE the click and
+              without a toast that disappears. These are the same objects
+              sendAllToQuoteItems refuses on (lib/quoteJourney.js), so the list
+              and the refusal cannot disagree. */}
+          <SendReadiness readiness={quoteReadiness}/>
           <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
             {/* Profile actions, moved here from the Batch Profile bar. Same handlers. */}
+            {/* CC-08: "Import profile" named neither its source nor its
+                destination. The handler is untouched; only the words say what
+                it copies, and from where. */}
             <button type="button" onClick={copyCostingToProfile}
-              title="Import the current Costing profile"
+              title="Copy the customer, route and commercial values from the Start Costing screen into this Batch Profile, replacing what is here now."
               style={{padding:"4px 9px",borderRadius:5,border:"none",background:"#2E6094",
                 color:C.white,fontSize:T.label,cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>
-              ↓ Import profile
+              ↓ Copy from Costing
             </button>
-            <button type="button" onClick={startNewBatch}
-              title="Start a new Batch"
-              style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.amber}`,background:C.white,
+            {/* CC-01 / CC-06: this is the governed door - the only control on
+                this screen that creates a durable, shareable Customer quote -
+                and it read like a local housekeeping action beside "Code tools".
+                The words now say which lane it opens. */}
+            <button type="button" id={FOCUS.workspace} onClick={startNewBatch}
+              title="Start a governed Batch against a Customer Family, Plant and Sector. It gets a permanent Batch reference, persisted calculations and the approval workflow — unlike the quick calculation on this screen."
+              style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.amber}`,background:C.amberL,
                 color:C.amberD,fontSize:T.label,cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>
-              + New batch
+              + New customer quote
             </button>
             <details style={{position:"relative",flexShrink:0}}>
               <summary style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.border}`,
@@ -217,7 +383,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
             style={{padding:"3px 10px",borderRadius:5,border:`1px solid ${C.amber}`,
               background:C.amberL,color:C.amberD,fontSize:T.body,cursor:"pointer",fontWeight:700,
               whiteSpace:"nowrap",flexShrink:0}}>
-            📚 Construction Library ({constructionCatalogue.filter(c=>(c.status||'active')==='active').length} active)
+            Constructions ({constructionCatalogue.filter(c=>(c.status||'active')==='active').length})
           </button>
           <div style={{borderLeft:`1px solid ${C.border}`,paddingLeft:8,display:"flex",gap:6,flexShrink:0}}>
             {["Box","Plate","Part-L","Part-W"].map(t=>(

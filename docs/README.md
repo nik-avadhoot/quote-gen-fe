@@ -57,6 +57,15 @@ without explicit Product Owner scope.
   read-only increment record.
 - [`u2-plant-construction-adoption-increment.md`](u2-plant-construction-adoption-increment.md) —
   read-only Plant Construction Adoption matrix and local verification.
+- [`cost-calculation-journey-ux-review-2026-09-22.md`](cost-calculation-journey-ux-review-2026-09-22.md)
+  — hurdle register CC-01..CC-34 for the login-to-shareable-quote journey. A review record, not an
+  authorisation.
+- [`quote-journey-slice-1-closure.md`](quote-journey-slice-1-closure.md) — slice 1 of that
+  reshaping: one stage vocabulary, one shared readiness register, and verbs that name their
+  consequence. Locally verified, fixture-browser only.
+- [`quote-journey-slice-2-closure.md`](quote-journey-slice-2-closure.md) — slice 2: the lane is an
+  explicit persisted choice rather than an inference, shareability belongs to a Quote revision, and
+  partial calculation stops reading as ready. Locally verified, fixture-browser only.
 
 ## Current open work
 
@@ -69,6 +78,10 @@ without explicit Product Owner scope.
   product decision.
 - [`u2-location-applicability-decision-packet.md`](u2-location-applicability-decision-packet.md) —
   accepted decision packet for governed SKU Master Location applicability (Amendment 05).
+- [`quote-journey-decision-packet-2026-09-22.md`](quote-journey-decision-packet-2026-09-22.md) —
+  open Product Owner decisions D-1..D-9 for reshaping the frontend around the customer's quote.
+  Three of the questions it was asked were already settled canonically and are restated, not
+  re-asked. It does not block work.
 
 ## Active S9 material — do not archive
 

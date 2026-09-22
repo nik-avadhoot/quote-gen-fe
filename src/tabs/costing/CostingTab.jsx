@@ -107,6 +107,17 @@ export default function CostingTab(){
           onClick={inReview?requestExitReview:undefined}
           title={inReview?"Leave this review and return to your Costing draft":undefined}/>
         {inReview&&<Subtab label="REVIEW" active/>}
+        {/* CDM-02 says this screen is a private browser-local scratchpad, and
+            CC-24 records that nothing on it ever says so. One permanent line
+            does, in the strip that already exists, rather than a banner. */}
+        <span title={inReview
+          ? "A review copy of an existing Batch row. It lives for this session only — reload and unpushed changes are gone."
+          : "Your own working draft, kept in this browser. Nothing here is a Quote until it is added to a batch, and no customer can be shown it."}
+          style={{alignSelf:"center",marginLeft:8,padding:"2px 7px",borderRadius:999,
+            fontSize:T.micro,fontWeight:800,letterSpacing:"0.05em",textTransform:"uppercase",
+            whiteSpace:"nowrap",color:C.amberD,background:C.amberL,
+            border:`1px dashed ${C.amber}`}}>
+          {inReview?"Session copy · not saved until Push":"Private draft · this browser only"}</span>
         <div title={[spec.client,spec.material_code,spec.product].filter(Boolean).join(" · ")||"New SKU"}
           style={{alignSelf:"center",minWidth:0,maxWidth:"min(460px,38vw)",marginLeft:8,
             padding:"4px 10px",borderRadius:4,background:"#29465b",color:C.white,
@@ -115,8 +126,10 @@ export default function CostingTab(){
           {[spec.client,spec.material_code,spec.product].filter(Boolean).join(" · ")||"New SKU"}
         </div>
         <div style={{marginLeft:"auto",padding:"3px 8px",display:"flex",gap:6,alignItems:"center"}}>
-          {/* Unlink — shown only in REVIEW mode (activeBatchRowId set). Moved from left panel bottom. */}
-          {activeBatchRowId&&<Btn ch="✕ Unlink" v="ghost" sm onClick={requestExitReview}/>}
+          {/* The review exit — shown only in REVIEW mode (activeBatchRowId set). Moved from
+              left panel bottom. Was labelled "Unlink"; renamed to the user's intent (CC-25),
+              same requestExitReview handler and the same single confirm rule. */}
+          {activeBatchRowId&&<Btn ch="✕ Close review" v="ghost" sm onClick={requestExitReview}/>}
           {/* C12: Context badge — visible when BatchEntry has rows, distinguishes same-batch vs new-batch */}
           {batchRows.length>0&&(
             <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:3,
@@ -135,9 +148,9 @@ export default function CostingTab(){
             return(
             <button onClick={activeBatchRowId?undefined:sendCostingToBatch}
               disabled={_disabled}
-              title={activeBatchRowId?"Unavailable while reviewing an existing Batch row. Unlink the review first."
+              title={activeBatchRowId?"Unavailable while reviewing an existing Batch row. Close the review first."
                 :_newBatchBlocked?"Scratchpad context — go to Batch Entry → + New Batch to clear the old batch first"
-                :_sendReady?"Send this spec to Batch Entry as a new row"
+                :_sendReady?"Add this SKU to the Batch Builder grid as a new row. It stays in this browser until a governed Batch is created."
                 :"Complete dimensions and paper layers first — see panel"}
               style={{padding:"6px 14px",borderRadius:6,border:"none",fontFamily:sans,
                 fontSize:12,fontWeight:700,
@@ -145,12 +158,12 @@ export default function CostingTab(){
                 background:_disabled?"#C0C0C0":C.amber,
                 color:"white",letterSpacing:"0.01em",
                 opacity:_disabled?0.55:1,transition:"all 0.15s"}}>
-              → Send to Batch Entry
+              → Add to batch
             </button>);
           })()}
           <Btn ch="Start new SKU" v="ghost" sm
             disabled={!!activeBatchRowId}
-            title={activeBatchRowId?"Unavailable while reviewing an existing Batch row. Unlink the review first to start a new SKU."
+            title={activeBatchRowId?"Unavailable while reviewing an existing Batch row. Close the review first to start a new SKU."
               :"Another SKU in this batch — construction and board specs carry forward"}
             onClick={activeBatchRowId?undefined:startNewSku}/>
           {/* C5: New Draft replaces "+ New Batch". Two ruled choices, and the

@@ -26,6 +26,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
 import { SPLIT_DEFAULT, panelLayout } from "../lib/panelSplit.js";
+import { revisionShareability } from "../lib/quoteJourney.js";
 import {
   orderedQuoteRevisions, quoteActor, quoteRevisionLabel, U5_QUOTE_CATALOGUE_ILLUSTRATIONS,
   U5_QUOTE_ILLUSTRATION, U5_SUBMITTED_QUOTE_ILLUSTRATION,
@@ -33,7 +34,8 @@ import {
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag } from "../ui/dataDisplay.jsx";
 import {
-  GovernedActions, PanelDivider, PanelFocusToggle, RowDisclosure, ScreenFooter, ToolbarLabel,
+  GovernedActions, PanelDivider, PanelFocusToggle, RowDisclosure, ScreenFooter, ShareabilityNote,
+  ToolbarLabel,
 } from "../ui/screenChrome.jsx";
 import {
   control, denseCell, denseHead, denseTable, frozenCell, menuPanel, menuSummary, segment, toolbar,
@@ -427,6 +429,10 @@ export default function QuoteCatalogueScreen({
           <span style={{ fontFamily: mono, fontSize: T.body, fontWeight: 700,
             color: selectedLabel ? C.slate : C.slateL, overflow: "hidden", textOverflow: "ellipsis",
             whiteSpace: "nowrap", minWidth: 0 }}>{selectedLabel || "No revision selected"}</span>
+          {/* The SELECTED historical revision's own authority. History shows
+              many revisions of many quotes; the one on screen is the only thing
+              this may describe, and no current Batch Builder lane belongs here. */}
+          {selectedRevision && <ShareabilityNote {...revisionShareability(selectedRevision)} />}
           <GovernedActions actions={selectedActions} onAction={runWorkflow}
             busy={workflow.status === "busy"} label="Backend-reported Quote workflow actions" />
           <span style={{ flex: "1 1 auto" }} />

@@ -19,13 +19,14 @@ import { resolveBatchCommercialDefaults, resolveBatchInterest, resolveField } fr
 import { materializeEffectiveRates } from "../engine/rateMaster.js";
 import { applyAddOns, isPPType } from "../engine/rowType.js";
 import { findDuplicate, isUsableConstruction } from "../lib/constructionIdentity.js";
+import { calculatedRowCount, firstRefusal, journeyState, localWorkBlockers, sendReadiness } from "../lib/quoteJourney.js";
 import { parseImportedExcel } from "../export/importExcel.js";
 import { toB64 } from "../export/toB64.js";
 import { C } from "../theme.js";
 import { getItem, setItem } from "../lib/persist.js";
 
 export function useQuoteActions(st){
-  const { autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchFreight, batchProfile, batchResults, batchRows, boxTrim, constructionCatalogue, constructionLib, freight, items, locations, missing, partitionsMaster, r, rates, restoreRef, sectors, setAiNotes, setAutoCodeSeq, setBatchFreight, setBatchResults, setBatchRows, setConstructionLib, setItems, setQuoteView, setSavedQuotes, setTab, setTemplateB64, setTemplateLoaded, showToast, spec } = st;
+  const { _sendReady, autoCalcPPDims, autoCodeEnabled, autoCodeSeq, batchFreight, batchProfile, batchResults, batchRows, boxTrim, constructionCatalogue, constructionLib, durableBatch, freight, items, laneSelection, locations, missing, partitionsMaster, r, rates, restoreRef, sectors, setAiNotes, setAutoCodeSeq, setBatchFreight, setBatchResults, setBatchRows, setConstructionLib, setItems, setQuoteView, setSavedQuotes, setTab, setTemplateB64, setTemplateLoaded, showToast, spec } = st;
   const batchCommercialDefaults=resolveBatchCommercialDefaults(batchProfile,
     sectors.find(sector=>sector.code===batchProfile.sector));
 
@@ -33,7 +34,7 @@ export function useQuoteActions(st){
   // ── BACKUP & RESTORE ──────────────────────────────────────────────────────
   // Backup: download every persisted localStorage key as a single JSON file.
   // Fix 3: cbb_batch_autosave added so batch rows are included in manual JSON backups.
-  const BACKUP_KEYS=['cbb_rates','cbb_freight','cbb_sectors','cbb_boxtrim',
+  const BACKUP_KEYS=['cbb_rates','cbb_freight','cbb_boxtrim',
     'cbb_partitions','cbb_constrlib','cbb_template',
     'cbb_rate_date','cbb_batchprofile','cbb_quoteitems','cbb_batch_autosave',
     'cbb_locations', // A3: locations is a persisted master
@@ -57,7 +58,9 @@ export function useQuoteActions(st){
     // Also include current in-memory state for anything not yet flushed to localStorage
     snap.cbb_rates=rates;
     snap.cbb_freight=freight;
-    snap.cbb_sectors=sectors;
+    // cbb_sectors is deliberately absent: Sectors became a GOVERNED master on
+    // 2026-09-22 and no longer live in this browser. Writing them into a local
+    // backup would imply a restore could put them back, which it cannot.
     snap.cbb_boxtrim=boxTrim;
     snap.cbb_partitions=partitionsMaster;
     snap.cbb_constrlib=constructionLib;
@@ -273,25 +276,15 @@ export function useQuoteActions(st){
       {authorityV2:isFeatureEnabled("freight_authority_v2")});
   };
 
+  // The two SET-Code and Construction gates that used to be written out here
+  // now come from `localWorkBlockers` (lib/quoteJourney.js) so that the toolbar
+  // can show the SAME refusal, in the same words, BEFORE the click instead of
+  // as a toast afterwards. Stale results are not a Calculate gate - Calculate
+  // is how a stale row is cleared - so no rowStatus is passed here.
   const calculateAll=()=>{
-    // Gate: block if any non-Box row has an unconfirmed SET Code
-    const unconfirmed=batchRows.filter(r=>r.itemType!=="Box"&&r.setCodeAssumed);
-    if(unconfirmed.length>0){
-      const list=unconfirmed.map((r,i)=>`Row ${batchRows.indexOf(r)+1}${r.matCode?` [${r.matCode}]`:""}`).join(", ");
-      showToast(`⚠️ Confirm SET Codes first: ${list} — click the orange ! in its SET Code`,'error',6000);
-      return;
-    }
-    const incompleteConstructions=batchRows.filter(row=>{
-      const entry=constructionCatalogue.find(c=>c.code===row.constructionCode);
-      return entry&&!isUsableConstruction(entry);
-    });
-    if(incompleteConstructions.length>0){
-      const list=incompleteConstructions.map(row=>
-        `Row ${batchRows.indexOf(row)+1}${row.matCode?` [${row.matCode}]`:""}`).join(", ");
-      showToast(`❌ Incomplete construction — paper grade/BF and positive GSM are required on every structural layer: ${list}`,
-        'error',7000);
-      return;
-    }
+    const refusal=firstRefusal(localWorkBlockers({batchRows,batchProfile,
+      constructionCatalogue,isUsableConstruction}),"calculate");
+    if(refusal){showToast(refusal.text,'error',refusal.duration);return;}
     const newResults={},newFreight={};
     batchRows.forEach(row=>{
       // Destructured on the line it is created: the wrapper never enters state.
@@ -324,22 +317,21 @@ export function useQuoteActions(st){
     return"draft";
   };
 
+  // Every reason Send refuses, computed once, in one place, and shown in the
+  // Batch Builder toolbar before the Maker clicks (review CC-10). `localBlockers`
+  // must stay BELOW getBatchRowStatus: the stale check calls it.
+  const localBlockers=()=>localWorkBlockers({batchRows,batchProfile,
+    constructionCatalogue,isUsableConstruction,rowStatus:getBatchRowStatus});
+
   const sendAllToQuoteItems=()=>{
-    if(!batchProfile.plant||!batchProfile.delivery){
-      showToast("❌ Select Avadhoot Plant and Client Plant in the Batch Profile before sending to Quote Items",'error',5000);
-      return;
-    }
-    const incompleteConstructions=batchRows.filter(row=>{
-      const entry=constructionCatalogue.find(c=>c.code===row.constructionCode);
-      return entry&&!isUsableConstruction(entry);
-    });
-    if(incompleteConstructions.length>0){
-      const list=incompleteConstructions.map(row=>
-        `Row ${batchRows.indexOf(row)+1}${row.matCode?` [${row.matCode}]`:""}`).join(", ");
-      showToast(`❌ Cannot send: incomplete construction on ${list}. Select a construction with grade/BF and positive GSM on every structural layer.`,
-        'error',7000);
-      return;
-    }
+    // CHANGED IN THIS INCREMENT: all four refusals are now evaluated BEFORE the
+    // two confirmations below, instead of route/construction first and
+    // stale/SET-Code after them. Nothing that was permitted becomes blocked and
+    // nothing blocked becomes permitted - the Maker is simply no longer asked to
+    // confirm a mixed-client or uncoated send that was about to be refused
+    // anyway. The refusal order is now the register's order in quoteJourney.js.
+    const refusal=firstRefusal(localBlockers(),"send");
+    if(refusal){showToast(refusal.text,'error',refusal.duration);return;}
     // Fix 5: client-mismatch guard — if Quote Items already has items for a different client, warn
     if(items.length>0&&batchProfile.client){
       const existingClient=(items[0]?.spec?.client||"").trim();
@@ -369,20 +361,8 @@ export function useQuoteActions(st){
       if(!proceed)return;
     }
 
-    // Fix 1: block if any row has a stale result (inputs changed since last Calculate All)
-    const staleRows=batchRows.filter(r=>getBatchRowStatus(r)==="stale");
-    if(staleRows.length>0){
-      const list=staleRows.map(r=>`Row ${batchRows.indexOf(r)+1}${r.matCode?` [${r.matCode}]`:""}`).join(", ");
-      showToast(`🔄 Stale results — run Calculate All first. Affected: ${list}`,'error',6000);
-      return;
-    }
-    // Gate: block if any non-Box row has an unconfirmed SET Code
-    const unconfirmed=batchRows.filter(r=>r.itemType!=="Box"&&r.setCodeAssumed);
-    if(unconfirmed.length>0){
-      const list=unconfirmed.map(r=>`Row ${batchRows.indexOf(r)+1}${r.matCode?` [${r.matCode}]`:""}`).join(", ");
-      showToast(`⚠️ Confirm SET Codes first: ${list} — click the orange ! in its SET Code`,'error',6000);
-      return;
-    }
+    // The stale-result and assumed-SET-Code refusals that used to stand here
+    // are in the single `firstRefusal(localBlockers(),"send")` gate above.
     const newItems=[];
     const sentRowIds=new Set(); // Fix 4: track which rows actually sent
     const skippedRows=[]; // Fix 4: collect skipped row numbers for toast
@@ -578,5 +558,18 @@ export function useQuoteActions(st){
 
   // ── SIDEBAR (left nav) ────────────────────────────────────────────────────
 
-  return { BACKUP_KEYS, addBatchRow, addItem, calcBatchRow, calculateAll, card, generateCode, generateMissingCodes, getBatchRowStatus, handleBackup, handleImport, handleRestore, handleRestoreFile, handleTemplateLoad, importConstrFromSpec, removeItem, sendAllToQuoteItems };
+  // One derived answer to "where am I in the journey, and what is left?", read
+  // by the TopBar and the Batch Builder toolbar. Same blocker objects the two
+  // actions above refuse on, so the shell can never promise a readiness the
+  // click then denies.
+  const quoteBlockers=localBlockers();
+  const journey=journeyState({laneSelection,durableBatch,batchRows,batchResults,batchProfile,
+    quoteItems:items,blockers:quoteBlockers,hasScratchDraft:!!_sendReady});
+  // ONE readiness verdict for the toolbar, the TopBar and the Send button, so
+  // the three cannot describe three different permitted behaviours. Built from
+  // the truthful result count, never from batchResults' key count.
+  const quoteReadiness=sendReadiness(quoteBlockers,
+    {rowCount:batchRows.length,calculated:calculatedRowCount(batchRows,batchResults)});
+
+  return { BACKUP_KEYS, addBatchRow, addItem, calcBatchRow, calculateAll, card, generateCode, generateMissingCodes, getBatchRowStatus, handleBackup, handleImport, handleRestore, handleRestoreFile, handleTemplateLoad, importConstrFromSpec, journey, quoteBlockers, quoteReadiness, removeItem, sendAllToQuoteItems };
 }
