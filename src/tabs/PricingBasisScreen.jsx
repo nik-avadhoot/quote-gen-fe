@@ -16,7 +16,10 @@ import {
 } from "../lib/pricingBasisModel.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode } from "../ui/dataDisplay.jsx";
-import { denseCell, denseHead, denseTable } from "../ui/screenStandards.js";
+import {
+  control, denseCell, denseHead, denseTable, frozenCell, menuPanel, menuSummary, toolbar,
+} from "../ui/screenStandards.js";
+import { RowDisclosure, ScreenFooter, ToolbarLabel } from "../ui/screenChrome.jsx";
 import { C, T, mono, sans } from "../theme.js";
 import BatchPricingCard from "./batch/BatchPricingCard.jsx";
 
@@ -37,9 +40,9 @@ function BasisPart({ title, eyebrow, component, historyLabel, children, drilldow
     <section aria-label={`${eyebrow} component`}
       style={{ ...panel, padding: 9, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 8.5, fontWeight: 800, color: C.slateL,
+        <span style={{ fontSize: T.micro, fontWeight: 800, color: C.slateL,
           textTransform: "uppercase", letterSpacing: ".06em" }}>{eyebrow}</span>
-        <span style={{ fontSize: 10.5, fontWeight: 750, color: C.slate, minWidth: 0,
+        <span style={{ fontSize: T.body, fontWeight: 750, color: C.slate, minWidth: 0,
           overflow: "hidden", textOverflow: "ellipsis" }}>{title}</span>
         <span style={{ marginLeft: "auto" }}>
           <LifecycleBadge status={component?.status || "Unavailable"} />
@@ -68,7 +71,7 @@ function BasisPart({ title, eyebrow, component, historyLabel, children, drilldow
 function Identity({ setLabel, component }) {
   if (!component) return null;
   return (
-    <div style={{ fontFamily: mono, fontSize: 9, color: C.slateL, overflowWrap: "anywhere" }}>
+    <div style={{ fontFamily: mono, fontSize: T.label, color: C.slateL, overflowWrap: "anywhere" }}>
       {setLabel} #{component.set_id} · version #{component.id}
     </div>
   );
@@ -79,15 +82,15 @@ function Identity({ setLabel, component }) {
 function VersionHistory({ label, versions = [] }) {
   return (
     <details style={{ marginTop: 5 }}>
-      <summary style={{ fontSize: 9, color: C.slateL, fontWeight: 800, cursor: "pointer" }}>
+      <summary style={{ fontSize: T.label, color: C.slateL, fontWeight: 800, cursor: "pointer" }}>
         {label} lifecycle{versions.length ? ` · ${versions.length}` : ""}
       </summary>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 5 }}>
         {versions.length === 0
-          ? <span style={{ fontSize: 9.5, color: C.slateL }}>No caller-visible version history.</span>
+          ? <span style={{ fontSize: T.body, color: C.slateL }}>No caller-visible version history.</span>
           : versions.map(version => (
             <div key={version.id} style={{ border: `1px solid ${C.border}`, borderRadius: 5,
-              padding: "4px 6px", background: C.white, fontSize: 9.5, color: C.slateM }}>
+              padding: "4px 6px", background: C.white, fontSize: T.body, color: C.slateM }}>
               <span style={{ fontWeight: 800 }}>v{version.version_no}</span>{" "}
               <LifecycleBadge status={version.status} />
               {version.effective_from ? ` · from ${version.effective_from}` : ""}
@@ -111,7 +114,7 @@ function Head({ children }) {
 
 function DrilldownNotice({ children }) {
   return <div style={{ border: `1px solid ${C.amber}`, borderRadius: 5, padding: "7px 8px",
-    background: C.amberL, color: C.slateM, fontSize: 9.5, lineHeight: 1.45 }}>{children}</div>;
+    background: C.amberL, color: C.slateM, fontSize: T.body, lineHeight: 1.45 }}>{children}</div>;
 }
 
 function RateDrilldown({ rate }) {
@@ -121,11 +124,11 @@ function RateDrilldown({ rate }) {
     <section aria-label="Rate version drill-down" style={{ ...panel, padding: 11 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 230 }}>
-          <div style={{ fontSize: 10.5, color: C.slate, fontWeight: 800 }}>
+          <div style={{ fontSize: T.body, color: C.slate, fontWeight: 800 }}>
             Rate Set · {rate.set_name} · v{rate.version_no}
           </div>
           <Identity setLabel="Rate Set" component={rate} />
-          <div style={{ fontSize: 9.5, color: C.slateM, marginTop: 3 }}>
+          <div style={{ fontSize: T.body, color: C.slateM, marginTop: 3 }}>
             Owning plant: <strong>{rate.owning_plant
               ? `${rate.owning_plant.plant_code} · ${rate.owning_plant.name}`
               : "unavailable to this caller"}</strong>
@@ -134,14 +137,14 @@ function RateDrilldown({ rate }) {
         <LifecycleBadge status={rate.status} />
       </div>
       <div style={{ marginTop: 8, padding: "7px 8px", borderRadius: 5,
-        background: C.blueL || C.paper, border: `1px solid ${C.border}`, fontSize: 9.5,
+        background: C.blueL || C.paper, border: `1px solid ${C.border}`, fontSize: T.body,
         color: C.slateM, lineHeight: 1.45 }}>
         <strong>Upstream Rate Master derivation only.</strong>{" "}
         Base price + supplier-credit cost − discount + inbound freight = effective material rate.
         Supplier-credit values shown here are not Batch Calculate inputs.
       </div>
       <div style={{ marginTop: 6, padding: "7px 8px", borderRadius: 5,
-        background: C.greenL, border: `1px solid ${C.green}`, fontSize: 9.5,
+        background: C.greenL, border: `1px solid ${C.green}`, fontSize: T.body,
         color: C.slateM, lineHeight: 1.45 }}>
         <strong>Downstream calculation boundary:</strong> Batch Calculate receives the grade code and governed
         effective material rate only. Raw price, discount, freight and supplier-credit terms do not cross it.
@@ -151,7 +154,7 @@ function RateDrilldown({ rate }) {
           Grade/rate entries are unavailable in this caller-scoped read. No fallback rows are displayed.
         </DrilldownNotice></div>
       ) : entries.length === 0 ? (
-        <div style={{ marginTop: 8, fontSize: 9.5, color: C.slateL }}>
+        <div style={{ marginTop: 8, fontSize: T.body, color: C.slateL }}>
           No governed grade entries are present in this version.
         </div>
       ) : (
@@ -177,7 +180,7 @@ function RateDrilldown({ rate }) {
           </table>
         </div>
       )}
-      <div style={{ marginTop: 7, fontSize: 9.5, color: C.slateL }}>
+      <div style={{ marginTop: 7, fontSize: T.body, color: C.slateL }}>
         This schema gives Rate versions no independent effective date; the Pricing Basis Release effective period governs selection.
       </div>
     </section>
@@ -191,22 +194,22 @@ function FreightDrilldown({ freight }) {
     <section aria-label="Freight version drill-down" style={{ ...panel, padding: 11 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 230 }}>
-          <div style={{ fontSize: 10.5, color: C.slate, fontWeight: 800 }}>
+          <div style={{ fontSize: T.body, color: C.slate, fontWeight: 800 }}>
             Freight Set · {freight.set_name} · v{freight.version_no}
           </div>
           <Identity setLabel="Freight Set" component={freight} />
-          <div style={{ fontSize: 9.5, color: C.slateM, marginTop: 3 }}>
+          <div style={{ fontSize: T.body, color: C.slateM, marginTop: 3 }}>
             Set/version owner: <strong>{freight.owning_plant
               ? `${freight.owning_plant.plant_code} · ${freight.owning_plant.name}`
               : "unavailable to this caller"}</strong>
           </div>
-          <div style={{ fontSize: 9.5, color: C.slateL, marginTop: 3 }}>
+          <div style={{ fontSize: T.body, color: C.slateL, marginTop: 3 }}>
             Effective from {freight.effective_from || "not recorded"}
           </div>
         </div>
         <LifecycleBadge status={freight.status} />
       </div>
-      <div style={{ marginTop: 8, fontSize: 9.5, color: C.slateM, lineHeight: 1.45 }}>
+      <div style={{ marginTop: 8, fontSize: T.body, color: C.slateM, lineHeight: 1.45 }}>
         Canonical lane dimensions are <strong>origin plant × destination Ship-to</strong>; the current governed
         Freight schema has no vehicle-class dimension. Basis: freight rate per kg.
         The Freight Set owner shown above is not the lane origin shown in each row.
@@ -216,7 +219,7 @@ function FreightDrilldown({ freight }) {
           Freight lanes are unavailable in this caller-scoped read. No fallback lanes are displayed.
         </DrilldownNotice></div>
       ) : entries.length === 0 ? (
-        <div style={{ marginTop: 8, fontSize: 9.5, color: C.slateL }}>
+        <div style={{ marginTop: 8, fontSize: T.body, color: C.slateL }}>
           No lane rows are present. Every unlisted destination is missing—not zero.
         </div>
       ) : (
@@ -244,7 +247,7 @@ function FreightDrilldown({ freight }) {
           </table>
         </div>
       )}
-      <div style={{ marginTop: 7, fontSize: 9.5, color: C.slateL }}>
+      <div style={{ marginTop: 7, fontSize: T.body, color: C.slateL }}>
         A displayed 0.0000 is an explicit governed value. An unlisted destination or unavailable row remains missing.
       </div>
       {freight.missing_destinations_available === false ? <div style={{ marginTop: 7 }}><DrilldownNotice>
@@ -252,9 +255,9 @@ function FreightDrilldown({ freight }) {
       </DrilldownNotice></div> : (freight.missing_destinations || []).length > 0 && (
         <div style={{ marginTop: 8, border: `1px dashed ${C.amber}`, borderRadius: 5,
           padding: "7px 8px", background: C.amberL }}>
-          <div style={{ fontSize: 9, color: C.amberD, fontWeight: 800 }}>MISSING LANES · ABSENT, NOT ZERO</div>
+          <div style={{ fontSize: T.label, color: C.amberD, fontWeight: 800 }}>MISSING LANES · ABSENT, NOT ZERO</div>
           {(freight.missing_destinations || []).map(destination => (
-            <div key={destination.id} style={{ fontSize: 9.5, color: C.slateM, marginTop: 4 }}>
+            <div key={destination.id} style={{ fontSize: T.body, color: C.slateM, marginTop: 4 }}>
               <strong>{destination.location_code || "Ship-to code unavailable"}</strong>
               {destination.customer ? ` · ${destination.customer.display_name}` : " · customer details unavailable"}
               {" · no Freight Entry exists in this version"}
@@ -285,7 +288,7 @@ function tierText(tier, unit) {
 function ResolutionLadder({ ladder }) {
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 8, background: C.white }}>
-      <div style={{ fontSize: 10, fontWeight: 800, color: C.slate, marginBottom: 6 }}>{ladder.label}</div>
+      <div style={{ fontSize: T.body, fontWeight: 800, color: C.slate, marginBottom: 6 }}>{ladder.label}</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(118px, 1fr))",
         gap: 5, overflowX: "auto", paddingBottom: 2 }}>
         {ladder.tiers.map((tier, index) => {
@@ -293,13 +296,13 @@ function ResolutionLadder({ ladder }) {
           return <div key={tier.source} style={{ position: "relative", minWidth: 118,
             border: `1px solid ${active ? C.green : C.border}`, borderRadius: 5, padding: "6px 7px",
             background: active ? C.greenL : tier.state === "unavailable" || tier.state === "active" ? C.redL : C.cream }}>
-            <div style={{ fontSize: 8.5, color: C.slateL, fontWeight: 800 }}>{index + 1}. {tier.label}</div>
-            <div style={{ fontSize: 9.5, color: active ? C.green : C.slateM,
+            <div style={{ fontSize: T.micro, color: C.slateL, fontWeight: 800 }}>{index + 1}. {tier.label}</div>
+            <div style={{ fontSize: T.body, color: active ? C.green : C.slateM,
               fontWeight: active ? 800 : 550, marginTop: 3 }}>{tierText(tier, ladder.unit)}</div>
           </div>;
         })}
       </div>
-      <div style={{ marginTop: 5, fontSize: 9, color: C.slateL }}>
+      <div style={{ marginTop: 5, fontSize: T.label, color: C.slateL }}>
         Release-side preview: {ladder.releaseSource === "sector"
           ? "Sector supplies the first visible governed value when row and Batch Profile are blank."
           : ladder.releaseSource === "system"
@@ -319,10 +322,10 @@ function SectorDefaultDrilldown({ sector, defaults }) {
         <div style={{ ...panel, padding: 9 }}>
           <div style={{ display: "flex", gap: 7, alignItems: "flex-start" }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 10.5, color: C.slate, fontWeight: 800 }}>
+              <div style={{ fontSize: T.body, color: C.slate, fontWeight: 800 }}>
                 Sector · {sector ? `${sector.sector_code} · ${sector.name} · v${sector.version_no}` : "Details unavailable"}
               </div>
-              {sector && <div style={{ fontFamily: mono, fontSize: 9, color: C.slateL }}>
+              {sector && <div style={{ fontFamily: mono, fontSize: T.label, color: C.slateL }}>
                 Sector #{sector.sector_id} · version #{sector.id}
               </div>}
             </div>
@@ -335,10 +338,10 @@ function SectorDefaultDrilldown({ sector, defaults }) {
         <div style={{ ...panel, padding: 9 }}>
           <div style={{ display: "flex", gap: 7, alignItems: "flex-start" }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 10.5, color: C.slate, fontWeight: 800 }}>
+              <div style={{ fontSize: T.body, color: C.slate, fontWeight: 800 }}>
                 Calculation Default · {defaults ? `v${defaults.version_no}` : "Details unavailable"}
               </div>
-              {defaults && <div style={{ fontFamily: mono, fontSize: 9, color: C.slateL }}>
+              {defaults && <div style={{ fontFamily: mono, fontSize: T.label, color: C.slateL }}>
                 Calculation Default version #{defaults.id}
               </div>}
             </div>
@@ -351,7 +354,7 @@ function SectorDefaultDrilldown({ sector, defaults }) {
       </div>
 
       <div style={{ marginTop: 10, padding: "8px 9px", border: `1px solid ${C.border}`,
-        borderRadius: 6, background: C.paper, fontSize: 9.5, color: C.slateM, lineHeight: 1.45 }}>
+        borderRadius: 6, background: C.paper, fontSize: T.body, color: C.slateM, lineHeight: 1.45 }}>
         <strong>Canonical inheritance:</strong> waste, conversion and margin use Row override → Batch Profile override
         → Sector version → Calculation Default fallback → unresolved. Pricing Group is not a tier for these fields;
         it governs customer payment terms and freight.
@@ -361,8 +364,8 @@ function SectorDefaultDrilldown({ sector, defaults }) {
       </div>
 
       <div style={{ ...panel, marginTop: 10, padding: 10 }}>
-        <div style={{ fontSize: 10.5, color: C.slate, fontWeight: 800 }}>Customer Payment-Term Interest</div>
-        <div style={{ fontSize: 9.5, color: C.slateM, lineHeight: 1.45, marginTop: 4 }}>
+        <div style={{ fontSize: T.body, color: C.slate, fontWeight: 800 }}>Customer Payment-Term Interest</div>
+        <div style={{ fontSize: T.body, color: C.slateM, lineHeight: 1.45, marginTop: 4 }}>
           Pricing Group override → derive from its structured payment-term days using the approved annual policy
           → independent system fallback → unresolved. There is no row or Sector tier.
         </div>
@@ -375,24 +378,24 @@ function SectorDefaultDrilldown({ sector, defaults }) {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
               gap: 6, marginTop: 8 }}>
               <div style={{ ...panel, padding: 8, background: C.cream }}>
-                <div style={{ fontSize: 8.5, color: C.slateL, fontWeight: 800 }}>PRICING GROUP OVERRIDE</div>
-                <div style={{ fontSize: 9.5, color: C.slateM, marginTop: 3 }}>Batch-specific; requires a stated reason.</div>
+                <div style={{ fontSize: T.micro, color: C.slateL, fontWeight: 800 }}>PRICING GROUP OVERRIDE</div>
+                <div style={{ fontSize: T.body, color: C.slateM, marginTop: 3 }}>Batch-specific; requires a stated reason.</div>
               </div>
               <div style={{ ...panel, padding: 8, background: C.greenL }}>
-                <div style={{ fontSize: 8.5, color: C.slateL, fontWeight: 800 }}>ANNUAL POLICY · DERIVATION INPUT</div>
-                <div style={{ fontSize: 9.5, color: C.green, fontWeight: 800, marginTop: 3 }}>
+                <div style={{ fontSize: T.micro, color: C.slateL, fontWeight: 800 }}>ANNUAL POLICY · DERIVATION INPUT</div>
+                <div style={{ fontSize: T.body, color: C.green, fontWeight: 800, marginTop: 3 }}>
                   {interest.annual_interest_pct}% per annum · {interest.day_count_basis}-day basis
                 </div>
               </div>
               <div style={{ ...panel, padding: 8, background: C.cream }}>
-                <div style={{ fontSize: 8.5, color: C.slateL, fontWeight: 800 }}>INDEPENDENT FALLBACK</div>
-                <div style={{ fontSize: 9.5, color: C.slateM, marginTop: 3 }}>
+                <div style={{ fontSize: T.micro, color: C.slateL, fontWeight: 800 }}>INDEPENDENT FALLBACK</div>
+                <div style={{ fontSize: T.body, color: C.slateM, marginTop: 3 }}>
                   {value(interest.interest_fallback_pct, "%")} when no structured term resolves
                 </div>
               </div>
               <div style={{ ...panel, padding: 8, background: C.redL }}>
-                <div style={{ fontSize: 8.5, color: C.slateL, fontWeight: 800 }}>UNRESOLVED</div>
-                <div style={{ fontSize: 9.5, color: C.slateM, marginTop: 3 }}>No override, derivation or fallback.</div>
+                <div style={{ fontSize: T.micro, color: C.slateL, fontWeight: 800 }}>UNRESOLVED</div>
+                <div style={{ fontSize: T.body, color: C.slateM, marginTop: 3 }}>No override, derivation or fallback.</div>
               </div>
             </div>
             <div style={{ overflowX: "auto", marginTop: 8 }}>
@@ -411,7 +414,7 @@ function SectorDefaultDrilldown({ sector, defaults }) {
         )}
         <div style={{ marginTop: 8, padding: "7px 8px", borderRadius: 5,
           border: `1px solid ${C.amber}`, background: C.amberL, color: C.slateM,
-          fontSize: 9.5, lineHeight: 1.45 }}>
+          fontSize: T.body, lineHeight: 1.45 }}>
           <strong>Separate commercial authority:</strong> supplier paper-credit cost belongs only to upstream
           Rate Master derivation. It is neither this annual policy nor customer Payment-Term Interest.
         </div>
@@ -440,10 +443,10 @@ function ReleaseChronology({ release }) {
       <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) minmax(220px, 1fr)",
         gap: 10 }}>
         <div>
-          <div style={{ color: C.slateL, fontSize: 8.5, fontWeight: 800 }}>LIFECYCLE CHRONOLOGY</div>
+          <div style={{ color: C.slateL, fontSize: T.micro, fontWeight: 800 }}>LIFECYCLE CHRONOLOGY</div>
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 5 }}>
             {events.map((event, index) => <div key={`${event.label}-${index}`} style={{ display: "flex",
-              alignItems: "center", gap: 5, color: C.slateM, fontSize: 8.9 }}>
+              alignItems: "center", gap: 5, color: C.slateM, fontSize: T.label }}>
               {index > 0 && <span aria-hidden="true" style={{ color: C.slateL }}>→</span>}
               <span style={{ border: `1px solid ${C.border}`, background: C.paper,
                 borderRadius: 4, padding: "3px 5px" }}>
@@ -453,8 +456,8 @@ function ReleaseChronology({ release }) {
           </div>
         </div>
         <div>
-          <div style={{ color: C.slateL, fontSize: 8.5, fontWeight: 800 }}>COMMERCIAL EFFECTIVE PERIOD · NOT LIFECYCLE</div>
-          <div style={{ color: C.slateM, fontSize: 9.2, marginTop: 6 }}>
+          <div style={{ color: C.slateL, fontSize: T.micro, fontWeight: 800 }}>COMMERCIAL EFFECTIVE PERIOD · NOT LIFECYCLE</div>
+          <div style={{ color: C.slateM, fontSize: T.label, marginTop: 6 }}>
             {release.effective_from || "Start unavailable"} → {release.effective_until || "open-ended"}
           </div>
         </div>
@@ -470,7 +473,7 @@ function ComparisonPanel({ comparison }) {
   return (
     <section aria-label="Comparison with the automatic default"
       style={{ ...panel, padding: 10, marginTop: 8 }}>
-      <div style={{ fontSize: 10, color: C.slateM, marginBottom: 7 }}>
+      <div style={{ fontSize: T.body, color: C.slateM, marginBottom: 7 }}>
         Compared with <strong>{comparison.baselineName}</strong>, the automatic default on this date.{" "}
         {comparison.differing === 0
           ? "No governed component differs."
@@ -531,28 +534,28 @@ function ReleaseCard({ release, asOf, defaultRelease }) {
         display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 230 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <h3 style={{ fontSize: 13, color: C.slate, margin: 0 }}>{release.release_name || "Unnamed release"}</h3>
+            <h3 style={{ fontSize: T.title, color: C.slate, margin: 0 }}>{release.release_name || "Unnamed release"}</h3>
             <LifecycleBadge status={release.status} />
             {release.is_automatic_default && (
-              <span style={{ fontSize: 9, fontWeight: 800, color: C.green,
+              <span style={{ fontSize: T.label, fontWeight: 800, color: C.green,
                 background: C.greenL, padding: "2px 6px", borderRadius: 9 }}>AUTOMATIC DEFAULT</span>
             )}
             {release.self_approved && (
               <span title="The proposer and approver were the same authorised person."
-                style={{ fontSize: 9, fontWeight: 800, color: C.amberD,
+                style={{ fontSize: T.label, fontWeight: 800, color: C.amberD,
                   background: C.amberL, padding: "2px 6px", borderRadius: 9 }}>SELF-APPROVED</span>
             )}
           </div>
-          <div style={{ fontSize: 10, color: C.slateL, marginTop: 5 }}>
+          <div style={{ fontSize: T.body, color: C.slateL, marginTop: 5 }}>
             <strong>Pricing Basis Release plant:</strong>{" "}
-            <PermanentCode code={release.plant?.plant_code || "Plant unavailable"} style={{ fontSize: 10 }} />
+            <PermanentCode code={release.plant?.plant_code || "Plant unavailable"} style={{ fontSize: T.body }} />
             {release.plant?.name ? ` · ${release.plant.name}` : ""}
             {` · effective ${release.effective_from || "—"} to ${release.effective_until || "open-ended"}`}
           </div>
         </div>
         <div style={{ border: `1px solid ${eligibilityColors.border}`, color: eligibilityColors.color,
           background: eligibilityColors.background, borderRadius: 6, padding: "6px 9px",
-          maxWidth: 280, fontSize: 10, fontWeight: 700, lineHeight: 1.35 }}>
+          maxWidth: 280, fontSize: T.body, fontWeight: 700, lineHeight: 1.35 }}>
           {eligibility.eligible ? "✓ " : ""}{eligibility.reason}
         </div>
       </div>
@@ -560,7 +563,7 @@ function ReleaseCard({ release, asOf, defaultRelease }) {
       <ReleaseChronology release={release} />
 
       <div style={{ padding: 12, background: C.cream }}>
-        <div style={{ fontSize: 9, color: C.slateL, fontWeight: 800, marginBottom: 7,
+        <div style={{ fontSize: T.label, color: C.slateL, fontWeight: 800, marginBottom: 7,
           textTransform: "uppercase", letterSpacing: ".06em" }}>Governed composition</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
           <BasisPart eyebrow="Rate" component={rate}
@@ -597,7 +600,7 @@ function ReleaseCard({ release, asOf, defaultRelease }) {
             historyLabel="Calculation Default">
             <div>Annual interest: {value(defaults?.annual_interest_pct, "%")} / {value(defaults?.day_count_basis, " days")}</div>
             <div>Rounding: nearest {value(defaults?.rounding_step)}</div>
-            <div title={defaults?.engine_version} style={{ fontFamily: mono, fontSize: 9,
+            <div title={defaults?.engine_version} style={{ fontFamily: mono, fontSize: T.label,
               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {defaults?.engine_version || "Engine identity unavailable"}
             </div>
@@ -607,14 +610,14 @@ function ReleaseCard({ release, asOf, defaultRelease }) {
           <button type="button" onClick={() => setPolicyOpen(open => !open)}
             aria-expanded={policyOpen}
             style={{ border: `1px solid ${C.border}`, borderRadius: 5,
-              background: C.white, color: C.slate, fontSize: 10, fontWeight: 750,
+              background: C.white, color: C.slate, fontSize: T.body, fontWeight: 750,
               padding: "6px 9px", cursor: "pointer" }}>
             {policyOpen ? "Hide Sector & Default details" : "View Sector & Default details"}
           </button>
           {comparison && <button type="button" onClick={() => setCompareOpen(open => !open)}
             aria-expanded={compareOpen}
             style={{ border: `1px solid ${C.border}`, borderRadius: 5,
-              background: C.white, color: C.slate, fontSize: 10, fontWeight: 750,
+              background: C.white, color: C.slate, fontSize: T.body, fontWeight: 750,
               padding: "6px 9px", cursor: "pointer" }}>
             {compareOpen ? "Hide comparison" : `Compare with today's default${
               comparison.differing > 0 ? ` · ${comparison.differing} differ` : ""}`}
@@ -625,72 +628,6 @@ function ReleaseCard({ release, asOf, defaultRelease }) {
           <SectorDefaultDrilldown sector={sector} defaults={defaults} />
         </div>}
       </div>
-    </article>
-  );
-}
-
-function ReleaseSummaryRow({ release, asOf, defaultRelease }) {
-  const [expanded, setExpanded] = useState(false);
-  const eligibility = releaseEligibility(release, asOf);
-  const composition = releaseComponentSummary(release);
-  return (
-    <article style={{ ...panel, overflow: "hidden" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(230px, 1.5fr) minmax(170px, .8fr) minmax(210px, 1fr) auto",
-        alignItems: "center", gap: 10, padding: "8px 10px" }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <span style={{ color: C.slate, fontSize: 11, fontWeight: 800, overflow: "hidden",
-              textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{release.release_name || "Unnamed Release"}</span>
-            <LifecycleBadge status={release.status} />
-          </div>
-          <div style={{ marginTop: 2, color: C.slateL, fontSize: 8.8, fontFamily: mono }}>
-            Release #{release.id}
-          </div>
-        </div>
-        <div style={{ color: C.slateM, fontSize: 9.5 }}>
-          <strong>{release.plant?.plant_code || "Plant unavailable"}</strong>
-          {release.plant?.name ? ` · ${release.plant.name}` : ""}
-          <div style={{ color: C.slateL, fontSize: 8.7 }}>Release owner</div>
-        </div>
-        <div style={{ color: C.slateM, fontSize: 9.5 }}>
-          {release.effective_from || "No start"} → {release.effective_until || "open-ended"}
-          <div style={{ color: eligibility.eligible ? C.green : C.slateL, fontSize: 8.7,
-            fontWeight: eligibility.eligible ? 750 : 500 }}>
-            {eligibility.reason}
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
-          {release.is_automatic_default
-            ? <span style={{ color: C.green, background: C.greenL, borderRadius: 8,
-                padding: "2px 5px", fontSize: 8.2, fontWeight: 800 }}>DEFAULT</span>
-            : release.status === "approved"
-              ? <span style={{ color: C.slateL, background: C.paper, borderRadius: 8,
-                  padding: "2px 5px", fontSize: 8.2, fontWeight: 800 }}>ALTERNATIVE</span>
-              : null}
-          {release.self_approved && <span title="The proposer and approver were the same authorised person."
-            style={{ color: C.amberD, background: C.amberL, borderRadius: 8,
-              padding: "2px 5px", fontSize: 8.2, fontWeight: 800 }}>SELF-APPROVED</span>}
-          <button type="button" onClick={() => setExpanded(open => !open)} aria-expanded={expanded}
-            style={{ border: `1px solid ${C.border}`, background: C.white, color: C.slate,
-              borderRadius: 4, padding: "4px 7px", fontSize: 9, fontWeight: 750, cursor: "pointer" }}>
-            {expanded ? "Close" : "Details"}
-          </button>
-        </div>
-      </div>
-      {/* The composition, readable without opening anything. */}
-      <div style={{ padding: "0 10px 7px", display: "flex", gap: 10, flexWrap: "wrap",
-        color: C.slateM, fontSize: 9.2 }}>
-        {composition.map(part => (
-          <span key={part.key} style={{ color: part.available ? C.slateM : C.slateL }}>
-            <span style={{ color: C.slateL, fontWeight: 700 }}>{part.label}</span>{" "}
-            {part.name ? `${part.name} · ` : ""}
-            <span style={{ fontFamily: mono }}>{part.version}</span>
-          </span>
-        ))}
-      </div>
-      {expanded && <div style={{ padding: "0 8px 8px", background: C.cream }}>
-        <ReleaseCard release={release} asOf={asOf} defaultRelease={defaultRelease} />
-      </div>}
     </article>
   );
 }
@@ -710,6 +647,7 @@ export default function PricingBasisScreen({ fixtureOnly = false, onExitFixture 
   // summary filtering to the server only when a real catalogue exceeds this
   // bounded UX or measured payload/latency becomes unacceptable.
   const [visibleCount, setVisibleCount] = useState(50);
+  const [openRows, setOpenRows] = useState(() => new Set());
   const [illustrating, setIllustrating] = useState(fixtureOnly);
 
   useEffect(() => {
@@ -749,13 +687,6 @@ export default function PricingBasisScreen({ fixtureOnly = false, onExitFixture 
     plantCode, asOf, query, scope,
   }), [asOf, plantCode, query, scope, source]);
   const shown = matches.slice(0, visibleCount);
-  const groups = useMemo(() => shown.reduce((result, release) => {
-    const code = release.plant?.plant_code || "Plant unavailable";
-    const existing = result.find(group => group.code === code);
-    if (existing) existing.releases.push(release);
-    else result.push({ code, name: release.plant?.name || "", releases: [release] });
-    return result;
-  }, []), [shown]);
 
   if (!isActive) return <AccessDeniedState reason="Your account is deactivated." />;
   if (state.status === "loading") return <LoadingState label="Loading governed Pricing Basis Releases…" />;
@@ -765,187 +696,265 @@ export default function PricingBasisScreen({ fixtureOnly = false, onExitFixture 
   if (state.status === "error") {
     return (
       <div style={{ padding: 24, fontFamily: sans }}>
-        <div style={{ fontSize: 13, fontWeight: 750, color: C.red }}>Could not load Pricing Basis Releases</div>
-        <div style={{ fontSize: 11, color: C.slateM, margin: "5px 0 12px" }}>
+        <div style={{ fontSize: T.title, fontWeight: 750, color: C.red }}>Could not load Pricing Basis Releases</div>
+        <div style={{ fontSize: T.body, color: C.slateM, margin: "5px 0 12px" }}>
           {state.message || "The governed read did not succeed. No local value has been substituted."}
         </div>
-        <button type="button" onClick={() => setReloadKey(k => k + 1)} style={{ fontSize: 11,
+        <button type="button" onClick={() => setReloadKey(k => k + 1)} style={{ fontSize: T.body,
           padding: "5px 12px", borderRadius: 4, border: `1px solid ${C.border}`,
           background: C.white, cursor: "pointer" }}>Retry</button>
       </div>
     );
   }
 
+  // Plants in view, and the Release each one prices with on the chosen date.
+  const plantsInView = plantCode !== "all" ? [plantCode] : plantCodes;
+  const defaultsNow = plantsInView
+    .map(code => ({ code, release: defaultReleaseOn(source, code, asOf) }))
+    .filter(entry => entry.release);
+
+  const toggleRow = id => setOpenRows(open => {
+    const next = new Set(open);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
   return (
-    <div className="screen-end-padded"
-      style={{ height: "100%", overflowY: "auto", padding: 16, fontFamily: sans, boxSizing: "border-box" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
-        <div style={{ flex: 1, minWidth: 260 }}>
-          <h2 style={{ margin: 0, fontSize: 16, color: C.slate }}>Pricing Basis</h2>
-          <div style={{ marginTop: 4, fontSize: 10.5, color: C.slateL, lineHeight: 1.45 }}>
-            See which governed Rate, Freight, Sector and Calculation versions form each release—and why it is eligible for a plant and date.
+    <div style={{ height: "100%", display: "flex", flexDirection: "column",
+      fontFamily: sans, boxSizing: "border-box", overflow: "hidden" }}>
+
+      {/* ONE toolbar, at the shared height. The screen name lives in the TopBar,
+          so it is not repeated here; the fixture preview has no TopBar. */}
+      <div role="toolbar" aria-label="Pricing Basis controls" style={toolbar}>
+        {fixtureOnly && <ToolbarLabel title="Fixture preview has no TopBar">Pricing Basis</ToolbarLabel>}
+        <select aria-label="Producing Plant" value={plantCode} style={control}
+          onChange={e => { setPlantCode(e.target.value); setVisibleCount(50); }}>
+          <option value="all">All accessible plants</option>
+          {plantCodes.map(code => <option value={code} key={code}>{code}</option>)}
+        </select>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 4,
+          fontSize: T.label, color: C.slateL, fontWeight: 700 }}>
+          on
+          <input type="date" aria-label="Eligibility date" value={asOf} style={control}
+            onChange={e => { setAsOf(e.target.value); setVisibleCount(50); }} />
+        </label>
+        <select aria-label="Show" value={scope} style={control}
+          onChange={event => { setScope(event.target.value); setVisibleCount(50); }}>
+          <option value="eligible">Eligible on date</option>
+          <option value="default">Automatic defaults</option>
+          <option value="alternative">Approved alternatives</option>
+          <option value="draft">Drafts</option>
+          <option value="withdrawn">Withdrawn</option>
+          <option value="all">All lifecycle states</option>
+        </select>
+        <input type="search" aria-label="Find Release" value={query}
+          placeholder="Name, permanent ID or plant"
+          onChange={event => { setQuery(event.target.value); setVisibleCount(50); }}
+          style={{ ...control, flex: "1 1 190px", minWidth: 130 }} />
+        <details style={{ position: "relative" }}>
+          <summary style={menuSummary(false)}>How to read this</summary>
+          <div style={{ ...menuPanel, minWidth: 360, fontSize: T.label,
+            color: C.slateM, lineHeight: 1.5 }}>
+            <div><strong>A Release is one frozen set of four governed masters</strong> — a Rate, Freight,
+              Sector and Calculation version — that a Batch at one plant prices with on a date.</div>
+            <div><strong>DEFAULT</strong> applies automatically. <strong>ALTERNATIVE</strong> is approved
+              but has to be chosen deliberately on the Batch. <strong>Draft</strong> and
+              <strong> Withdrawn</strong> price nothing.</div>
+            <div><strong>Eligible</strong> means approved and inside its effective period on the date
+              above — nothing else.</div>
+            <div>Brief catalogue view. Details and governed composition open only when requested.
+              Customer-focused Releases are found by governed Release name; no customer relationship is inferred.</div>
+            <div>Same-plant composition is database-enforced — the Release, Rate version and Freight version
+              share composite plant foreign keys, so this is not frontend filtering. No replacement link exists
+              in the current schema, so this screen does not assert replacement lineage between Releases.</div>
           </div>
-          {/* Said once, for every card below: it was repeated inside each one. */}
-          <div style={{ marginTop: 3, fontSize: 9.2, color: C.slateL, lineHeight: 1.45 }}>
-            Same-plant composition is database-enforced — the Release, Rate version and Freight version share
-            composite plant foreign keys, so this is not frontend filtering. No replacement link exists in the
-            current schema, so this screen does not assert replacement lineage between Releases.
-          </div>
-        </div>
-        <span style={{ fontSize: 9, fontWeight: 800, color: C.green, background: C.greenL,
-          borderRadius: 10, padding: "4px 8px" }}>GOVERNED READ · NO MUTATIONS</span>
+        </details>
+        <span style={{ marginLeft: "auto", fontSize: T.label, color: C.slateL, whiteSpace: "nowrap" }}>
+          {matches.length} match{matches.length === 1 ? "" : "es"}
+        </span>
+        {!fixtureOnly && <button type="button" style={control}
+          onClick={() => { setIllustrating(false); setReloadKey(k => k + 1); }}>Refresh</button>}
+      </div>
+
+      {/* The question this screen exists to answer, before any catalogue. */}
+      <div style={{ display: "flex", gap: 9, flexWrap: "wrap", alignItems: "baseline",
+        padding: "5px 10px", borderBottom: `1px solid ${C.border}`, background: C.white,
+        fontSize: T.label, color: C.slateM, flexShrink: 0 }}>
+        <ToolbarLabel title="The Release a Batch at this plant prices with on the chosen date">
+          Applies on {asOf}
+        </ToolbarLabel>
+        {defaultsNow.length === 0
+          ? <span style={{ color: C.slateL }}>
+              No plant in view has an automatic default on this date.
+            </span>
+          : defaultsNow.map(({ code, release }) => (
+            <span key={code} style={{ minWidth: 0 }}>
+              <strong style={{ fontFamily: mono }}>{code}</strong>{" "}
+              {release.release_name || `Release #${release.id}`}
+              <span style={{ color: C.slateL }}>
+                {" · "}{releaseComponentSummary(release).map(part => part.compact).join(" · ")}
+              </span>
+            </span>
+          ))}
       </div>
 
       {illustrating && (
-        <div role="status" style={{ padding: "8px 10px", borderRadius: 6, marginBottom: 10,
-          border: `1px solid ${C.amber}`, background: C.amberL, color: C.slateM,
-          fontSize: 10.5, fontWeight: 650 }}>
+        <div role="status" style={{ padding: "5px 10px", borderBottom: `1px solid ${C.amber}`,
+          background: C.amberL, color: C.slateM, fontSize: T.label, fontWeight: 650, flexShrink: 0 }}>
           Illustrative UX fixture — not authoritative data, not saved, and never mixed with the live response.
           <button type="button" onClick={() => {
             if (fixtureOnly) onExitFixture?.();
             else { setIllustrating(false); setPlantCode("all"); }
           }}
-            style={{ marginLeft: 10, border: "none", background: "transparent", color: C.amberD,
-              cursor: "pointer", fontWeight: 800, fontSize: 10 }}>
+            style={{ marginLeft: 8, border: "none", background: "transparent", color: C.amberD,
+              cursor: "pointer", fontWeight: 800, fontSize: T.label }}>
             {fixtureOnly ? "Exit illustration" : "Return to live data"}
           </button>
+        </div>
+      )}
+
+      {state.partial && !illustrating && (
+        <div role="status" style={{ padding: "5px 10px", borderBottom: `1px solid ${C.amber}`,
+          background: C.amberL, color: C.slateM, fontSize: T.label, flexShrink: 0 }}>
+          Some governed component details are unavailable to this caller. Missing values are labelled; none are guessed.
         </div>
       )}
 
       {/* PO ruling 2026-09-22: the Batch pricing card belongs on localhost only,
           never on the deployed application. import.meta.env.DEV is false under
           vite build, so a production bundle has no path to it. */}
-      {import.meta.env.DEV && <div style={{ marginBottom: 10, border: `1px solid ${C.border}`,
-        borderRadius: 8, overflow: "hidden" }}>
+      {import.meta.env.DEV && <div style={{ borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         {fixtureOnly
           ? <BatchPricingCard fixtureOnly fallbackPlantCode="NAG" />
           : <BatchPricingCard fallbackPlantCode={batchProfile?.plant}
               draft={u3PricingBasisDraft} setDraft={setU3PricingBasisDraft} showToast={showToast} />}
       </div>}
 
-      {state.partial && !illustrating && (
-        <div role="status" style={{ padding: "8px 10px", borderRadius: 6, marginBottom: 10,
-          border: `1px solid ${C.amber}`, background: C.amberL, color: C.slateM, fontSize: 10.5 }}>
-          Some governed component details are unavailable to this caller. Missing values are labelled; none are guessed.
-        </div>
-      )}
-
-      <div style={{ ...panel, padding: "9px 11px", display: "flex", alignItems: "end", gap: 10,
-        flexWrap: "wrap", marginBottom: 10 }}>
-        <label style={{ fontSize: 9.5, color: C.slateL, fontWeight: 700 }}>
-          Producing Plant
-          <select value={plantCode} onChange={e => { setPlantCode(e.target.value); setVisibleCount(50); }}
-            style={{ display: "block", marginTop: 3, minWidth: 155, padding: "5px 7px", fontSize: 11,
-              border: `1px solid ${C.border}`, borderRadius: 4, background: C.white }}>
-            <option value="all">All accessible plants</option>
-            {plantCodes.map(code => <option value={code} key={code}>{code}</option>)}
-          </select>
-        </label>
-        <label style={{ fontSize: 9.5, color: C.slateL, fontWeight: 700 }}>
-          Eligibility date
-          <input type="date" value={asOf} onChange={e => { setAsOf(e.target.value); setVisibleCount(50); }}
-            style={{ display: "block", marginTop: 3, padding: "4px 7px", fontSize: 11,
-              border: `1px solid ${C.border}`, borderRadius: 4, background: C.white }} />
-        </label>
-        <label style={{ minWidth: 210, flex: 1, fontSize: 9.5, color: C.slateL, fontWeight: 700 }}>
-          Find Release
-          <input type="search" value={query} onChange={event => { setQuery(event.target.value); setVisibleCount(50); }}
-            placeholder="Name, permanent ID or plant"
-            style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: 3,
-              padding: "5px 7px", fontSize: 11, border: `1px solid ${C.border}`,
-              borderRadius: 4, background: C.white }} />
-        </label>
-        <label style={{ fontSize: 9.5, color: C.slateL, fontWeight: 700 }}>
-          Show
-          <select value={scope} onChange={event => { setScope(event.target.value); setVisibleCount(50); }}
-            style={{ display: "block", marginTop: 3, minWidth: 155, padding: "5px 7px", fontSize: 11,
-              border: `1px solid ${C.border}`, borderRadius: 4, background: C.white }}>
-            <option value="eligible">Eligible on date</option>
-            <option value="default">Automatic defaults</option>
-            <option value="alternative">Approved alternatives</option>
-            <option value="draft">Drafts</option>
-            <option value="withdrawn">Withdrawn</option>
-            <option value="all">All lifecycle states</option>
-          </select>
-        </label>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 7 }}>
-          <span style={{ fontSize: 9.5, color: C.slateL }}>
-            {matches.length} match{matches.length === 1 ? "" : "es"} · {illustrating ? "Fixture view" : `Live read ${readAt ? readAt.toLocaleTimeString() : "—"}`}
-          </span>
-          {!fixtureOnly && <button type="button" onClick={() => { setIllustrating(false); setReloadKey(k => k + 1); }}
-            style={{ fontSize: 10, padding: "4px 9px", borderRadius: 4,
-              border: `1px solid ${C.border}`, background: C.white, cursor: "pointer" }}>Refresh live</button>}
-        </div>
-      </div>
-
-      {source.length === 0 ? (
-        <div style={panel}>
-          <EmptyState title="No Pricing Basis Releases are available for your plants."
-            hint="This is the live governed result. A release must be created and approved before it can become eligible." />
-          {import.meta.env.DEV && (
-            <div style={{ textAlign: "center", paddingBottom: 20 }}>
-              <button type="button" onClick={() => { setIllustrating(true); setPlantCode("all"); }}
-                style={{ fontSize: 10.5, padding: "6px 11px", borderRadius: 5,
-                  border: `1px solid ${C.amber}`, color: C.amberD, background: C.amberL,
-                  cursor: "pointer", fontWeight: 700 }}>View labelled UX illustration</button>
-            </div>
-          )}
-        </div>
-      ) : shown.length === 0 ? (
-        <div style={panel}><EmptyState title="No Releases match these filters."
-          hint="Change the date, plant, lifecycle view or search. No hidden record is inferred." /></div>
-      ) : (
-        <>
-          <div style={{ margin: "0 1px 8px", fontSize: 9.2, color: C.slateL }}>
-            Brief catalogue view. Details and governed composition open only when requested.
-            Customer-focused Releases are found by governed Release name; no customer relationship is inferred.
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+        {source.length === 0 ? (
+          <div style={{ padding: 12 }}>
+            <EmptyState title="No Pricing Basis Releases are available for your plants."
+              hint="This is the live governed result. A release must be created and approved before it can become eligible." />
+            {import.meta.env.DEV && (
+              <div style={{ textAlign: "center", paddingBottom: 20 }}>
+                <button type="button" style={control}
+                  onClick={() => { setIllustrating(true); setPlantCode("all"); }}>
+                  Show the labelled UX illustration
+                </button>
+              </div>
+            )}
           </div>
-          {shown.length < matches.length && <div role="status" style={{ margin: "0 1px 8px",
-            padding: "6px 8px", border: `1px solid ${C.amber}`, borderRadius: 5,
-            background: C.amberL, color: C.slateM, fontSize: 9.2 }}>
-            Results limited to the first {shown.length} matching Releases. This is not the complete matching catalogue;
-            {matches.length - shown.length} more match{matches.length - shown.length === 1 ? "es" : ""} the current filters.
-          </div>}
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {groups.map(group => <section key={group.code} aria-label={`Pricing Basis Releases for ${group.code}`}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 6, margin: "0 2px 5px" }}>
-                <h3 style={{ margin: 0, fontSize: 10.5, color: C.slate }}>{group.code}</h3>
-                {group.name && <span style={{ fontSize: 9, color: C.slateL }}>· {group.name}</span>}
-                <span style={{ marginLeft: "auto", fontSize: 8.7, color: C.slateL }}>
-                  {group.releases.length} shown
+        ) : matches.length === 0 ? (
+          <div style={{ padding: 12 }}>
+            <EmptyState title="No Releases match these filters."
+              hint="Change the date, plant, lifecycle view or search. No hidden record is inferred." />
+          </div>
+        ) : (
+          <>
+            <table style={denseTable}>
+              <thead>
+                <tr>
+                  <th scope="col" style={{ ...denseHead, ...frozenCell(false, true) }}>Release</th>
+                  <th scope="col" style={denseHead}>Plant</th>
+                  <th scope="col" style={denseHead}>Effective period</th>
+                  <th scope="col" style={denseHead}>Composition</th>
+                  <th scope="col" style={denseHead}>Role</th>
+                  <th scope="col" style={denseHead}>On {asOf}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map(release => (
+                  <ReleaseRow key={release.id} release={release} asOf={asOf}
+                    defaultRelease={defaultReleaseOn(source, release.plant?.plant_code, asOf)}
+                    expanded={openRows.has(release.id)}
+                    onToggle={() => toggleRow(release.id)} />
+                ))}
+              </tbody>
+            </table>
+            {shown.length < matches.length && (
+              <div style={{ padding: "8px 10px", display: "flex", alignItems: "center", gap: 8,
+                fontSize: T.label, color: C.slateM }}>
+                <button type="button" style={control}
+                  onClick={() => setVisibleCount(count => count + 50)}>
+                  Show 50 more
+                </button>
+                <span role="status">
+                  Results limited to the first {shown.length} matching Releases. This is not the complete matching catalogue;
+                  {" "}{matches.length - shown.length} more
+                  match{matches.length - shown.length === 1 ? "es" : ""} the current filters.
                 </span>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                {group.releases.map(release => <ReleaseSummaryRow key={release.id} release={release}
-                  asOf={asOf} defaultRelease={defaultReleaseOn(source, group.code, asOf)} />)}
-              </div>
-            </section>)}
-          </div>
-          {shown.length < matches.length && <div style={{ textAlign: "center", marginTop: 10 }}>
-            <button type="button" onClick={() => setVisibleCount(count => count + 50)}
-              style={{ border: `1px solid ${C.border}`, borderRadius: 5, padding: "6px 12px",
-                background: C.white, color: C.slate, fontSize: 10, fontWeight: 750, cursor: "pointer" }}>
-              Show 50 more · {matches.length - shown.length} remaining
-            </button>
-          </div>}
-        </>
-      )}
-
-      <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 7,
-        background: C.paper, border: `1px solid ${C.border}`, display: "flex",
-        alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 250 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 800, color: C.slate }}>Backend activation pending</div>
-          <div style={{ fontSize: 9.5, color: C.slateL, marginTop: 2 }}>
-            Governed Calculate, Atomic Send, approval, return, issue and revision actions remain unavailable. This screen performs reads only.
-          </div>
-        </div>
-        <button type="button" disabled title="Backend activation pending"
-          style={{ border: `1px solid ${C.border}`, background: C.white, color: C.slateL,
-            opacity: .65, padding: "6px 10px", borderRadius: 5, fontSize: 10, fontWeight: 700 }}>
-          Governed Calculate · Backend activation pending
-        </button>
+            )}
+          </>
+        )}
       </div>
+
+      <ScreenFooter right={illustrating ? "Fixture view"
+        : `Live read ${readAt ? readAt.toLocaleTimeString() : "—"}`}>
+        <span>Governed read · no mutations</span>
+        <span>· DEFAULT applies automatically · ALTERNATIVE must be chosen on the Batch · Draft and Withdrawn price nothing</span>
+      </ScreenFooter>
     </div>
+  );
+}
+
+// One dense catalogue row: identity frozen at the left, the four component
+// versions readable without opening anything, and every secondary fact inside
+// the expanded row rather than in a taller row.
+function ReleaseRow({ release, asOf, defaultRelease, expanded, onToggle }) {
+  const eligibility = releaseEligibility(release, asOf);
+  const composition = releaseComponentSummary(release);
+  const role = release.is_automatic_default
+    ? { label: "DEFAULT", fg: C.green, bg: C.greenL }
+    : release.status === "approved"
+      ? { label: "ALTERNATIVE", fg: C.slateL, bg: C.paper }
+      : { label: release.status || "unknown", fg: C.slateM, bg: C.paper };
+  const chip = tone => ({ color: tone.fg, background: tone.bg, borderRadius: 8,
+    padding: "1px 5px", fontSize: T.micro, fontWeight: 800, textTransform: "uppercase" });
+  // The full sentence stays on hover; the cell carries the verdict alone.
+  const shortReason = eligibility.eligible ? "Eligible"
+    : String(eligibility.reason || "").split(/[;.]/)[0];
+  return (
+    <>
+      <tr>
+        <td style={{ ...frozenCell(expanded), maxWidth: 260 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+            <RowDisclosure open={expanded} onToggle={onToggle}
+              label={`Detail for ${release.release_name || release.id}`} />
+            <span title={`${release.release_name || "Unnamed Release"} · Release #${release.id}`}
+              style={{ fontWeight: 750, color: C.slate, overflow: "hidden", textOverflow: "ellipsis" }}>
+              {release.release_name || "Unnamed Release"}
+            </span>
+          </div>
+        </td>
+        <td style={denseCell} title={release.plant?.name || ""}>
+          <span style={{ fontFamily: mono }}>{release.plant?.plant_code || "—"}</span>
+        </td>
+        <td style={denseCell}>
+          {release.effective_from || "—"} → {release.effective_until || "open-ended"}
+        </td>
+        <td style={{ ...denseCell, maxWidth: 330 }}
+          title={composition.map(part => part.text).join(" · ")}>
+          {composition.map(part => part.compact).join(" · ")}
+        </td>
+        <td style={denseCell}>
+          <span style={chip(role)}>{role.label}</span>
+          {release.self_approved && <span title="The proposer and approver were the same authorised person."
+            style={{ ...chip({ fg: C.amberD, bg: C.amberL }), marginLeft: 4 }}>Self-approved</span>}
+        </td>
+        <td style={denseCell} title={eligibility.reason}>
+          <span style={{ color: eligibility.eligible ? C.green : C.slateL,
+            fontWeight: eligibility.eligible ? 750 : 500 }}>{shortReason}</span>
+        </td>
+      </tr>
+      {expanded && (
+        <tr>
+          <td colSpan={6} style={{ padding: 8, background: C.cream,
+            borderBottom: `1px solid ${C.border}` }}>
+            <ReleaseCard release={release} asOf={asOf} defaultRelease={defaultRelease} />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

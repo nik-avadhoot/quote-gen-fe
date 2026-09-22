@@ -167,6 +167,11 @@ export function releaseComponentSummary(release) {
       version: versionText(component),
       available: !!component,
       text: [present(name) ? name : null, versionText(component)].filter(Boolean).join(" "),
+      // Rate and Freight set names are long, so the compact line carries the
+      // version alone; the Sector's name is short and says what it means.
+      compact: key === "sector" && present(name)
+        ? `${label} ${name} ${versionText(component)}`
+        : `${label} ${versionText(component)}`,
     };
   });
 }
