@@ -80,11 +80,20 @@
 const BUILD_DEFAULTS = ["u1_producing_plants", "u1_customer_families", "u3_pricing_basis", "u2_gsm_master",
   "u2_sku_master", "u1_batch_party_link", "u2_construction_library"];
 const PRODUCTION_DEFAULTS = ["limited_beta"];
+// ── 2026-09-23: customer_pricing_history (Phase 0, P0.1) ───────────────────
+// DEVELOPMENT ONLY, a deliberate and narrow exception to the parity ruling
+// above: its migration (20260923150000) is not applied to the live project,
+// so a production build would show a workspace whose every read answers
+// MASTER_UNAVAILABLE. The approved plan (§10 P0.5) enables it "only in the
+// authorised Beta environment"; moving it into BUILD_DEFAULTS is that step.
+// The flag controls mounting only - access is read_party_master, never this.
+const DEVELOPMENT_DEFAULTS = ["customer_pricing_history"];
 
 const RAW = import.meta.env.VITE_FEATURE_FLAGS || "";
 const ENABLED = new Set([
   ...BUILD_DEFAULTS,
   ...(import.meta.env.PROD ? PRODUCTION_DEFAULTS : []),
+  ...(import.meta.env.DEV ? DEVELOPMENT_DEFAULTS : []),
   ...RAW.split(",").map(s => s.trim()).filter(Boolean),
 ]);
 
