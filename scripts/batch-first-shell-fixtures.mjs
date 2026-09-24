@@ -99,10 +99,14 @@ check(topBar.includes("reviewRow?.durableRowId")
 const openInCostingStart = batchWorkspace.indexOf("const openInCosting = row =>");
 const openInCostingHandler = batchWorkspace.slice(openInCostingStart,
   batchWorkspace.indexOf("\n  };", openInCostingStart) + 5);
-check(costing.includes("Push updates local preview")
+// S3 superseded the S2 claim "the deep-dive adds no governed mutation path":
+// OPENING a durable row in Costing still writes nothing (no mutation in the
+// open handler), and the ONE governed return is the explicit Apply, which
+// reaches the row only through lib/governedRowReturn.js.
+check(costing.includes("Governed row review · Apply to Batch row")
   && batchWorkspace.includes("Governed state is unchanged")
-  && !openInCostingHandler.includes("runMutation"),
-  "S2-3 the deep-dive remains a session/local review and adds no governed mutation path");
+  && !openInCostingHandler.includes("runMutation") && !openInCostingHandler.includes("apiFetch"),
+  "S2-3 opening the deep-dive writes nothing; the governed return is only the explicit Apply to Batch row");
 check(costingDraft.includes("const requestExitReview=()=>{")
   && costingDraft.includes("if(reviewDirty)") && costingDraft.includes("window.confirm(")
   && costing.includes("requestExitReview") && sidebar.includes("st.requestExitReview?.()"),

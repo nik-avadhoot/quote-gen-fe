@@ -31,6 +31,10 @@ import {
   findUsableStandardConstructionMatch, isUsableConstruction, sameConstruction,
 } from "../lib/constructionIdentity.js";
 import { getItem, setItem } from "../lib/persist.js";
+import {
+  appliedLocalEffects, appliedMessage, durableReviewInputs, governedRowOrigin, planGovernedRowReturn,
+  runGovernedRowReturn,
+} from "../lib/governedRowReturn.js";
 
 // The review specification for one Batch row, derived ONLY from `profile`.
 // Pure: it neither reads nor writes React state, so a refusal leaves every
@@ -68,11 +72,15 @@ export function prepareBatchRowReview({row,profile,constructionCatalogue,sectors
   // The review copy now carries the same figure calcBatchRow uses.
   sp.interest=resolveBatchInterest(profile).value;
   applyAddOns(sp,row); // R-1: single injection point
+  // S3: a governed-origin review starts from the durable row's OWN returnable
+  // inputs (add-ons, fluting, volume, MOQ), blank and zero kept apart, so the
+  // baseline a governed return compares against is what the row really holds.
+  if(row.durableRowId!=null)Object.assign(sp,durableReviewInputs(row,sp));
   return{ok:true,spec:sp};
 }
 
 export function useCostingBatchBridge(st){
-  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionCatalogue, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, sectors, setAutoFill, setBatchProfile, setDurableBatch, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setNewBatchDialogOpen, setSetAutoFill, setSpec, setTab, showToast, spec, specRaw } = st;
+  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionCatalogue, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, sectors, setAutoFill, setBatchProfile, setDurableBatch, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setNewBatchDialogOpen, setSetAutoFill, setSpec, setTab, showToast, spec, specRaw, setBatchWorkspaceRequest } = st;
   const batchCommercialDefaults=resolveBatchCommercialDefaults(batchProfile,
     sectors.find(sector=>sector.code===batchProfile.sector));
 
@@ -121,6 +129,58 @@ export function useCostingBatchBridge(st){
   // this SKU alone. Shared Construction fields (box type/ply/flutes/paper layers)
   // are only pushed if the user explicitly confirms, because that Construction
   // may be reused by other SKUs and silently changing it would re-cost them too.
+  // ── S3 · GOVERNED RETURN ────────────────────────────────────────────────
+  // The only return from a review that opened from a DURABLE Batch row. It
+  // never touches the local rows' prices and never writes a local official
+  // figure: it PATCHes the governed row through the existing route with the
+  // row version captured at open, and only after that succeeds (and its
+  // read-back shows the version advanced) does it drop the temporary preview,
+  // end the review and reopen the Batch workspace on the same row. Every
+  // refusal leaves the review, the preview and navigation exactly as they were.
+  // The Profile is not written: Customer A stays the Batch's, the SKU owner B
+  // stays row evidence, and no browser-local Customer can reach the request.
+  const applyCostingToGovernedRow=async()=>{
+    const row=batchRows.find(r=>r.id===activeBatchRowId);
+    const origin=governedRowOrigin(row);
+    const isPP=isPPType(row?.itemType);
+    const plan=planGovernedRowReturn({spec,baseline:reviewBaseline,origin,isPP,
+      profile:{
+        margin:isPP?batchCommercialDefaults.marginPP:batchCommercialDefaults.margin,
+        waste:isPP?batchCommercialDefaults.wastePP:batchCommercialDefaults.waste,
+        conv:isPP?batchCommercialDefaults.convRatePP:batchCommercialDefaults.convRate,
+      },
+      resolved:resolveSpecWasteConv(isPP)});
+    if(plan.status!=="ready"){
+      showToast(`⚠️ ${plan.message}`,plan.status==="no_change"?"info":"error",9000);
+      return {outcome:plan.status};
+    }
+    // Loaded here, not at module scope: apiClient reads import.meta.env on load,
+    // and this module is also imported by node-run fixtures.
+    const { apiFetch }=await import("../lib/apiClient.js");
+    const result=await runGovernedRowReturn({plan,origin,
+      confirm:()=>window.confirm(
+        "Apply to Batch row?\n\n"+
+        `This updates the governed Batch row (${plan.submitted.length} input${plan.submitted.length===1?"":"s"}) `+
+        "and makes its previous calculation stale. Recalculate before Send.\n\n"+
+        "OK = apply  |  Cancel = keep reviewing"),
+      request:(path,body)=>apiFetch(path,{method:"PATCH",
+        headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),
+      readFreshness:o=>apiFetch(`/batches/${o.batchId}/rows/${o.rowId}/effective-inputs`)
+        .then(response=>response.ok?response.json():{freshness:"unknown"}),
+      commit:()=>{
+        const effects=appliedLocalEffects({rows:batchRows,previewId:row.id,origin,
+          requestId:`costing-apply-${origin.batchId}-${origin.rowId}-${Date.now()}`});
+        exitReview();
+        invalidateBatchRow(row.id);
+        setBatchRows(current=>current.filter(item=>item.id!==row.id));
+        setBatchWorkspaceRequest?.(effects.workspaceRequest);
+        setTab(effects.tab);
+      }});
+    showToast(result.outcome==="applied"?`✅ ${appliedMessage(result.freshness)}`:`⚠️ ${result.message}`,
+      result.outcome==="applied"?"success":result.outcome==="cancelled"?"info":"error",9000);
+    return result;
+  };
+
   // B3: specFromProfile — seeds batch-wide fields from batchProfile; blanks row-level fields.
   // Used by "✕ Unlink" (end of REVIEW) and the idle panel "Start new SKU" Reset.
   // The reverse direction (Costing → Profile) already exists as the "↓ Profile" button.
@@ -1018,5 +1078,5 @@ export function useCostingBatchBridge(st){
 
   const startNewBatch=()=>setNewBatchDialogOpen(true);
 
-  return { completeNewBatchStart, copyCostingToProfile, discardNewDraft, loadBatchRowIntoCosting, newDraftKeepClient, newDraftNewClient, pushCostingToBatchRow, sendCostingToBatch, specContextOnly, specForNextSku, specFromProfile, startNewBatch, startNewSku };
+  return { applyCostingToGovernedRow, completeNewBatchStart, copyCostingToProfile, discardNewDraft, loadBatchRowIntoCosting, newDraftKeepClient, newDraftNewClient, pushCostingToBatchRow, sendCostingToBatch, specContextOnly, specForNextSku, specFromProfile, startNewBatch, startNewSku };
 }

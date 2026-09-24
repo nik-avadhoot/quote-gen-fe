@@ -26,8 +26,8 @@ const profileSectionLabel={color:C.amber,fontWeight:700,fontSize:7.5,
   textTransform:"uppercase",letterSpacing:"0.12em",whiteSpace:"nowrap"};
 
 export default function BatchProfileBar({ pricingCard = null }){
-  const {batchAgeLabel,batchProfile,durableBatch,freight,locations,
-    sectorCodes,sectors,setBatchProfile,showToast}=useAppState();
+  const {batchAgeLabel,batchProfile,batchWorkspaceRequest,durableBatch,freight,locations,
+    sectorCodes,sectors,setBatchProfile,setBatchWorkspaceRequest,showToast}=useAppState();
   const hasGovernedCustomer=durableBatch?.customer_party_id!=null;
   const governedCustomer=hasGovernedCustomer ? durableBatch.customer_party : null;
   const governedGroup=durableBatch?.pricing_groups?.find(group=>group.status!=="removed");
@@ -62,10 +62,22 @@ export default function BatchProfileBar({ pricingCard = null }){
   // "Batch Profile" label can open or collapse them together. Presentation
   // only — no Batch field reads or writes this.
   const [openCards,setOpenCards]=useState({customer:false,commercials:false,terms:false,pricing:false});
-  const anyCardOpen=Object.values(openCards).some(Boolean);
+  // S3: the Batch workspace lives inside the Pricing card and mounts only while
+  // it is expanded. A return from Costing (governed Apply, or the TopBar return)
+  // asks for the workspace on its originating row, so while a request for THIS
+  // Batch is pending the card is open; collapsing it withdraws the request.
+  const workspaceRequested=batchWorkspaceRequest!=null&&durableBatch?.id!=null
+    &&String(batchWorkspaceRequest.batchId)===String(durableBatch.id);
+  const anyCardOpen=Object.values(openCards).some(Boolean)||workspaceRequested;
+  const pricingExpanded=openCards.pricing||workspaceRequested;
+  const setPricingExpanded=open=>{
+    if(!open&&workspaceRequested)setBatchWorkspaceRequest?.(null);
+    setOpenCards(current=>({...current,pricing:open}));
+  };
   const setCardOpen=key=>open=>setOpenCards(current=>({...current,[key]:open}));
   const toggleAllCards=()=>{
     const next=!anyCardOpen;
+    if(!next&&workspaceRequested)setBatchWorkspaceRequest?.(null);
     setOpenCards({customer:next,commercials:next,terms:next,pricing:next});
   };
 
@@ -382,7 +394,7 @@ export default function BatchProfileBar({ pricingCard = null }){
       })()}
 
       {pricingCard&&<div className="batch-profile-pricing-card">
-        {cloneElement(pricingCard,{expanded:openCards.pricing,onExpandedChange:setCardOpen("pricing")})}
+        {cloneElement(pricingCard,{expanded:pricingExpanded,onExpandedChange:setPricingExpanded})}
       </div>}
       {/* Import profile / New batch live in the Batch grid toolbar beside Focus
           mode, freeing this row's width for the separate Terms card. */}

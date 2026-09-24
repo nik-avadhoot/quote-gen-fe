@@ -99,7 +99,7 @@ export default function CostingTab(){
             does, in the strip that already exists, rather than a banner. */}
         <span title={inReview
           ? durableReview
-            ? "A session-only review copied from the exact durable Batch row. Push updates its local preview only; governed state changes only through the existing explicit governed actions."
+            ? "A session-only review of the exact durable Batch row. Apply to Batch row updates that governed row with the row-owned inputs you changed and marks its calculation stale; specification and Batch terms are not changed from Costing."
             : "A review copy of an existing Batch row. It lives for this session only — reload and unpushed changes are gone."
           : "Your own working draft, kept in this browser. Nothing here is a Quote until it is added to a batch, and no customer can be shown it."}
           style={{alignSelf:"center",marginLeft:8,padding:"2px 7px",borderRadius:999,
@@ -107,7 +107,7 @@ export default function CostingTab(){
             whiteSpace:"nowrap",color:C.amberD,background:C.amberL,
             border:`1px dashed ${C.amber}`}}>
           {inReview
-            ? durableReview ? "Session copy · Push updates local preview" : "Session copy · not saved until Push"
+            ? durableReview ? "Governed row review · Apply to Batch row" : "Session copy · not saved until Push"
             : "Private draft · this browser only"}</span>
         <div title={[spec.client,spec.material_code,spec.product].filter(Boolean).join(" · ")||"New SKU"}
           style={{alignSelf:"center",minWidth:0,maxWidth:"min(460px,38vw)",marginLeft:8,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../../lib/apiClient.js";
 import { classifyResponse } from "../../lib/backendError.js";
 import { ownerStaleLockReclaimRequest } from "../../lib/batchLockModel.js";
@@ -634,6 +634,15 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     onBatchChange?.(next);
   };
 
+  // The parent passes onBatchChange inline, so it is a new function on every
+  // render. As a dependency of the load below it re-ran the load after every
+  // accepted read (load -> onBatchChange -> parent re-render -> new callback ->
+  // load), re-reading the workspace continuously while the panel was open.
+  // The load depends on the Batch identity only; the latest callback is read
+  // through a ref.
+  const onBatchChangeRef = useRef(onBatchChange);
+  useEffect(() => { onBatchChangeRef.current = onBatchChange; }, [onBatchChange]);
+
   useEffect(() => {
     if (fixtureOnly) return undefined;
     let cancelled = false;
@@ -646,7 +655,7 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
         if (outcome.kind === "ok" && data.batch) {
           setState({ status: "ready", batch: data.batch,
             message: "Caller-visible durable state loaded." });
-          onBatchChange?.(data.batch);
+          onBatchChangeRef.current?.(data.batch);
         } else {
           setState({ status: outcome.kind === "access-denied" ? "denied" : "error",
             batch: null, message: outcome.message || "The Batch workspace could not be loaded." });
@@ -657,7 +666,7 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
       }
     })();
     return () => { cancelled = true; };
-  }, [batchId, fixtureOnly, onBatchChange]);
+  }, [batchId, fixtureOnly]);
 
   const batch = state.batch;
   const profile = batch?.current_profile;
@@ -1351,7 +1360,7 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
 
   const copyToLocalPreview = row => {
     const existing = localRows.find(item => String(item.durableRowId) === String(row.id));
-    const preview = durableRowToLocalPreview(row, existing?.id || `local-durable-${row.id}`);
+    const preview = durableRowToLocalPreview(row, existing?.id || `local-durable-${row.id}`, batch);
     return commitLocalPreview(row, preview, existing, freshBatchProfileValues(batch));
   };
 

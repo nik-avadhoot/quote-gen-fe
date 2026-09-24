@@ -14,13 +14,18 @@ export function durableRowSelection(skus, skuId, versionId) {
   return { sku, version };
 }
 
-export function durableRowToLocalPreview(row, existingId = `local-durable-${row.id}`) {
+export function durableRowToLocalPreview(row, existingId = `local-durable-${row.id}`, batch = null) {
   const version = row?.sku_version || {};
   const construction = row?.effective_construction?.construction;
   return {
     id: existingId,
     durableRowId: row.id,
     durableRowContentVersion: row.content_version,
+    // S3: the exact identities a governed return resends unchanged.
+    durableBatchId: batch?.id ?? row.batch_id ?? null,
+    durableBatchContentVersion: batch?.content_version ?? null,
+    durableRowType: row.row_type ?? null,
+    durableMaterialCode: row.material_code ?? null,
     governedSkuId: row.sku_id,
     governedSkuVersionId: row.sku_version_id,
     governedPricingGroupId: row.pricing_group_id,
@@ -71,7 +76,7 @@ export function durableRowToLocalPreview(row, existingId = `local-durable-${row.
 // render's (possibly unrelated) browser-local Profile, and only a successful
 // transition hands the same object to commit.
 export function openDurableRowInCosting({ batch, row, existingId, transition, commit }) {
-  const preview = durableRowToLocalPreview(row, existingId || `local-durable-${row.id}`);
+  const preview = durableRowToLocalPreview(row, existingId || `local-durable-${row.id}`, batch);
   const targetProfile = freshBatchProfileValues(batch);
   if (transition(preview, targetProfile) !== true) return { opened: false, preview: null, targetProfile: null };
   commit(preview, targetProfile);
