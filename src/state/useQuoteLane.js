@@ -25,6 +25,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getItem, setItem } from "../lib/persist.js";
 import { laneSelectionApplies } from "../lib/quoteJourney.js";
+import { isS1ActiveBrowserFixture, S1_ACTIVE_BATCH } from "../lib/s1BrowserFixture.js";
 
 const LANE_KEY = "cbb_quote_lane";
 
@@ -43,7 +44,10 @@ function readSelection() {
 export function useQuoteLane(st) {
   const { batchRows, durableBatch, invalidateAllBatchResults, setNewBatchDialogOpen,
     showToast } = st;
-  const [laneSelection, setLaneSelectionState] = useState(readSelection);
+  const [laneSelection, setLaneSelectionState] = useState(() =>
+    isS1ActiveBrowserFixture()
+      ? { lane: "customer", batchId: String(S1_ACTIVE_BATCH.id), chosenAt: 1 }
+      : readSelection());
   // A promotion in flight: the user chose Customer quote and the governed Batch
   // creation panel is open. Held in a ref because it must survive the renders
   // between opening the panel and the Batch coming back, without causing any.

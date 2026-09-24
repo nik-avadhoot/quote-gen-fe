@@ -21,6 +21,7 @@ import {
 import { durableBatchPreparation, durableRowSelection, durableRowSpecificationEvidence,
   durableRowToLocalPreview, localPreviewState }
   from "../src/lib/batchRowModel.js";
+import { batchSkuChoices } from "../src/lib/batchSkuChoice.js";
 import { readFileSync } from "node:fs";
 
 let passed = 0;
@@ -337,9 +338,16 @@ check(workspacePanel.includes("/row-options")
   && workspacePanel.includes("No caller-visible durable rows")
   && workspacePanel.includes("no governed record was written"),
   "U4-FE-33 durable row UI exposes live, fixture, empty and local-preview boundaries")
+check(workspacePanel.includes("Open in Costing")
+  && workspacePanel.includes("openDurableRowInCosting({")
+  && workspacePanel.includes("transition: loadBatchRowIntoCosting")
+  && workspacePanel.includes("commitLocalPreview(row, preview, existing, targetProfile)")
+  && workspacePanel.includes('mode: "row-focus"'),
+  "S2-FE-1 durable-row deep-dive preserves the local-preview authority boundary and return identity")
 check(workspace.includes("/batches/pricing-basis?reference=")
   && workspace.includes("runMutation(`/batches/${batch.id}/pricing-basis`")
   && workspace.includes("Reopen persisted selection")
+  && workspace.includes("setBatchProfile(freshBatchProfileValues(accepted))")
   && workspace.includes("governed RPC completed"),
   "U4-FE-7 production workspace opens, mutates through the backend RPC route and reopens")
 check(!workspace.includes("localStorage") && !workspace.includes(".table(")
@@ -386,11 +394,11 @@ check(appCss.includes(".batch-profile-pricing-card {\n  width: auto;\n  min-widt
 check(!profileBar.includes("<SummaryRow title=\"Actions\"")
   && !profileBar.includes("onClick={copyCostingToProfile}")
   && batchGrid.includes("onClick={copyCostingToProfile}")
-  && batchGrid.includes("onClick={startNewBatch}")
-  && batchGrid.indexOf("onClick={startNewBatch}") < batchGrid.indexOf("onClick={onToggleFocusMode}")
+  && batchGrid.includes("Batch tools ▾")
+  && !batchGrid.includes("+ New customer quote")
   && !profileBar.includes("onClick={importConstrFromSpec}")
   && !profileBar.includes("+ Constr"),
-  "U4-FE-11a Import profile and New batch sit in the grid toolbar beside Focus mode, freeing the profile row")
+  "U4-FE-11a secondary Batch setup stays in the grid toolbar while the primary new-Quote action leads above it")
 check(workspace.includes("Permanent Batch reference")
   && workspace.includes("batch-pb-workspace-meta")
   && selector.includes("Pricing date")
@@ -481,12 +489,15 @@ check(pricingState.includes("durableBatch")
 check(newBatchPanel.includes('apiFetch("/batches/create-options")')
   && newBatchPanel.includes('runMutation("/batches"')
   && newBatchPanel.includes("family_id: Number(familyId)")
+  && newBatchPanel.includes("customer_party_id: Number(partyId)")
   && newBatchPanel.includes("plant_id: Number(plantId)")
   && newBatchPanel.includes("sector_id: Number(sectorId)")
-  && newBatchPanel.includes("const ready = state.status === \"ready\" && familyId && plantId && sectorId")
+  && newBatchPanel.includes("&& (shipToId || destinationText.trim()) && (billToId || billingText.trim())")
   && !newBatchPanel.includes(".table("),
-  "U4-FE-24 governed creation uses caller-scoped options and the existing Batch RPC wrapper only")
-check(newBatchPanel.includes("Find Customer Family or member Customer")
+  "U4-FE-24 governed creation requires exact member, delivery and terms through the Batch API only")
+check(newBatchPanel.includes("Find or create Customer/Prospect")
+  && newBatchPanel.includes('className="new-batch-search-choices"')
+  && newBatchPanel.includes('className="is-create"')
   && newBatchPanel.includes("member.display_name")
   && newBatchPanel.includes("member.customer_code")
   && newBatchPanel.includes("make-quote authority")
@@ -495,6 +506,17 @@ check(newBatchPanel.includes("Find Customer Family or member Customer")
   && newBatchPanel.includes("first attached Sector is suggested")
   && newBatchPanel.includes("guidance and inheritance follow the selected Sector only"),
   "U4-FE-25 creation presents exact Family/member/Plant identity and restricts the Batch to one attached Sector")
+const skuChoices = [
+  { id: 7, plant_item_code: "NAG-BOX-7", customer: { display_name: "Acme Foods" },
+    versions: [{ item_name: "Export carton" }], external_references: [], last_used_at: null },
+  { id: 8, plant_item_code: "NAG-BOX-8", customer: { display_name: "Acme Foods" },
+    versions: [{ item_name: "Retail carton" }],
+    external_references: [{ reference_value: "BUYER-8" }], last_used_at: "2026-09-22T10:00:00Z" },
+];
+check(batchSkuChoices(skuChoices, "acme").map(sku => sku.id).join(",") === "8,7"
+  && batchSkuChoices(skuChoices, "buyer-8").map(sku => sku.id).join(",") === "8"
+  && batchSkuChoices(skuChoices, "export carton").map(sku => sku.id).join(",") === "7",
+  "S2-FE-1 established SKU search covers exact customer references and item names, with recent use first")
 check(workspacePanel.includes("Customer Family Sectors")
   && workspacePanel.includes("This Batch uses one only")
   && workspacePanel.includes("BATCH SECTOR")
@@ -529,15 +551,13 @@ check(workspacePanel.includes('runMutation(`/batches/${batch.id}/sets`')
   && workspace.includes("FIX-SET-9301"),
   "U4-FE-35 SET identity, membership and active/dissolved state are explicit on the fixture surface")
 const canonicalNavigation = [
-  "Start Costing", "Batch Builder", "My Batches", "Approval Inbox", "Quotes",
+  "Quick calculation", "Batch Builder", "Active Batches", "Approval Inbox", "Quotes",
   "Customer Families", "Customers and Prospects", "Construction Library", "Plant Construction Adoption",
   "SKU Master", "Commercial Policies", "Rate Masters", "Freight Masters", "Pricing Basis Releases",
   "Plant Configuration", "Users & Access", "Producing Plants", "Audit History",
 ];
-check(["Workspace", "Customer Masters", "Product Masters", "Commercial Masters", "Technical Masters",
-  "Administration"].every(section => sidebar.includes(`["${section}"`))
+check(["Workspace", "Reference data", "Administration"].every(section => sidebar.includes(`["${section}"`))
   && !sidebar.includes('["Plant Capabilities"')
-  && sidebar.indexOf('item("gsm"') > sidebar.indexOf('["Technical Masters"')
   && sidebar.indexOf('item("gsm"') > sidebar.indexOf('pending("PC","Plant Configuration"')
   && sidebar.indexOf('item("gsm"') < sidebar.indexOf('["Administration"')
   && canonicalNavigation.every(label => sidebar.includes(`"${label}"`))
@@ -555,18 +575,18 @@ check(sidebar.includes("openSections")
   && appCss.includes(".sidebar-nav-section.is-current")
   && appCss.includes(".sidebar-nav-pending small"),
   "U4-FE-36a navigation uses a compact active-section accordion and restrained status tags")
-const productMastersMenu = sidebar.slice(
-  sidebar.indexOf('["Product Masters"'), sidebar.indexOf('["Commercial Masters"'));
-check(productMastersMenu.includes(':[pending("CL","Construction Library"')
-  && productMastersMenu.includes('item("conadoption","PA","Plant Construction Adoption"')
-  && productMastersMenu.includes('item("skus","SK","SKU Master"')
-  && productMastersMenu.includes(':[pending("SK","SKU Master"')
-  && productMastersMenu.includes('Read-only governed SKUs, versions, specifications and Location applicability')
-  && !productMastersMenu.includes('pending("SV","SKU Versions"')
-  && !productMastersMenu.includes('pending("SL","SKU–Location Applicability"')
-  && !productMastersMenu.includes('pending("SR","Specification Reference"')
+const referenceDataMenu = sidebar.slice(
+  sidebar.indexOf('["Reference data"'), sidebar.indexOf('["Administration"'));
+check(referenceDataMenu.includes(':[pending("CL","Construction Library"')
+  && referenceDataMenu.includes('item("conadoption","PA","Plant Construction Adoption"')
+  && referenceDataMenu.includes('item("skus","SK","SKU Master"')
+  && referenceDataMenu.includes(':[pending("SK","SKU Master"')
+  && referenceDataMenu.includes('Read-only governed SKUs, versions, specifications and Location applicability')
+  && !referenceDataMenu.includes('pending("SV","SKU Versions"')
+  && !referenceDataMenu.includes('pending("SL","SKU–Location Applicability"')
+  && !referenceDataMenu.includes('pending("SR","Specification Reference"')
   && sidebar.includes('detail === "Capability required" ? "Restricted"'),
-  "U4-FE-36b Product Masters remains visible and SKU functions do not become redundant destinations")
+  "U4-FE-36b Product reference data remains reachable and SKU functions do not become redundant destinations")
 check(sidebar.includes('pending("CP","Customers and Prospects","Locations and External References included")')
   && !sidebar.includes('pending("CL","Customer Locations"')
   && !sidebar.includes('pending("ER","External References"')

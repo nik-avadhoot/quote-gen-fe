@@ -3,15 +3,18 @@ import { apiFetch } from "../../lib/apiClient.js";
 import { classifyResponse } from "../../lib/backendError.js";
 import { ownerStaleLockReclaimRequest } from "../../lib/batchLockModel.js";
 import { DURABLE_ROW_TYPES, durableBatchPreparation, durableRowSelection,
-  durableRowSpecificationEvidence, durableRowToLocalPreview, localPreviewState }
+  durableRowSpecificationEvidence, durableRowToLocalPreview, localPreviewState,
+  openDurableRowInCosting }
   from "../../lib/batchRowModel.js";
 import { applyFixturePricingGroupUpdate, deliveryGroupStatusBody,
   PRICING_GROUP_FREIGHT_MODES, PRICING_GROUP_PAYMENT_DAYS, pricingGroupCreateBody,
   pricingGroupCreateValidation, pricingGroupDraft, pricingGroupDraftValidation,
   pricingGroupStatusBody, pricingGroupUpdateBody } from "../../lib/pricingGroupModel.js";
 import { runMutation } from "../../lib/runMutation.js";
+import { batchSkuChoices } from "../../lib/batchSkuChoice.js";
 import { governedBatchActionState } from "../../lib/governedBatchActions.js";
 import { useAppState } from "../../state/AppStateContext.js";
+import { freshBatchProfileValues } from "../../state/costingDraftModel.js";
 
 const shown = value => value === null || value === undefined || value === "" ? "—" : String(value);
 
@@ -312,12 +315,18 @@ const ROW_ADDON_FIELDS = [
 const ROW_NUMERIC_FIELDS = [...ROW_OVERRIDE_FIELDS, ...ROW_ADDON_FIELDS,
   ["fluting_bcf", "Fluting BCF"]];
 
-function BatchRowEditor({ row, groups, skus, loading, disabled, fixtureOnly, initialGroupId, onCancel, onSave }) {
+function BatchRowEditor({ row, groups, skus, constructionOptions, batch, loading, disabled,
+  fixtureOnly, initialGroupId, onCancel, onSave, onProposeSku }) {
   const activeGroups = groups.filter(group => group.status === "active");
   const currentGroupIsActive = activeGroups.some(group =>
     String(group.id) === String(row?.pricing_group_id));
   const requestedGroup = activeGroups.find(group => String(group.id) === String(initialGroupId));
   const [skuId, setSkuId] = useState(row?.sku_id == null ? "" : String(row.sku_id));
+  const [skuQuery, setSkuQuery] = useState("");
+  const [proposingSku, setProposingSku] = useState(false);
+  const [proposalError, setProposalError] = useState("");
+  const [proposal, setProposal] = useState({ item_name: "", construction_version_id: "",
+    length_mm: "", width_mm: "", height_mm: "", box_type: "RSC", ups: "1" });
   const [versionId, setVersionId] = useState(row?.sku_version_id == null ? "" : String(row.sku_version_id));
   const [groupId, setGroupId] = useState(row?.pricing_group_id != null && currentGroupIsActive
     ? String(row.pricing_group_id) : String(requestedGroup?.id || activeGroups[0]?.id || ""));
@@ -327,6 +336,23 @@ function BatchRowEditor({ row, groups, skus, loading, disabled, fixtureOnly, ini
     ROW_NUMERIC_FIELDS
       .map(([key]) => [key, row?.[key] == null ? "" : String(row[key])])));
   const selection = durableRowSelection(skus, skuId, versionId);
+  const filteredSkus = batchSkuChoices(skus, skuQuery);
+  const proposalReady = Boolean(batch?.customer_party_id && batch?.plant?.plant_code
+    && proposal.item_name.trim() && proposal.construction_version_id
+    && ["length_mm", "width_mm", "height_mm", "ups"].every(key => Number(proposal[key]) > 0));
+  const submitProposal = async () => {
+    if (!proposalReady || disabled) return;
+    setProposalError("");
+    const result = await onProposeSku(proposal);
+    if (!result?.versions?.[0]) {
+      setProposalError("The proposed SKU was not returned as an eligible Batch-row choice. Check its Construction adoption and your read access.");
+      return;
+    }
+    setSkuId(String(result.id));
+    setVersionId(String(result.versions[0].id));
+    setSkuQuery("");
+    setProposingSku(false);
+  };
   const versions = selection.sku?.versions || [];
   const complete = skuId && versionId && groupId && rowType;
   const identity = value => fixtureOnly ? value : Number(value);
@@ -350,18 +376,59 @@ function BatchRowEditor({ row, groups, skus, loading, disabled, fixtureOnly, ini
       <small>{row ? `Row #${row.id} · lineage #${row.lineage_id}`
         : "Exact governed identities; labels are never parsed"}</small>
     </div>
+    {!row && <label>Find established SKU
+      <input type="search" value={skuQuery} disabled={disabled || loading}
+        onChange={event => setSkuQuery(event.target.value)}
+        placeholder="Plant Item Code, Customer reference or description" />
+      <small>Caller-visible recent use is shown first. Select an exact SKU and Version.</small>
+    </label>}
     <label>Customer SKU
       <select value={skuId} disabled={disabled || loading || Boolean(row)} onChange={event => {
         setSkuId(event.target.value);
+        setSkuQuery("");
         const nextSku = skus.find(item => String(item.id) === event.target.value);
         setVersionId(nextSku?.versions?.[0] ? String(nextSku.versions[0].id) : "");
       }}>
-        <option value="">{loading ? "Loading governed SKUs…" : "Select SKU"}</option>
-        {skus.map(sku => <option key={sku.id} value={sku.id}>
-          {sku.customer?.customer_code || `Customer #${sku.party_id}`} · {sku.plant_item_code || `SKU #${sku.id}`} · {sku.status}
+        <option value="">{loading ? "Loading governed SKUs…" : "Select established SKU"}</option>
+        {filteredSkus.map(sku => <option key={sku.id} value={sku.id}>
+          {sku.customer?.display_name || `Customer #${sku.party_id}`} · {sku.plant_item_code || `SKU #${sku.id}`} · {sku.versions?.[0]?.item_name || "No item name"} · {sku.status}{sku.last_used_at ? " · used recently" : ""}
         </option>)}
       </select>
+      {!filteredSkus.length && <small>No matching eligible SKU. Create a proposed SKU below if this is a new item.</small>}
     </label>
+    {!row && <div className="batch-workspace-sku-proposal">
+      <button type="button" onClick={() => setProposingSku(value => !value)} disabled={disabled}>
+        {proposingSku ? "Close proposed SKU" : "+ Create proposed SKU"}</button>
+      {proposingSku && <div className="batch-workspace-sku-proposal-fields">
+        <strong>New item for {batch?.customer_party?.display_name || "the selected Customer"}</strong>
+        {!batch?.customer_party_id && <small>This legacy Batch has no exact selected Customer. Start a new customer quote before proposing its SKU.</small>}
+        <label>Item name<input value={proposal.item_name} maxLength={200}
+          onChange={event => setProposal(current => ({ ...current, item_name: event.target.value }))} /></label>
+        <label>Adopted Construction Version
+          <select value={proposal.construction_version_id} onChange={event => setProposal(current => ({
+            ...current, construction_version_id: event.target.value }))}>
+            <option value="">Choose adopted Construction</option>
+            {(constructionOptions || []).map(option => <option key={option.id} value={option.id}>
+              {option.construction?.construction_code || `Construction #${option.construction_id}`} · v{option.version_no}
+            </option>)}
+          </select>
+        </label>
+        {[["length_mm", "Length mm"], ["width_mm", "Width mm"], ["height_mm", "Height mm"]].map(([key,label]) =>
+          <label key={key}>{label}<input type="number" min="0.001" step="0.001" value={proposal[key]}
+            onChange={event => setProposal(current => ({ ...current, [key]: event.target.value }))} /></label>)}
+        <label>Box type<select value={proposal.box_type} onChange={event => setProposal(current => ({
+          ...current, box_type: event.target.value }))}>
+          {["RSC", "Die-R", "Die-S", "HRSC-L", "HRSC-R", "HRSC-O", "Board", "PP", "Custom"]
+            .map(type => <option key={type} value={type}>{type}</option>)}
+        </select></label>
+        <label>Ups<input type="number" min="1" step="1" value={proposal.ups}
+          onChange={event => setProposal(current => ({ ...current, ups: event.target.value }))} /></label>
+        <small>Creates one proposed SKU with Version 1. It is quotable but not published; calculation and Send keep their existing governed checks.</small>
+        {proposalError && <div role="alert">{proposalError}</div>}
+        <button type="button" onClick={submitProposal} disabled={disabled || !proposalReady}>
+          Create and select proposed SKU</button>
+      </div>}
+    </div>}
     <label>SKU Version · Construction
       <select value={versionId} disabled={disabled || loading} onChange={event => setVersionId(event.target.value)}>
         <option value="">Select SKU version</option>
@@ -507,8 +574,9 @@ function MembershipCreator({ setItem, rows, disabled, initialRowId, onCancel, on
 
 export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixtureWorkspace,
   initialDeliveryAction, showToast, onBatchChange, onClose }) {
-  const { batchResults, batchRows: localRows, invalidateBatchRow, setBatchProfile,
-    setBatchRows: setLocalRows, setQuoteView, setQuoteWorkspaceRequest, setTab } = useAppState();
+  const { batchResults, batchRows: localRows, invalidateBatchRow, loadBatchRowIntoCosting,
+    setBatchProfile, setBatchRows: setLocalRows, setBatchWorkspaceRequest, setQuoteView,
+    setQuoteWorkspaceRequest, setTab } = useAppState();
   const [state, setState] = useState(() => fixtureOnly
     ? { status: "ready", batch: fixtureWorkspace, message: "Fixture-only workspace illustration." }
     : { status: "loading", batch: null, message: "Loading the caller-visible durable Batch…" });
@@ -546,12 +614,17 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
   const [groupEditing, setGroupEditing] = useState(null);
   const [groupCreating, setGroupCreating] = useState(false);
   const [rowEditing, setRowEditing] = useState(requestedRowEditor?.id ?? null);
+  const [rowCreateSerial, setRowCreateSerial] = useState(0);
   const [profileEditing, setProfileEditing] = useState(false);
   const [setEditor, setSetEditor] = useState(requestedSetEditor);
   const [pendingRowStatus, setPendingRowStatus] = useState(requestedRowStatus);
   const [rowCatalogue, setRowCatalogue] = useState(() => fixtureOnly
-    ? { status: "ready", skus: fixtureWorkspace?.available_skus || [] }
-    : { status: requestedRowEditor ? "loading" : "idle", skus: [] });
+    ? { status: "ready", skus: fixtureWorkspace?.available_skus || [],
+      constructionOptions: fixtureWorkspace?.available_constructions || (fixtureWorkspace?.available_skus || []).flatMap(sku =>
+        (sku.versions || []).map(version => ({ id: version.construction_version_id,
+          construction_id: version.construction?.id, version_no: version.construction_version?.version_no || 1,
+          construction: version.construction }))) }
+    : { status: requestedRowEditor ? "loading" : "idle", skus: [], constructionOptions: [] });
   const [busy, setBusy] = useState(false);
   const [effectiveByRow, setEffectiveByRow] = useState({});
   const [sentRevisionId, setSentRevisionId] = useState(null);
@@ -596,19 +669,20 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
 
   const loadRowCatalogue = async () => {
     if (fixtureOnly || rowCatalogue.status === "ready" || rowCatalogue.status === "loading") return;
-    setRowCatalogue({ status: "loading", skus: [] });
+    setRowCatalogue({ status: "loading", skus: [], constructionOptions: [] });
     try {
       const response = await apiFetch(`/batches/${batch.id}/row-options`);
       const data = await response.json().catch(() => ({}));
       const outcome = classifyResponse({ ok: response.ok, status: response.status, data });
       if (outcome.kind === "ok") {
-        setRowCatalogue({ status: "ready", skus: data.skus || [] });
+        setRowCatalogue({ status: "ready", skus: data.skus || [],
+          constructionOptions: data.construction_options || [] });
       } else {
         setRowCatalogue({ status: outcome.kind === "access-denied" ? "denied" : "error",
-          skus: [], message: outcome.message || "Governed SKU options are unavailable." });
+          skus: [], constructionOptions: [], message: outcome.message || "Governed SKU options are unavailable." });
       }
     } catch {
-      setRowCatalogue({ status: "error", skus: [],
+      setRowCatalogue({ status: "error", skus: [], constructionOptions: [],
         message: "Governed SKU options could not be loaded. No fixture was substituted." });
     }
   };
@@ -782,8 +856,11 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
         : initialDeliveryAction.pricingGroupId != null
           ? `batch-workspace-pricing-group-${initialDeliveryAction.pricingGroupId}`
           : "batch-workspace-groups-title";
-    const frame = window.requestAnimationFrame(() =>
-      document.getElementById(targetId)?.scrollIntoView({ block: "center" }));
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(targetId);
+      target?.scrollIntoView({ block: "center" });
+      target?.focus?.({ preventScroll: true });
+    });
     return () => window.cancelAnimationFrame(frame);
   }, [initialDeliveryAction, state.status]);
 
@@ -820,13 +897,14 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
         const outcome = classifyResponse({ ok: response.ok, status: response.status, data });
         if (cancelled) return;
         if (outcome.kind === "ok") {
-          setRowCatalogue({ status: "ready", skus: data.skus || [] });
+          setRowCatalogue({ status: "ready", skus: data.skus || [],
+            constructionOptions: data.construction_options || [] });
         } else {
           setRowCatalogue({ status: outcome.kind === "access-denied" ? "denied" : "error",
-            skus: [], message: outcome.message || "Governed SKU options are unavailable." });
+            skus: [], constructionOptions: [], message: outcome.message || "Governed SKU options are unavailable." });
         }
       } catch {
-        if (!cancelled) setRowCatalogue({ status: "error", skus: [],
+        if (!cancelled) setRowCatalogue({ status: "error", skus: [], constructionOptions: [],
           message: "Governed SKU options could not be loaded. No fixture was substituted." });
       }
     })();
@@ -1081,7 +1159,60 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     setBusy(false);
     if (saved) {
       setEffectiveByRow({});
-      setRowEditing(null);
+      if (row) setRowEditing(null);
+      else {
+        setRowCreateSerial(serial => serial + 1);
+        setRowEditing("new");
+      }
+    }
+  };
+
+  const proposeSku = async proposal => {
+    if (!batch?.customer_party_id || !batch?.plant?.plant_code) return null;
+    setBusy(true);
+    const body = {
+      plant_code: batch.plant.plant_code,
+      party_id: fixtureOnly ? batch.customer_party_id : Number(batch.customer_party_id),
+      pricing_portfolio: "Transactional",
+      is_price_driving: true,
+      fields: {
+        item_name: proposal.item_name.trim(),
+        construction_version_id: fixtureOnly ? proposal.construction_version_id
+          : Number(proposal.construction_version_id),
+        length_mm: Number(proposal.length_mm), width_mm: Number(proposal.width_mm),
+        height_mm: Number(proposal.height_mm), box_type: proposal.box_type,
+        ups: Number(proposal.ups),
+      },
+    };
+    if (fixtureOnly) {
+      const option = rowCatalogue.constructionOptions.find(item =>
+        String(item.id) === String(proposal.construction_version_id));
+      const id = `fixture-proposed-sku-${Date.now()}`;
+      const sku = { id, plant_id: batch.plant_id, party_id: batch.customer_party_id,
+        plant_item_code: null, status: "proposed", customer: batch.customer_party,
+        external_references: [], last_used_at: null,
+        versions: [{ id: `fixture-proposed-version-${Date.now()}`, sku_id: id,
+          version_no: 1, approved: false, ...body.fields,
+          construction: option?.construction || null,
+          construction_version: { id: option?.id, version_no: option?.version_no } }] };
+      setRowCatalogue(previous => ({ ...previous, skus: [...previous.skus, sku] }));
+      setBusy(false);
+      return sku;
+    }
+    const created = await runMutation("/masters/skus", body,
+      { showToast, successMessage: "Proposed SKU created for this Customer" });
+    if (!created?.id) { setBusy(false); return null; }
+    try {
+      const response = await apiFetch(`/batches/${batch.id}/row-options`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error("New SKU choices could not be loaded.");
+      setRowCatalogue({ status: "ready", skus: data.skus || [],
+        constructionOptions: data.construction_options || [] });
+      setBusy(false);
+      return (data.skus || []).find(sku => String(sku.id) === String(created.id)) || null;
+    } catch {
+      setBusy(false);
+      return null;
     }
   };
 
@@ -1204,21 +1335,43 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     setEffectiveByRow({});
   };
 
-  const copyToLocalPreview = row => {
-    const existing = localRows.find(item => String(item.durableRowId) === String(row.id));
-    const preview = durableRowToLocalPreview(row, existing?.id || `local-durable-${row.id}`);
+  // The Profile committed with a preview is the governed Batch's own
+  // (freshBatchProfileValues). row.customer owns the SKU only and is never the
+  // Profile Customer: a Family member's SKU stays under the Batch's Customer.
+  const commitLocalPreview = (row, preview, existing, targetProfile) => {
     setLocalRows(current => existing
       ? current.map(item => item.id === existing.id ? preview : item)
       : [...current, preview]);
     if (existing) invalidateBatchRow(existing.id);
-    setBatchProfile(current => ({
-      ...current,
-      client: row.customer?.display_name || current.client,
-      plant: batch.plant?.name || batch.plant?.plant_code || current.plant,
-      sector: batch.sector?.sector_code || current.sector,
-    }));
+    setBatchProfile(targetProfile);
     showToast?.("Copied exact governed row inputs to the local preview grid. No calculation was persisted.",
       "success", 6500);
+    return preview;
+  };
+
+  const copyToLocalPreview = row => {
+    const existing = localRows.find(item => String(item.durableRowId) === String(row.id));
+    const preview = durableRowToLocalPreview(row, existing?.id || `local-durable-${row.id}`);
+    return commitLocalPreview(row, preview, existing, freshBatchProfileValues(batch));
+  };
+
+  const openInCosting = row => {
+    const existing = localRows.find(item => String(item.durableRowId) === String(row.id));
+    openDurableRowInCosting({
+      batch,
+      row,
+      existingId: existing?.id,
+      transition: loadBatchRowIntoCosting,
+      commit: (preview, targetProfile) => {
+        commitLocalPreview(row, preview, existing, targetProfile);
+        setBatchWorkspaceRequest({
+          requestId: `costing-return-${batch.id}-${row.id}-${Date.now()}`,
+          batchId: batch.id,
+          mode: "row-focus",
+          rowId: row.id,
+        });
+      },
+    });
   };
 
   return <div className="batch-workspace-panel-scrim" role="presentation">
@@ -1252,6 +1405,10 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
             <Identity label="Batch reference" value={batch.batch_reference} detail={`Batch #${batch.id}`} />
             <Identity label="Customer Family" value={batch.family?.name || `#${batch.family_id}`}
               detail={batch.family ? `${batch.family.group_customer_code || "No family code"} · #${batch.family.id}` : "Details unavailable"} />
+            <Identity label="Selected Customer / Prospect"
+              value={batch.customer_party?.display_name || (batch.customer_party_id ? "Identity unavailable" : "Not selected on this Batch")}
+              detail={batch.customer_party
+                ? `${batch.customer_party.customer_code || "Prospect"} · Party #${batch.customer_party.id}` : null} />
             <Identity label="Producing Plant" value={batch.plant?.name || `#${batch.plant_id}`}
               detail={batch.plant ? `${batch.plant.plant_code} · #${batch.plant.id}` : "Details unavailable"} />
             <Identity label="Owner" value={batch.owner?.display_name || `#${batch.owner_user_id}`}
@@ -1350,7 +1507,8 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
               const preview = localPreviewState(row, localRows, batchResults);
               const specification = durableRowSpecificationEvidence(row, localRows, batchResults);
               const assignedGroup = groups.find(group => String(group.id) === String(row.pricing_group_id));
-              return <article id={`batch-workspace-row-${row.id}`} className="batch-workspace-row" key={row.id}>
+              return <article id={`batch-workspace-row-${row.id}`} tabIndex={-1}
+                className="batch-workspace-row" key={row.id}>
                 <div className="batch-workspace-row-head">
                   <div><strong>{row.material_code || row.sku?.plant_item_code || `SKU #${row.sku_id}`}</strong>
                     <small>Row #{row.id} · lineage #{row.lineage_id} · v{row.content_version} · {row.status}</small></div>
@@ -1405,6 +1563,11 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
                   <button type="button" onClick={() => copyToLocalPreview(row)} disabled={row.status !== "active"}>
                     {preview.state === "not-copied" ? "Copy to local preview" : "Refresh local preview"}
                   </button>
+                  <button type="button" className="is-primary" onClick={() => openInCosting(row)}
+                    disabled={row.status !== "active"}
+                    title="Open a session-only Costing review of this exact durable row. Governed state is unchanged.">
+                    Open in Costing
+                  </button>
                   <button type="button" onClick={() => loadEffectiveInputs(row)}
                     disabled={row.status !== "active" || effectiveByRow[row.id]?.status === "loading"}>
                     {effectiveByRow[row.id]?.status === "loading" ? "Resolving…" : "Resolve values & freshness"}
@@ -1424,20 +1587,23 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
                 <RowSpecificationEvidence evidence={specification} />
                 {rowEditing === row.id && <BatchRowEditor key={`${row.id}-${row.content_version}`}
                   row={row} groups={groups} skus={rowCatalogue.skus}
+                  constructionOptions={rowCatalogue.constructionOptions} batch={batch}
                   initialGroupId={requestedRowEditor?.groupId}
                   loading={rowCatalogue.status === "loading"}
                   disabled={!batch.caller_holds_lock || busy || ["denied", "error"].includes(rowCatalogue.status)}
                   fixtureOnly={fixtureOnly} onCancel={() => setRowEditing(null)}
-                  onSave={body => saveRow(row, body)} />}
+                  onSave={body => saveRow(row, body)} onProposeSku={proposeSku} />}
               </article>;
             })}
           </div>
-          {rowEditing === "new" && <BatchRowEditor groups={groups} skus={rowCatalogue.skus}
+          {rowEditing === "new" && <BatchRowEditor key={`new-${rowCreateSerial}`}
+            groups={groups} skus={rowCatalogue.skus}
+            constructionOptions={rowCatalogue.constructionOptions} batch={batch}
             initialGroupId={requestedRowEditor?.groupId}
             loading={rowCatalogue.status === "loading"}
             disabled={!batch.caller_holds_lock || busy || ["denied", "error"].includes(rowCatalogue.status)}
             fixtureOnly={fixtureOnly} onCancel={() => setRowEditing(null)}
-            onSave={body => saveRow(null, body)} />}
+            onSave={body => saveRow(null, body)} onProposeSku={proposeSku} />}
           {rowEditing !== "new" && <button type="button" className="batch-workspace-add-row"
             onClick={() => openRowEditor(null)} disabled={!batch.caller_holds_lock || busy || !groups.length}>
             + Add durable row
@@ -1550,6 +1716,12 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
                     {String(group.freight_basis_delivery_group_id) === String(delivery.id) ? " · freight basis" : ""}</small></div>
                 <Location role="Bill-to" locationId={delivery.bill_to_location_id} location={delivery.bill_to_location} />
                 <Location role="Ship-to" locationId={delivery.ship_to_location_id} location={delivery.ship_to_location} />
+                {!delivery.ship_to_location_id && delivery.destination_text && <div className="batch-workspace-route-note">
+                  Quote-specific destination: {delivery.destination_text}
+                </div>}
+                {!delivery.bill_to_location_id && delivery.billing_text && <div className="batch-workspace-route-note">
+                  Quote-specific billing destination: {delivery.billing_text}
+                </div>}
                 <div className="batch-workspace-delivery-actions">
                   <button type="button" onClick={() => openEditor(group, delivery)}
                     disabled={!batch.caller_holds_lock || busy || group.status !== "active" || delivery.status !== "active"}>Edit route</button>

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { C, sans } from "./theme.js";
 import { useAuth } from "./AuthContext.jsx";
 
-export default function AccountMenu({ onEditProfile, onChangePassword }) {
+export default function AccountMenu({ onEditProfile, onChangePassword, onBackup, onRestore }) {
   const { profile, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -34,6 +34,8 @@ export default function AccountMenu({ onEditProfile, onChangePassword }) {
           <div style={{ padding: "8px 14px", fontSize: 10, color: C.slateL, borderBottom: `1px solid ${C.border}`, wordBreak: "break-all" }}>{profile?.email}</div>
           <button style={itemStyle} onClick={() => { setOpen(false); onEditProfile(); }}>👤 Edit Profile</button>
           <button style={itemStyle} onClick={() => { setOpen(false); onChangePassword(); }}>🔑 Change Password</button>
+          {onBackup && <button style={itemStyle} onClick={() => { setOpen(false); onBackup(); }}>⬇ Download backup</button>}
+          {onRestore && <button style={itemStyle} onClick={() => { setOpen(false); onRestore(); }}>⬆ Restore backup</button>}
           <div style={{ borderTop: `1px solid ${C.border}` }} />
           <button style={{ ...itemStyle, color: C.red }} onClick={() => { setOpen(false); signOut(); }}>⏻ Sign out</button>
         </div>

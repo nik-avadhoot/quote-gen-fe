@@ -224,15 +224,17 @@ check(styles.includes("export const compactGridRowSt={height:26};")
   && batchGrid.includes('<table style={{borderCollapse:"collapse",fontSize:T.body,lineHeight:1.3,minWidth:1400,width:"100%"}}>')
   && batchGrid.includes('padding:"4px 5px",color:C.white,fontSize:T.label,fontWeight:600,'),
   "SS-34 Batch Builder: compact rows are 26px, with the grid's line-height pinned and a one-line header");
-const compact = batchGrid.slice(batchGrid.indexOf("<tr style={{...compactGridRowSt"),
+const compact = batchGrid.slice(batchGrid.indexOf("<tr id={`batch-row-${row.id}`}"),
   batchGrid.indexOf("{expandedRows.has(row.id)&&(()=>{"));
 check(compact.length > 1000 && !compact.includes('<td style={{padding:"3px 4px"')
   && !compact.includes('flexDirection:"column",alignItems:"center",gap:1')
   && batchGrid.includes('<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:1}}>'),
   "SS-35 Batch Builder: no compact-row cell is taller than one line - the Status icon and chevron sit side by side");
-check(batchGrid.indexOf("onClick={startNewBatch}") < batchGrid.indexOf("onClick={onToggleFocusMode}")
-  && batchGrid.includes("onClick={copyCostingToProfile}") && batchGrid.includes("Code tools ▾"),
-  "SS-36 Batch Builder: Import profile, New batch and Code tools keep their places in the grid toolbar");
+check(batchEntry.includes("<BatchFirstShell/>")
+  && batchGrid.includes("onClick={copyCostingToProfile}") && batchGrid.includes("Batch tools ▾")
+  && batchGrid.includes("+ Add product ▾")
+  && !batchGrid.includes("+ New customer quote"),
+  "SS-36 Batch Builder: New customer quote leads above the workspace and secondary setup tools share one toolbar disclosure");
 
 // ── Light only ────────────────────────────────────────────────────────────
 check(css.includes("  color-scheme: light;\n") && !css.includes("color-scheme: light dark")

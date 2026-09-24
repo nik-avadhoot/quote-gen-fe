@@ -21,30 +21,26 @@ import { useAppState } from "../state/AppStateContext.js";
 import { BrandMark, BrandWordmark } from "./BrandLogo.jsx";
 
 export default function Sidebar(){
+  const st=useAppState();
   const { constructionLib, items, profile, setSidebarCollapsed, setTab,
-    sidebarCollapsed, tab } = useAppState();
+    sidebarCollapsed, tab } = st;
   const item = (id, icon, label, count, detail) => ({ id, icon, label, count, detail });
   const pending = (icon, label, detail) => ({ icon, label, detail, pending: true });
   const NAV_SECTIONS=[
     ["Workspace", [
-      item("costing","SC","Start Costing"),
       item("batch","BB","Batch Builder"),
-      item("mybatches","MB","My Batches",undefined,"Bounded caller-visible durable Batch catalogue"),
+      item("mybatches","AB","Active Batches",undefined,"Open caller-visible durable Batch work"),
       ...(hasCapability(profile,"check_quote")
-        ?[item("approvalinbox","AI","Approval Inbox",undefined,"Read-only submitted revision queue")]
-        :[pending("AI","Approval Inbox","Capability required")]),
+        ?[item("approvalinbox","AI","Approval Inbox",undefined,"Submitted revisions awaiting an Approver")]
+        :[]),
       item("items","QU","Quotes",items.length,"Governed evidence, working items and Quote History"),
+      item("costing","QC","Quick calculation",undefined,
+        "Private scratchpad and Batch-row Costing deep-dive; not a customer Quote"),
     ]],
-    ["Customer Masters", [
+    ["Reference data", [
       ...(isFeatureEnabled("u1_customer_families")&&hasCapability(profile,"read_party_master")
         ?[item("families","CF","Customer Families"),
           pending("CP","Customers and Prospects","Locations and External References included")]:[]),
-    ]],
-    ["Product Masters", [
-    // Product Masters is part of the canonical application map and therefore
-    // remains visible even when this caller cannot open a governed destination.
-    // Feature flags and capabilities decide interactivity, not whether an
-    // entire product domain silently disappears from navigation.
       ...(isFeatureEnabled("u2_construction_library")&&hasCapability(profile,"read_construction_library")
         ?[item("conlib","CL","Construction Library",constructionLib.length)]
         :[pending("CL","Construction Library",
@@ -59,18 +55,11 @@ export default function Sidebar(){
         ?[item("skus","SK","SKU Master",undefined,"Read-only governed SKUs, versions, specifications and Location applicability")]
         :[pending("SK","SKU Master",
           isFeatureEnabled("u2_sku_master") ? "Capability required" : "U2 destination not enabled")]),
-    ]],
-    ["Commercial Masters", [
       item("defaults","CP","Commercial Policies",undefined,
         "Sectors, Calculation Defaults and Annual Interest Basis"),
       item("rates","RM","Rate Masters"),
       item("freight","FM","Freight Masters"),
       ...(isFeatureEnabled("u3_pricing_basis") ?[item("pricingbasis","PB","Pricing Basis Releases")]:[]),
-    ]],
-    // Technical Masters hold raw-material and plant input parameters, not the
-    // products sold. Product Masters stays limited to SKUs and their live
-    // Constructions (Product Owner, 2026-09-15); Constructions may move here later.
-    ["Technical Masters", [
       pending("PC","Plant Configuration","Flute Profiles, Machines, Stations and Process Routes included"),
       ...(isFeatureEnabled("u2_gsm_master")
         ?[item("gsm","GS","GSM Master",undefined,"Paper GSM values offered by construction layer pickers")]:[]),
@@ -133,6 +122,10 @@ export default function Sidebar(){
           return <button key={t} onClick={()=>{
             setOpenSections(current => current.has(section)
               ? current : new Set([section]));
+            const leavingReview=st.tab==="costing"&&!!st.activeBatchRowId
+              &&(t==="costing"||t==="batch");
+            if(leavingReview&&!st.requestExitReview?.())return;
+            if(t==="costing")st.returnToQuickCalculation?.();
             setTab(t);
           }} title={sidebarCollapsed?l:detail}
             className={`sidebar-nav-item${tab===t ? " is-active" : ""}`} aria-current={tab===t?"page":undefined}>

@@ -197,6 +197,41 @@ export const STAGES = [
 
 export const stageIndex = id => STAGES.findIndex(stage => stage.id === id);
 
+const FUTURE_STAGE_REASONS = {
+  products: "Name the customer before adding products.",
+  price: "Add at least one product before pricing.",
+  review: "Calculate the included products and clear readiness blockers first.",
+  document: "Complete Batch readiness before opening the customer document.",
+  approval: "Create the customer document and submit its exact revision before Approval.",
+  shared: "The exact Quote revision must be approved before it can be shared.",
+};
+
+function futureStageReason(stageId, journey) {
+  if (stageId === "price" && journey?.counts?.rows > 0) {
+    return "Calculate the included products to establish current prices.";
+  }
+  if (stageId === "review" && journey?.counts?.rows > 0
+    && journey?.counts?.calculated < journey?.counts?.rows) {
+    return "Calculate every included product before reviewing readiness.";
+  }
+  return FUTURE_STAGE_REASONS[stageId];
+}
+
+// Presentation-only disclosure state. Enabling a stage opens the surface that
+// already owns it; it never runs a calculation or a workflow transition. Future
+// stages remain visible, with the reason the existing journey ladder has not
+// reached them, so this menu cannot become a shortcut around readiness,
+// approval or immutable-revision authority.
+export function journeyStageDisclosure(journey) {
+  const current = Math.max(0, stageIndex(journey?.stage));
+  return STAGES.map((stage, index) => ({
+    ...stage,
+    state: index < current ? "complete" : index === current ? "current" : "future",
+    disabled: index > current,
+    reason: index > current ? futureStageReason(stage.id, journey) : "",
+  }));
+}
+
 // ── Blocker vocabulary ─────────────────────────────────────────────────────
 // `gate` says which action a blocker stops. `calculate` blockers also stop
 // Send, because an uncalculated row cannot become a Quote Item; `send`
@@ -356,6 +391,9 @@ export function sendReadiness(blockers = [], { rowCount = 0, calculated = 0 } = 
 // stays pure and the fixtures can assert them.
 export const FOCUS = {
   lane: "journey-lane-control",
+  newQuote: "journey-new-quote-control",
+  profile: "journey-batch-profile-control",
+  addProduct: "journey-add-product-control",
   calculate: "journey-calculate-control",
   send: "journey-send-control",
   workspace: "journey-workspace-control",
@@ -416,28 +454,32 @@ export function journeyState({ laneSelection = null, durableBatch = null, batchR
   // behind on Batch Builder.
   let next;
   if (!laneSelection?.lane) {
-    next = { label: "Choose how this work is saved", surface: "batch",
-      focus: FOCUS.lane,
-      detail: "A quick calculation stays private in this browser. A customer quote is saved against the customer and goes through approval." };
+    next = { label: "Start a customer quote", surface: "batch",
+      focus: FOCUS.newQuote,
+      detail: "Create a governed multi-item Batch. Quick calculation remains available as a private, non-Quote scratchpad." };
   } else if (lane.id === "customer_pending") {
     next = { label: "Create or open the governed Batch", surface: "batch",
-      focus: FOCUS.lane,
+      focus: FOCUS.newQuote,
       detail: "You chose the customer-quote workflow. Nothing is governed until the Batch exists — until then this is still browser-local work." };
   } else if (!batchProfile.client) {
     next = { label: "Name the customer you are quoting", surface: "batch",
+      focus: FOCUS.profile,
       detail: "Open Batch Profile and set the Customer, Sector and route." };
   } else if (!batchRows.length) {
     next = { label: "Add the products being quoted", surface: "batch",
+      focus: FOCUS.addProduct,
       detail: hasScratchDraft
-        ? "Your Start Costing draft is not in the batch yet — send it to Batch Builder, or add a row directly."
+        ? "Your Quick calculation draft is not in the batch yet — add it to Batch Builder, or add a row directly."
         : "Add a Box, Plate or Partition row in Batch Builder." };
   } else if (calcBlockers.length) {
-    next = { label: calcBlockers[0].title, surface: "batch", detail: calcBlockers[0].message };
+    next = { label: calcBlockers[0].title, surface: "batch", focus: FOCUS.workspace,
+      detail: calcBlockers[0].message };
   } else if (calculated === 0) {
     next = { label: "Calculate the batch", surface: "batch", focus: FOCUS.calculate,
       detail: `None of the ${batchRows.length} rows has a price yet.` };
   } else if (sendBlockers.length) {
-    next = { label: sendBlockers[0].title, surface: "batch", detail: sendBlockers[0].message };
+    next = { label: sendBlockers[0].title, surface: "batch", focus: FOCUS.workspace,
+      detail: sendBlockers[0].message };
   } else if (calculated < batchRows.length) {
     next = { label: "Calculate the remaining rows", surface: "batch", focus: FOCUS.calculate,
       detail: `${batchRows.length - calculated} of ${batchRows.length} rows have no current result. Sending now would leave them out of the customer document.` };
@@ -445,12 +487,11 @@ export function journeyState({ laneSelection = null, durableBatch = null, batchR
     // STAYS ON BATCH BUILDER. The control that builds the document is here.
     next = { label: "Send the rows to Quote Items", surface: "batch", focus: FOCUS.send,
       detail: "Send All to Quote Items is on this toolbar. It builds the working items the Excel and PDF are produced from." };
-  } else if (lane.governed) {
-    next = { label: "Open the governed Batch workspace", surface: "batch", focus: FOCUS.workspace,
-      detail: "Governed Calculate and Atomic Send happen in the Batch workspace. Submit, approval and sharing are separate steps after that." };
   } else {
     next = { label: "Review the customer document", surface: "items",
-      detail: "This is a quick calculation — it carries no governed Quote reference and cannot be approved or shared as a quote." };
+      detail: lane.governed
+        ? "Open Working Quote Items produced from this Batch. They remain separate from an approved, immutable Quote revision."
+        : "This is a quick calculation — it carries no governed Quote reference and cannot be approved or shared as a quote." };
   }
 
   return {
@@ -467,4 +508,3 @@ export function journeyState({ laneSelection = null, durableBatch = null, batchR
     // Ask `revisionShareability(revision)` or `artifactContext(...)`.
   };
 }
-

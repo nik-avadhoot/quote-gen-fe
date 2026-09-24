@@ -32,42 +32,63 @@ import {
 } from "../lib/constructionIdentity.js";
 import { getItem, setItem } from "../lib/persist.js";
 
+// The review specification for one Batch row, derived ONLY from `profile`.
+// Pure: it neither reads nor writes React state, so a refusal leaves every
+// slice untouched and the caller decides what (if anything) to commit.
+export function prepareBatchRowReview({row,profile,constructionCatalogue,sectors,autoCalcPPDims}){
+  // Gate: block Deep Dive if this row has an unconfirmed SET Code
+  if(row.setCodeAssumed)return{ok:false,reason:"set-code",
+    message:`⚠️ Confirm SET Code [${row.setCode||"?"}] on this row before deep-dive`};
+  const constEntry=(constructionCatalogue||[]).find(c=>c.code===row.constructionCode);
+  if(!constEntry)return{ok:false,reason:"construction",
+    message:"⚠️ This row's Construction is not available in Costing yet. Select its Construction in the grid before opening the deep-dive."};
+  const dimRow=autoCalcPPDims(row);
+  const isPP=isPPType(dimRow.itemType); // R-2
+  const sp=buildSpecFromRow(dimRow,constEntry,profile);
+  if(!sp)return{ok:false,reason:"incomplete",
+    message:"⚠️ This row is not ready for Costing deep-dive. Complete its dimensions and Construction in the grid first."};
+  const commercialDefaults=resolveBatchCommercialDefaults(profile,
+    (sectors||[]).find(sector=>sector.code===profile.sector));
+  // Apply row-level overrides — same logic as calcBatchRow so deepdive reflects exact costing
+  const rowWaste=row.wasteConv_waste;
+  const rowConv=row.wasteConv_conv;
+  const effectiveWaste=rowWaste!==""&&rowWaste!=null?+rowWaste
+    :(isPP?commercialDefaults.wastePP:commercialDefaults.waste);
+  const effectiveConv=rowConv!==""&&rowConv!=null?+rowConv
+    :(isPP?commercialDefaults.convRatePP:commercialDefaults.convRate);
+  if(isPP){sp.wastePP=effectiveWaste;sp.convRatePP=effectiveConv;}
+  else{sp.waste=effectiveWaste;sp.convRate=effectiveConv;}
+  sp.margin=(row.marginOverride!==""&&row.marginOverride!=null)?+row.marginOverride
+    :(isPP?commercialDefaults.marginPP:commercialDefaults.margin);
+  // WAVE 3: the two row-override reads were here. Freight and Interest are
+  // BATCH-level only now. Freight keeps what buildSpecFromRow seeded from the
+  // profile (freightOverride:prof.freightOverride||""). Interest does NOT:
+  // buildSpecFromRow's `prof.interest??0.5` skips the Payment-Terms derivation,
+  // so a 60-day Batch reviewed at 0.5% while Calculate All costed it at 1%.
+  // The review copy now carries the same figure calcBatchRow uses.
+  sp.interest=resolveBatchInterest(profile).value;
+  applyAddOns(sp,row); // R-1: single injection point
+  return{ok:true,spec:sp};
+}
+
 export function useCostingBatchBridge(st){
   const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionCatalogue, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, sectors, setAutoFill, setBatchProfile, setDurableBatch, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setNewBatchDialogOpen, setSetAutoFill, setSpec, setTab, showToast, spec, specRaw } = st;
   const batchCommercialDefaults=resolveBatchCommercialDefaults(batchProfile,
     sectors.find(sector=>sector.code===batchProfile.sector));
 
-  const loadBatchRowIntoCosting=(row)=>{
-    // Gate: block Deep Dive if this row has an unconfirmed SET Code
-    if(row.setCodeAssumed){
-      showToast(`⚠️ Confirm SET Code [${row.setCode||"?"}] on this row before deep-dive`,'error',4000);
-      return;
+  // S2: `targetProfile` is the Profile the review is FOR. Opening a governed
+  // Batch row passes freshBatchProfileValues(batch) - the batch-selected
+  // Customer and its commercial context - because the React `batchProfile` is
+  // still the previous render's (possibly another customer's) until the caller
+  // commits. Local Batch Builder rows keep the live profile.
+  const loadBatchRowIntoCosting=(row,targetProfile=batchProfile)=>{
+    const prepared=prepareBatchRowReview({row,profile:targetProfile,
+      constructionCatalogue,sectors,autoCalcPPDims});
+    if(!prepared.ok){
+      showToast(prepared.message,"error",prepared.reason==="set-code"?4000:6500);
+      return false;
     }
-    const constEntry=constructionCatalogue.find(c=>c.code===row.constructionCode);
-    if(!constEntry)return;
-    const dimRow=autoCalcPPDims(row);
-    const isPP=isPPType(dimRow.itemType); // R-2
-    const sp=buildSpecFromRow(dimRow,constEntry,batchProfile);
-    if(!sp)return;
-    // Apply row-level overrides — same logic as calcBatchRow so deepdive reflects exact costing
-    const rowWaste=row.wasteConv_waste;
-    const rowConv=row.wasteConv_conv;
-    const effectiveWaste=rowWaste!==""&&rowWaste!=null?+rowWaste
-      :(isPP?batchCommercialDefaults.wastePP:batchCommercialDefaults.waste);
-    const effectiveConv=rowConv!==""&&rowConv!=null?+rowConv
-      :(isPP?batchCommercialDefaults.convRatePP:batchCommercialDefaults.convRate);
-    if(isPP){sp.wastePP=effectiveWaste;sp.convRatePP=effectiveConv;}
-    else{sp.waste=effectiveWaste;sp.convRate=effectiveConv;}
-    sp.margin=(row.marginOverride!==""&&row.marginOverride!=null)?+row.marginOverride
-      :(isPP?batchCommercialDefaults.marginPP:batchCommercialDefaults.margin);
-    // WAVE 3: the two row-override reads were here. Freight and Interest are
-    // BATCH-level only now. Freight keeps what buildSpecFromRow seeded from the
-    // profile (freightOverride:prof.freightOverride||""). Interest does NOT:
-    // buildSpecFromRow's `prof.interest??0.5` skips the Payment-Terms derivation,
-    // so a 60-day Batch reviewed at 0.5% while Calculate All costed it at 1%.
-    // The review copy now carries the same figure calcBatchRow uses.
-    sp.interest=resolveBatchInterest(batchProfile).value;
-    applyAddOns(sp,row); // R-1: single injection point
+    const sp=prepared.spec;
     // C4 · E4: replacing a review copy that has unpushed changes is the one
     // Deep Dive that can lose work. Opening a review from START cannot — the
     // draft is not read, written or discarded — so there is deliberately NO
@@ -78,7 +99,7 @@ export function useCostingBatchBridge(st){
         `Discard unpushed changes to Batch Row ${_cur+1}?\n\n`+
         "Your Costing draft is untouched either way.\n\n"+
         "OK = discard and open this row  |  Cancel = stay in the current review"
-      ))return;
+      ))return false;
     }
     // C4: builds the SESSION-ONLY review copy. The persisted START draft is not
     // touched. openReview captures START's workspace flags BEFORE the two
@@ -90,6 +111,7 @@ export function useCostingBatchBridge(st){
     // a review copy is open, so there is no flag to set and none to restore.
     // C4 stopped clearing specCommitted here; C6 deleted the flag entirely.
     setTab("costing");
+    return true;
   };
 
   // Stage-1 fix for "Costing edits don't reach Batch Entry": an explicit, one-click
@@ -947,13 +969,10 @@ export function useCostingBatchBridge(st){
               }
             }catch{ /* unparseable autosave — leave any existing archive intact */ }
             const _freshProfile=freshBatchProfileValues(governedBatch);
-            // On a promotion the governed Batch supplies sector and plant; the
-            // customer, route and payment context came with the work and would
-            // otherwise be silently dropped, leaving kept rows with no customer.
+            // Even on promotion the saved governed handoff owns Customer,
+            // destination and payment terms. Local rows remain input-only.
             const fresh=keepLocalInputs
-              ?{..._freshProfile,client:batchProfile.client,delivery:batchProfile.delivery,
-                customerType:batchProfile.customerType,priceContext:batchProfile.priceContext,
-                paymentDisc:batchProfile.paymentDisc}
+              ?{..._freshProfile,priceContext:batchProfile.priceContext}
               :_freshProfile;
             setBatchProfile(fresh);
             // C5 · B2: seed the draft from the `fresh` object we just built, NOT

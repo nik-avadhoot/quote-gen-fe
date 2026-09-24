@@ -1,150 +1,195 @@
-// ═══ src/ui/TopBar.jsx — account menu + backup/restore ═══════════════════
-//
-// Extracted from QuotationApp.jsx (Phase 8). Structural move only.
-//
-// ⚠️ THE RESTORE TRIO MUST NOT BE SEPARATED. handleRestore fires
-// restoreRef.current?.click(); restoreRef is attached to the hidden <input
-// type="file"> below; that input's onChange is handleRestoreFile. Split any
-// one of the three from the other two and Restore silently does nothing -
-// the button still highlights, and no file dialog ever opens.
-// ════════════════════════════════════════════════════════════════════════
+import { useEffect, useMemo, useRef, useState } from "react";
 import AccountMenu from "../AccountMenu.jsx";
+import { FOCUS, journeyStageDisclosure } from "../lib/quoteJourney.js";
 import { useAppState } from "../state/AppStateContext.js";
-import { ProvenanceTag } from "./dataDisplay.jsx";
-import { C, T, mono, sans } from "../theme.js";
+import "./TopBar.css";
 
-// Display names for the active destination. Presentation only — navigation and
-// access still live in Sidebar.jsx / QuotationApp.jsx.
 const TAB_LABELS = {
-  costing: "Start Costing", batch: "Batch Builder", mybatches: "My Batches",
+  costing: "Quick calculation", batch: "Batch Builder", mybatches: "Active Batches",
   approvalinbox: "Approval Inbox", items: "Quotes", families: "Customer Families",
-  conlib: "Construction Library", conadoption: "Plant Construction Adoption", constrlib: "Construction Library", gsm: "GSM Master", skus: "SKU Master",
+  conlib: "Construction Library", conadoption: "Plant Construction Adoption",
+  constrlib: "Construction Library", gsm: "GSM Master", skus: "SKU Master",
   defaults: "Commercial Policies", rates: "Rate Masters", freight: "Freight Masters",
   pricingbasis: "Pricing Basis Releases", users: "Users & Access", plants: "Producing Plants",
 };
 
-// The destinations where the journey cue describes what is on screen.
-//
-// Quotes is deliberately CONDITIONAL. Its Governed and History views show
-// frozen evidence belonging to a particular Quote revision, and that revision's
-// authority has nothing to do with whichever lane the Batch Builder work is in.
-// Painting "Quick calculation" across an approved 2026 revision would attribute
-// the wrong authority to immutable evidence, so on those two views the cue is
-// absent and each view states its own artifact's provenance instead.
-const JOURNEY_TABS = new Set(["costing", "batch"]);
+const STAGE_FOCUS = {
+  customer: FOCUS.profile,
+  products: FOCUS.addProduct,
+  price: FOCUS.calculate,
+  review: FOCUS.workspace,
+};
 
-export default function TopBar(){
-  const { batchRows, durableBatch, handleBackup, handleRestore, handleRestoreFile, journey,
-    quoteView, restoreRef, setShowChangePassword, setShowProfile, setTab, tab } = useAppState();
-  const workingRows = Array.isArray(batchRows) ? batchRows.length : 0;
-  const showWorkingRows = workingRows > 0 && (tab === "batch" || tab === "costing");
-  const showJourney = !!journey
-    && (JOURNEY_TABS.has(tab) || (tab === "items" && quoteView === "working-items"));
+function focusControl(id) {
+  if (!id) return;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const element = document.getElementById(id);
+    if (!element) return;
+    element.scrollIntoView({ block: "nearest", inline: "nearest" });
+    element.focus?.({ preventScroll: true });
+    element.animate?.([
+      { outline: "2px solid #e6983d", outlineOffset: "2px" },
+      { outline: "2px solid transparent", outlineOffset: "2px" },
+    ], { duration: 1400, easing: "ease-out" });
+  }));
+}
 
-  // The Next action must land on the control it names. Navigating to a surface
-  // and leaving the user to find the button was the defect: "Build the customer
-  // document" opened an EMPTY Working Quote Items view while the control that
-  // fills it stayed behind on Batch Builder. So: switch surface only if needed,
-  // then focus and flash the named control once it has rendered.
-  const goToNext = () => {
-    const { surface, focus } = journey.next;
-    if (surface && surface !== tab) setTab(surface);
-    if (!focus) return;
-    // Two frames: one for the tab switch to mount, one for layout.
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const el = document.getElementById(focus);
-      if (!el) return;
-      el.scrollIntoView({ block: "nearest", inline: "nearest" });
-      el.focus({ preventScroll: true });
-      el.animate?.([{ outline: `2px solid ${C.amber}`, outlineOffset: "2px" },
-        { outline: "2px solid transparent", outlineOffset: "2px" }],
-      { duration: 1400, easing: "ease-out" });
-    }));
+export default function TopBar() {
+  const {
+    activeBatchRowId, batchFocusMode, batchJourney, batchProfile, batchRows,
+    durableBatch, handleBackup, handleRestore, handleRestoreFile,
+    quoteHeaderContext, quoteView, requestExitReview, restoreRef,
+    setBatchFocusMode, setBatchWorkspaceRequest, setQuoteView, setShowChangePassword,
+    setShowProfile, setTab, tab,
+  } = useAppState();
+  const [journeyOpen, setJourneyOpen] = useState(false);
+  const journeyRef = useRef(null);
+  const returnRequestSerial = useRef(0);
+  const stages = useMemo(() => journeyStageDisclosure(batchJourney), [batchJourney]);
+  const currentStage = stages.find(stage => stage.state === "current");
+  const customer = durableBatch?.customer_party_id != null
+    ? durableBatch.customer_party?.display_name || "Customer identity unavailable"
+    : batchProfile?.client || "Customer not named";
+  const isDeepDive = tab === "costing" && !!activeBatchRowId;
+  const isPrivateQuick = tab === "costing" && !activeBatchRowId;
+  const workingQuotes = tab === "items" && quoteView === "working-items";
+  const showBatchContext = isDeepDive || (!!durableBatch?.id
+    && (tab === "batch" || workingQuotes));
+  const showQuoteContext = tab === "items"
+    || (tab === "approvalinbox" && !!quoteHeaderContext?.revisionId);
+
+  useEffect(() => {
+    if (!journeyOpen) return undefined;
+    const close = event => {
+      if (journeyRef.current && !journeyRef.current.contains(event.target)) setJourneyOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [journeyOpen]);
+  const returnToBatch = (focusId = null) => {
+    const rowId = activeBatchRowId;
+    const reviewRow = (batchRows || []).find(row => row.id === rowId);
+    const durableRowId = reviewRow?.durableRowId ?? null;
+    if (isDeepDive && !requestExitReview?.()) return false;
+    setJourneyOpen(false);
+    setBatchFocusMode(false);
+    if (!focusId && durableRowId != null && durableBatch?.id != null) {
+      returnRequestSerial.current += 1;
+      setBatchWorkspaceRequest({
+        requestId: `costing-return-${durableBatch.id}-${durableRowId}-${returnRequestSerial.current}`,
+        batchId: durableBatch.id,
+        mode: "row-focus",
+        rowId: durableRowId,
+      });
+    }
+    setTab("batch");
+    if (focusId || durableRowId == null) {
+      focusControl(focusId || (rowId ? `batch-row-${rowId}` : FOCUS.workspace));
+    }
+    return true;
   };
-  return(
-  <div style={{background:C.slate,display:"flex",alignItems:"center",padding:"0 16px",
-    height:48,borderBottom:`2px solid ${C.amber}`,flexShrink:0,gap:8}}>
-    {/* Context for the otherwise empty bar (UX policy §3): where you are, and
-        which Batch is in play — governed or local — at a glance. */}
-    <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,overflow:"hidden"}}>
-      <span style={{color:"rgba(255,255,255,.92)",fontSize:T.title,fontWeight:700,whiteSpace:"nowrap"}}>
-        {TAB_LABELS[tab] || ""}</span>
-      {durableBatch?.batch_reference && <>
-        <span aria-hidden="true" style={{color:"rgba(255,255,255,.35)"}}>·</span>
-        <span title="Open governed Batch" style={{color:"rgba(255,255,255,.85)",fontFamily:mono,
-          fontSize:T.body,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-          {durableBatch.batch_reference}{durableBatch.content_version != null ? ` · v${durableBatch.content_version}` : ""}
-        </span>
-        <ProvenanceTag kind="governed"/>
-      </>}
-      {/* The row count keeps its place; its LOCAL tag does not. The journey
-          cluster to the right now states the lane once, and two provenance
-          signals 60px apart saying the same thing is the repetition the
-          2026-09-22 review objects to, not a second reassurance. */}
-      {showWorkingRows && <>
-        <span aria-hidden="true" style={{color:"rgba(255,255,255,.35)"}}>·</span>
-        <span style={{color:"rgba(255,255,255,.75)",fontSize:T.body,whiteSpace:"nowrap"}}>
-          {workingRows} working {workingRows === 1 ? "row" : "rows"}</span>
-      </>}
+
+  const openStage = stage => {
+    if (stage.disabled) return;
+    setJourneyOpen(false);
+    if (stage.surface === "items") {
+      setQuoteView("working-items");
+      setTab("items");
+      return;
+    }
+    if (stage.surface === "batch") returnToBatch(STAGE_FOCUS[stage.id] || FOCUS.workspace);
+  };
+
+  const goToNext = () => {
+    const next = batchJourney?.next;
+    if (!next) return;
+    setJourneyOpen(false);
+    if (next.surface === "items") {
+      // Working is the customer-document preparation surface. A prior History
+      // selection must not hijack this explicit journey target.
+      setQuoteView("working-items");
+      setTab("items");
+      return;
+    }
+    if (next.surface === "batch") {
+      if (tab === "batch") {
+        if (batchFocusMode) setBatchFocusMode(false);
+        focusControl(next.focus || FOCUS.workspace);
+      } else {
+        returnToBatch(next.focus || FOCUS.workspace);
+      }
+    }
+  };
+
+  const quoteIdentity = quoteHeaderContext?.quoteReference
+    || (quoteHeaderContext?.revisionId != null
+      ? `Quote revision #${quoteHeaderContext.revisionId}` : null);
+  const revisionIdentity = quoteHeaderContext?.revisionNumber != null
+    ? `Revision ${quoteHeaderContext.revisionNumber}`
+    : quoteHeaderContext?.revisionId != null ? `Revision #${quoteHeaderContext.revisionId}` : null;
+  const activeLocalRow = (batchRows || []).find(row => row.id === activeBatchRowId);
+  const durableOriginRowId = activeLocalRow?.durableRowId ?? null;
+  const rowNumber = Math.max(1, durableOriginRowId == null
+    ? (batchRows || []).findIndex(row => row.id === activeBatchRowId) + 1
+    : (durableBatch?.batch_rows || []).findIndex(row =>
+      String(row.id) === String(durableOriginRowId)) + 1);
+  const batchReference = durableBatch?.batch_reference || "Working Batch";
+
+  return <header className="app-topbar">
+    <div className="app-topbar__location">
+      {isDeepDive
+        ? <button type="button" className="app-topbar__back" onClick={() => returnToBatch()}>
+          ← Batch Builder
+        </button>
+        : <strong>{TAB_LABELS[tab] || ""}</strong>}
+      {isPrivateQuick && <span className="app-topbar__private">Private · no Batch context</span>}
     </div>
-    {/* The journey, in the band that already exists. The review's CC-13 asks for
-        a persistent stage and next-required-action cue; the screen-space standard
-        forbids spending a second band on it, so it goes here, where the bar was
-        empty. Three facts only: which lane the work is in, how far it has got,
-        and the single next thing - each one a claim the user can act on rather
-        than a status word they have to interpret. */}
-    {showJourney && <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,
-      marginLeft:14,paddingLeft:14,borderLeft:"1px solid rgba(255,255,255,.18)"}}>
-      <span title={journey.lane.authority} style={{fontSize:T.micro,fontWeight:800,
-        letterSpacing:"0.05em",textTransform:"uppercase",whiteSpace:"nowrap",padding:"2px 7px",
-        borderRadius:999,color:journey.lane.governed?C.white:C.amberL,
-        background:journey.lane.governed?"rgba(255,255,255,.14)"
-          :journey.lane.id==="undecided"||journey.lane.id==="customer_pending"
-            ?"rgba(184,50,50,.55)":"rgba(217,123,46,.28)",
-        border:`1px ${journey.lane.governed?"solid":"dashed"} rgba(255,255,255,.38)`}}>
-        {journey.lane.label}</span>
-      <span title={`${journey.stageLabel} — ${journey.stages.find(s=>s.id===journey.stage)?.question||""}`}
-        style={{color:"rgba(255,255,255,.72)",fontSize:T.body,whiteSpace:"nowrap"}}>
-        Step {journey.stages.findIndex(s=>s.id===journey.stage)+1} of {journey.stages.length} ·{" "}
-        <b style={{color:"rgba(255,255,255,.92)",fontWeight:650}}>{journey.stageLabel}</b></span>
-      <button type="button" onClick={goToNext}
-        title={`Next: ${journey.next.label}\n\n${journey.next.detail}`}
-        style={{display:"flex",alignItems:"center",gap:5,minWidth:0,maxWidth:340,padding:"3px 9px",
-          borderRadius:5,border:`1px solid ${C.amber}`,background:"rgba(217,123,46,.22)",
-          color:C.white,fontFamily:sans,fontSize:T.body,fontWeight:650,cursor:"pointer"}}>
-        <span style={{fontSize:T.micro,fontWeight:800,letterSpacing:"0.05em",
-          textTransform:"uppercase",color:C.amberL,flexShrink:0}}>Next</span>
-        <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-          {journey.next.label}</span>
+
+    {showBatchContext && <div className="app-topbar__context" aria-label="Active Batch journey">
+      <span className="app-topbar__batch" title={`${batchReference} · ${customer}`}>
+        <b>Batch</b> {batchReference} · {customer}
+      </span>
+      {isDeepDive && <span className="app-topbar__row">Row {rowNumber}</span>}
+      <div className="app-topbar__journey" ref={journeyRef}>
+        <button type="button" className="app-topbar__stage" aria-expanded={journeyOpen}
+          onClick={() => setJourneyOpen(open => !open)}>
+          {currentStage?.label || batchJourney?.stageLabel} · {Math.max(1,
+            stages.findIndex(stage => stage.state === "current") + 1)} of {stages.length} ▾
+        </button>
+        {journeyOpen && <div className="app-topbar__stage-menu" role="menu" aria-label="Quotation stages">
+          {stages.map(stage => <button type="button" role="menuitem" key={stage.id}
+            className={`is-${stage.state}`} disabled={stage.disabled}
+            title={stage.disabled ? stage.reason : stage.question}
+            onClick={() => openStage(stage)}>
+            <span aria-hidden="true">{stage.state === "complete" ? "✓"
+              : stage.state === "current" ? "●" : "○"}</span>
+            <span><b>{stage.label}</b><small>{stage.disabled ? stage.reason : stage.question}</small></span>
+            <em>{stage.surface === "batch" ? "Batch"
+              : stage.id === "approval" ? "Approval" : "Quotes"}</em>
+          </button>)}
+        </div>}
+      </div>
+      <button type="button" className="app-topbar__next" onClick={goToNext}
+        title={batchJourney.next.detail}>
+        <b>Next:</b> <span>{batchJourney.next.label}</span>
       </button>
-      {/* Only once there is something to send. An empty workspace has an
-          unresolved route by definition, and counting that as a fault would
-          greet every new session with a red chip it cannot act on. */}
-      {journey.counts.rows>0 && journey.counts.toFix>0 && <span
-        title={journey.readiness.canSend
-          ? "This batch can be sent, but some rows would be left out — the Batch Builder toolbar lists them"
-          : "Reasons this batch cannot be sent yet — listed in full in the Batch Builder toolbar"}
-        style={{fontSize:T.micro,fontWeight:800,letterSpacing:"0.04em",textTransform:"uppercase",
-          whiteSpace:"nowrap",padding:"2px 7px",borderRadius:999,color:C.white,
-          background:journey.readiness.canSend?"rgba(217,123,46,.75)":"rgba(184,50,50,.75)",
-          border:"1px solid rgba(255,255,255,.3)"}}>
-        {journey.counts.toFix} to fix</span>}
+      {batchJourney.counts.rows > 0 && batchJourney.counts.toFix > 0
+        && <span className="app-topbar__blockers">{batchJourney.counts.toFix} to fix</span>}
     </div>}
-    <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
-      <AccountMenu onEditProfile={()=>setShowProfile(true)} onChangePassword={()=>setShowChangePassword(true)}/>
-      <button onClick={handleBackup} title="Download a full backup of all app data (rates, freight, sectors, constructions, partitions)"
-        style={{padding:"4px 10px",borderRadius:5,fontSize:11,fontWeight:600,border:"1px solid rgba(255,255,255,.25)",
-          background:"rgba(255,255,255,.10)",color:"rgba(255,255,255,.80)",cursor:"pointer",fontFamily:sans}}>
-        ⬇ Backup
-      </button>
-      <button onClick={handleRestore} title="Restore all app data from a previously downloaded backup file"
-        style={{padding:"4px 10px",borderRadius:5,fontSize:11,fontWeight:600,border:"1px solid rgba(255,255,255,.25)",
-          background:"rgba(255,255,255,.10)",color:"rgba(255,255,255,.80)",cursor:"pointer",fontFamily:sans}}>
-        ⬆ Restore
-      </button>
-      <input ref={restoreRef} type="file" accept="application/json" style={{display:"none"}}
+
+    {showQuoteContext && <div className="app-topbar__quote-context" aria-label="Quote view context">
+      <span>{quoteHeaderContext?.view || (quoteView === "working-items" ? "Working Quote Items"
+        : quoteView === "governed" ? "Governed Quote" : "Quote History")}</span>
+      {quoteIdentity && <b title={quoteIdentity}>{quoteIdentity}</b>}
+      {revisionIdentity && <em>{revisionIdentity}</em>}
+    </div>}
+
+    <div className="app-topbar__account">
+      <AccountMenu onEditProfile={() => setShowProfile(true)}
+        onChangePassword={() => setShowChangePassword(true)}
+        onBackup={handleBackup} onRestore={handleRestore}/>
+      <input ref={restoreRef} type="file" accept="application/json" hidden
         onChange={handleRestoreFile}/>
     </div>
-  </div>
-  );
+  </header>;
 }

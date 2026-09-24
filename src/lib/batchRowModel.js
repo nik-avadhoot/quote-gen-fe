@@ -63,6 +63,21 @@ export function durableRowToLocalPreview(row, existingId = `local-durable-${row.
   };
 }
 
+// The Costing Profile for a durable row is the governed BATCH's, never the
+// row's. `row.customer` only owns the SKU - Batch choices include established
+// SKUs of any current Customer Family member - so it must not become the
+// Profile Customer. The target Profile is built here, synchronously, so the
+// transition prepares the review from it rather than from the previous
+// render's (possibly unrelated) browser-local Profile, and only a successful
+// transition hands the same object to commit.
+export function openDurableRowInCosting({ batch, row, existingId, transition, commit }) {
+  const preview = durableRowToLocalPreview(row, existingId || `local-durable-${row.id}`);
+  const targetProfile = freshBatchProfileValues(batch);
+  if (transition(preview, targetProfile) !== true) return { opened: false, preview: null, targetProfile: null };
+  commit(preview, targetProfile);
+  return { opened: true, preview, targetProfile };
+}
+
 export function durableRowSpecificationEvidence(row, localRows, localResults) {
   const preview = (localRows || []).find(item => String(item.durableRowId) === String(row.id));
   const result = preview ? localResults?.[preview.id] : null;
@@ -139,3 +154,4 @@ export function localPreviewState(row, localRows, localResults) {
   return { state: "ready", label: "Copied · local preview not yet run" };
 }
 import { checkSpecCompliance } from "../engine/costing.js";
+import { freshBatchProfileValues } from "../state/costingDraftModel.js";

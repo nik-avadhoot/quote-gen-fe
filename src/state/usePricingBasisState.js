@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { localIsoDate } from "../lib/pricingBasisModel.js";
+import { isS1ActiveBrowserFixture, S1_ACTIVE_BATCH } from "../lib/s1BrowserFixture.js";
 
 // Session fallback while no governed Batch is open. U4 hydrates its durable
 // selection from the Batch route and never copies it into localStorage or the
@@ -13,7 +14,8 @@ export function usePricingBasisState() {
   // One application-wide durable Batch binding. Keeping this above both the
   // PRICING card and the legacy grid/profile state prevents those surfaces
   // from quietly pointing at different governed Batches.
-  const [durableBatch, setDurableBatch] = useState(null);
+  const [durableBatch, setDurableBatch] = useState(() =>
+    isS1ActiveBrowserFixture() ? S1_ACTIVE_BATCH : null);
   const [newBatchDialogOpen, setNewBatchDialogOpen] = useState(false);
   const [batchWorkspaceRequest, setBatchWorkspaceRequest] = useState(null);
 

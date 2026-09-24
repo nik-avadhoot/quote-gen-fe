@@ -63,6 +63,21 @@ export const U4_BATCH_CATALOGUE_ILLUSTRATION = Object.freeze({
       effective_from: "2026-09-01", effective_until: null, is_automatic_default: true },
     owner: { id: "fixture-maker-1", display_name: "Fixture Maker", status: "active" },
     details_partial: false,
+  }, {
+    id: "fixture-batch-9400",
+    batch_reference: "__U4_FIXTURE_ONLY__/NAG/BAT/009400",
+    family_id: "fixture-family-9402", plant_id: "fixture-plant-nag",
+    owner_user_id: "fixture-maker-2", sector_id: "fixture-sector-fmcg",
+    status: "issued_locked", content_version: 9, pricing_date: "2026-09-10",
+    pricing_basis_release_id: "fixture-release-12", pricing_basis_is_deliberate: true,
+    created_at: "2026-09-10T08:30:00Z",
+    customer_family: { id: "fixture-family-9402", group_customer_code: "FIX-FAM-9402",
+      name: "__U4_FIXTURE_ONLY__ Retail Family", status: "active" },
+    plant: { id: "fixture-plant-nag", plant_code: "NAG", name: "Nagpur", status: "active" },
+    sector: { id: "fixture-sector-fmcg", sector_code: "FMCG", name: "FMCG", status: "active" },
+    pricing_basis_release: { id: "fixture-release-12", release_name: "__U4_FIXTURE_ONLY__ NAG September",
+      status: "approved" },
+    owner: null, details_partial: true,
   }],
 });
 

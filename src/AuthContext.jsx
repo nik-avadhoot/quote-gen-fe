@@ -52,3 +52,19 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
+
+// Development-only full-shell evidence. The production Gate never calls this
+// provider; it exists so the Batch-first navigation can be exercised at the
+// beta laptop width for exact capability profiles without credentials, API
+// writes or invented governed records.
+export function AuthFixtureProvider({ children, profile }) {
+  if (!import.meta.env.DEV) return null;
+  const value = {
+    profile,
+    loading: false,
+    isActive: true,
+    signIn: async () => profile,
+    signOut: async () => {},
+  };
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}

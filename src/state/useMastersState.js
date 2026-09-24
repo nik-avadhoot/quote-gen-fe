@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { DEFAULT_BOX_TRIM_DATA, DEFAULT_FREIGHT, DEFAULT_RATES, PARTITIONS_MASTER_DEFAULT } from "../data/defaults.js";
 import { getItem, setItem } from "../lib/persist.js";
+import { isS1ActiveBrowserFixture, S1_ACTIVE_CONSTRUCTION } from "../lib/s1BrowserFixture.js";
 
 export function useMastersState(){
   const[rates,setRates]=useState(()=>{try{const s=getItem('cbb_rates');return s?JSON.parse(s):DEFAULT_RATES;}catch(e){return DEFAULT_RATES;}});
@@ -64,6 +65,7 @@ export function useMastersState(){
     }catch(e){return DEFAULT_LOCATIONS;}
   });
   const[constructionLib,setConstructionLib]=useState(()=>{
+    if(isS1ActiveBrowserFixture())return [S1_ACTIVE_CONSTRUCTION];
     try{const s=getItem('cbb_constrlib');return s?JSON.parse(s):[];}catch(e){return [];}
   });
   // A3: persist locations whenever the list changes
@@ -73,7 +75,10 @@ export function useMastersState(){
   useEffect(()=>{try{setItem('cbb_freight',JSON.stringify(freight));}catch(e){}},[freight]);
   useEffect(()=>{try{setItem('cbb_boxtrim',JSON.stringify(boxTrim));}catch(e){}},[boxTrim]);
   useEffect(()=>{try{setItem('cbb_partitions',JSON.stringify(partitionsMaster));}catch(e){}},[partitionsMaster]);
-  useEffect(()=>{try{setItem('cbb_constrlib',JSON.stringify(constructionLib));}catch(e){}},[constructionLib]);
+  useEffect(()=>{
+    if(isS1ActiveBrowserFixture())return;
+    try{setItem('cbb_constrlib',JSON.stringify(constructionLib));}catch{ /* storage unavailable */ }
+  },[constructionLib]);
   const gradeCodes=["",...rates.map(r=>r.code)];
 
   return { DEFAULT_LOCATIONS, blanketDisc, blanketInterest, boxTrim, constructionLib, freight, freightBands, gradeCodes, gyPremHigh, gyPremLow, locations, partitionsMaster, rateUpdatedAt, rates, setBlanketDisc, setBlanketInterest, setBoxTrim, setConstructionLib, setFreight, setFreightBands, setGyPremHigh, setGyPremLow, setLocations, setPartitionsMaster, setRateUpdatedAt, setRates, touchRateDate };

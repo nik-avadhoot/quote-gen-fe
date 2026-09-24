@@ -53,11 +53,13 @@ const Subtab=({label,active,onClick,title})=>(
 
 export default function CostingTab(){
   const {
-    activeBatchRowId, batchRows, discardNewDraft, exitReview,
-    constructionCatalogue, newDraftKeepClient, newDraftNewClient, profileDraft, reviewDirty,
-    sendCostingToBatch, setSpec, setTab, showToast, spec, startNewSku, _sendReady,
+    activeBatchRowId, batchRows, discardNewDraft,
+    constructionCatalogue, newDraftKeepClient, newDraftNewClient, profileDraft,
+    requestExitReview, sendCostingToBatch, setSpec, setTab, showToast, spec, startNewSku, _sendReady,
   } = useAppState();
   const inReview=!!activeBatchRowId;
+  const reviewRow=batchRows.find(row=>row.id===activeBatchRowId);
+  const durableReview=reviewRow?.durableRowId!=null;
   // C5: new-batch is DERIVED from the draft profile's existence, not a flag.
   const newBatch=profileDraft!==null;
   const [draftMenu,setDraftMenu]=useState(false);
@@ -85,39 +87,28 @@ export default function CostingTab(){
   };
   const openFullLibrary=()=>{closeConstructionPicker();setTab('constrlib');};
 
-  // C4 - X1. The ONE exit path, shared by the Unlink button and the START
-  // subtab. Confirms only when the review copy has unpushed changes; the
-  // persisted START draft is never consulted, because exiting cannot harm it.
-  // exitReview() also restores the workspace flags Deep Dive overwrote.
-  const requestExitReview=()=>{
-    if(reviewDirty){
-      const _n=batchRows.findIndex(r=>r.id===activeBatchRowId)+1;
-      if(!window.confirm(
-        `Discard unpushed changes to Batch Row ${_n}?\n\n`+
-        "Your Costing draft is untouched and will reappear as you left it.\n\n"+
-        "OK = discard review changes  |  Cancel = stay in REVIEW"
-      ))return;
-    }
-    exitReview();
-  };
   return(
     <div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.cream,flexShrink:0}}>
-        <Subtab label="START" active={!inReview}
+        <Subtab label="QUICK CALCULATION" active={!inReview}
           onClick={inReview?requestExitReview:undefined}
           title={inReview?"Leave this review and return to your Costing draft":undefined}/>
-        {inReview&&<Subtab label="REVIEW" active/>}
+        {inReview&&<Subtab label="COSTING DEEP-DIVE" active/>}
         {/* CDM-02 says this screen is a private browser-local scratchpad, and
             CC-24 records that nothing on it ever says so. One permanent line
             does, in the strip that already exists, rather than a banner. */}
         <span title={inReview
-          ? "A review copy of an existing Batch row. It lives for this session only — reload and unpushed changes are gone."
+          ? durableReview
+            ? "A session-only review copied from the exact durable Batch row. Push updates its local preview only; governed state changes only through the existing explicit governed actions."
+            : "A review copy of an existing Batch row. It lives for this session only — reload and unpushed changes are gone."
           : "Your own working draft, kept in this browser. Nothing here is a Quote until it is added to a batch, and no customer can be shown it."}
           style={{alignSelf:"center",marginLeft:8,padding:"2px 7px",borderRadius:999,
             fontSize:T.micro,fontWeight:800,letterSpacing:"0.05em",textTransform:"uppercase",
             whiteSpace:"nowrap",color:C.amberD,background:C.amberL,
             border:`1px dashed ${C.amber}`}}>
-          {inReview?"Session copy · not saved until Push":"Private draft · this browser only"}</span>
+          {inReview
+            ? durableReview ? "Session copy · Push updates local preview" : "Session copy · not saved until Push"
+            : "Private draft · this browser only"}</span>
         <div title={[spec.client,spec.material_code,spec.product].filter(Boolean).join(" · ")||"New SKU"}
           style={{alignSelf:"center",minWidth:0,maxWidth:"min(460px,38vw)",marginLeft:8,
             padding:"4px 10px",borderRadius:4,background:"#29465b",color:C.white,

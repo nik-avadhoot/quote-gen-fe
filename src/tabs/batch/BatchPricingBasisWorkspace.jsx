@@ -11,6 +11,7 @@ import { C, mono, sans } from "../../theme.js";
 import BatchPricingBasisSelector from "./BatchPricingBasisSelector.jsx";
 import BatchWorkspacePanel from "./BatchWorkspacePanel.jsx";
 import NewGovernedBatchPanel from "./NewGovernedBatchPanel.jsx";
+import { freshBatchProfileValues } from "../../state/costingDraftModel.js";
 import { useAppState } from "../../state/AppStateContext.js";
 
 const FIXTURE_BATCH = Object.freeze({
@@ -165,7 +166,17 @@ const FIXTURE_CREATE_OPTIONS = Object.freeze({
     name: "__U4_FIXTURE_ONLY__ Customer Family", status: "active",
     sector_ids: ["fixture-sector-9301", "fixture-sector-9302"],
     members: [{ id: "fixture-party-9301", display_name: "__U4_FIXTURE_ONLY__ Customer",
-      customer_code: "FIX-CUST-9301", lifecycle_state: "customer" }] }],
+      customer_code: "FIX-CUST-9301", lifecycle_state: "customer",
+      delivery_locations: [{ id: "fixture-ship-9301", location_code: "FIX-SHIP-9301", status: "active" }],
+      billing_locations: [{ id: "fixture-bill-9301", location_code: "FIX-BILL-9301", status: "active" }] }] },
+  { id: "fixture-family-9302", group_customer_code: "FIX-FAM-9302",
+    name: "__U4_FIXTURE_ONLY__ Multi-member Family", status: "active",
+    sector_ids: ["fixture-sector-9302"], members: [
+      { id: "fixture-party-9302", display_name: "__U4_FIXTURE_ONLY__ Second Customer",
+        customer_code: "FIX-CUST-9302", lifecycle_state: "customer", delivery_locations: [] },
+      { id: "fixture-party-9303", display_name: "__U4_FIXTURE_ONLY__ Prospect",
+        customer_code: null, lifecycle_state: "prospect", status: "proposed", delivery_locations: [] },
+    ] }],
   plants: [{ id: "fixture-nag", plant_code: "NAG", name: "Nagpur", status: "active" }],
   sectors: [
     { id: "fixture-sector-9301", sector_code: "PIZZA", name: "Pizza", status: "active" },
@@ -189,8 +200,8 @@ export default function BatchPricingBasisWorkspace({
   showToast,
   compact = false,
 }) {
-  const { batchWorkspaceRequest, durableBatch, newBatchDialogOpen, setBatchWorkspaceRequest,
-    setDurableBatch, setNewBatchDialogOpen } = useAppState();
+  const { batchWorkspaceRequest, durableBatch, newBatchDialogOpen, requestExitReview,
+    setBatchProfile, setBatchWorkspaceRequest, setDurableBatch, setNewBatchDialogOpen } = useAppState();
   const [reference, setReference] = useState(fixtureOnly
     ? FIXTURE_WORKSPACE.batch_reference : durableBatch?.batch_reference || "");
   const [fixtureStored, setFixtureStored] = useState(FIXTURE_WORKSPACE);
@@ -250,13 +261,25 @@ export default function BatchPricingBasisWorkspace({
         const workspaceData = await workspaceResponse.json().catch(() => ({}));
         const workspaceOutcome = classifyResponse({ ok: workspaceResponse.ok,
           status: workspaceResponse.status, data: workspaceData });
-        if (workspaceOutcome.kind === "ok" && workspaceData.batch) {
-          accepted = { ...workspaceData.batch,
-            pricing_basis_release: data.batch.pricing_basis_release || null };
+        if (workspaceOutcome.kind !== "ok" || !workspaceData.batch) {
+          setStatus(workspaceOutcome.kind === "access-denied" ? "denied" : "error");
+          setMessage("The saved Batch customer context could not be reopened. The prior view was kept.");
+          return null;
         }
+        accepted = { ...workspaceData.batch,
+          pricing_basis_release: data.batch.pricing_basis_release || null };
       } catch {
-        accepted = { ...data.batch, details_partial: true };
+        setStatus("error");
+        setMessage("The saved Batch workspace could not be reached. The prior view was kept.");
+        return null;
       }
+    }
+    if (!fixtureOnly && accepted.customer_party_id !== undefined) {
+      if (!requestExitReview?.()) {
+        setMessage("Batch reopen cancelled; the Costing review was kept unchanged.");
+        return null;
+      }
+      setBatchProfile(freshBatchProfileValues(accepted));
     }
     updateBatch(accepted);
     setReference(data.batch.batch_reference);

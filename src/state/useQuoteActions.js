@@ -565,11 +565,19 @@ export function useQuoteActions(st){
   const quoteBlockers=localBlockers();
   const journey=journeyState({laneSelection,durableBatch,batchRows,batchResults,batchProfile,
     quoteItems:items,blockers:quoteBlockers,hasScratchDraft:!!_sendReady});
+  // The shared header describes the governed Batch that is actually open,
+  // independently of a private Quick draft parked elsewhere. This is a
+  // presentation context only: it grants no authority and runs no transition.
+  const batchJourney=journeyState({
+    laneSelection:durableBatch?.id
+      ?{lane:"customer",batchId:String(durableBatch.id)}:laneSelection,
+    durableBatch,batchRows,batchResults,batchProfile,quoteItems:items,
+    blockers:quoteBlockers,hasScratchDraft:!!_sendReady});
   // ONE readiness verdict for the toolbar, the TopBar and the Send button, so
   // the three cannot describe three different permitted behaviours. Built from
   // the truthful result count, never from batchResults' key count.
   const quoteReadiness=sendReadiness(quoteBlockers,
     {rowCount:batchRows.length,calculated:calculatedRowCount(batchRows,batchResults)});
 
-  return { BACKUP_KEYS, addBatchRow, addItem, calcBatchRow, calculateAll, card, generateCode, generateMissingCodes, getBatchRowStatus, handleBackup, handleImport, handleRestore, handleRestoreFile, handleTemplateLoad, importConstrFromSpec, journey, quoteBlockers, quoteReadiness, removeItem, sendAllToQuoteItems };
+  return { BACKUP_KEYS, addBatchRow, addItem, batchJourney, calcBatchRow, calculateAll, card, generateCode, generateMissingCodes, getBatchRowStatus, handleBackup, handleImport, handleRestore, handleRestoreFile, handleTemplateLoad, importConstrFromSpec, journey, quoteBlockers, quoteReadiness, removeItem, sendAllToQuoteItems };
 }

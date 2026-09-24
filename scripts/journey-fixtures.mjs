@@ -32,7 +32,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   FOCUS, LANE_CHOICES, LANES, STAGES, artifactContext, calculatedRowCount, firstRefusal,
-  journeyState, laneSelectionApplies, localWorkBlockers, resolveLane, revisionShareability,
+  journeyStageDisclosure, journeyState, laneSelectionApplies, localWorkBlockers, resolveLane, revisionShareability,
   sendReadiness,
 } from "../src/lib/quoteJourney.js";
 
@@ -299,9 +299,9 @@ check(readyLocal.next.surface === "batch" && readyLocal.next.focus === FOCUS.sen
   "JR-41 fully calculated rows with no Quote Items point at the Send control, on the screen that has it");
 
 const unchosen = journeyState({ batchProfile: ROUTED, batchRows: [row(1)] });
-check(unchosen.next.focus === FOCUS.lane
-  && unchosen.next.label === "Choose how this work is saved",
-  "JR-42 with no lane chosen the next action is the choice itself, focusing the lane control");
+check(unchosen.next.focus === FOCUS.newQuote
+  && unchosen.next.label === "Start a customer quote",
+  "JR-42 with no lane chosen the next action is the primary governed customer-quote door");
 
 check(journeyState({ laneSelection: pickCustomer(null), batchProfile: ROUTED,
   batchRows: [row(1)] }).next.label === "Create or open the governed Batch",
@@ -315,9 +315,9 @@ check(halfDone.next.focus === FOCUS.calculate
 
 const governedReady = journeyState({ laneSelection: pickCustomer("7"), durableBatch: BATCH7,
   batchProfile: ROUTED, batchRows: [row(1)], batchResults: { 1: {} }, quoteItems: [{}] });
-check(governedReady.next.surface === "batch" && governedReady.next.focus === FOCUS.workspace
+check(governedReady.next.surface === "items" && governedReady.next.label === "Review the customer document"
   && governedReady.lane.governed === true,
-  "JR-45 the governed lane is pointed at the Batch workspace, where governed Calculate and Send live");
+  "JR-45 once Working Quote Items exist, the governed journey advances to document review");
 
 check(Object.values(FOCUS).every(id => typeof id === "string" && id.startsWith("journey-"))
   && new Set(Object.values(FOCUS)).size === Object.keys(FOCUS).length,
@@ -336,6 +336,15 @@ check(journeyState({ laneSelection: pickCustomer("7"), durableBatch: BATCH7,
 check(STAGES.length === 7 && STAGES.every(s => s.id && s.label && s.question && s.surface)
   && STAGES[0].id === "customer" && STAGES[STAGES.length - 1].id === "shared",
   "JR-49 the stage list runs from the customer to the shared revision, and every stage states its question");
+
+const stageDisclosure = journeyStageDisclosure(journeyState({
+  laneSelection: pickCustomer("7"), durableBatch: BATCH7,
+  batchProfile: ROUTED, batchRows: [row(1)], batchResults: {}, quoteItems: [],
+}));
+check(stageDisclosure.find(stage => stage.id === "customer").state === "complete"
+  && stageDisclosure.find(stage => stage.id === "products").state === "current"
+  && stageDisclosure.filter(stage => stage.state === "future").every(stage => stage.disabled && stage.reason),
+  "JR-49a future journey stages remain visible but disabled with a concrete reason");
 
 // ── JR-50..JR-66 · the wiring, and the words on the controls ───────────────
 check(actions.includes('import { calculatedRowCount, firstRefusal, journeyState, localWorkBlockers, sendReadiness } from "../lib/quoteJourney.js"')
@@ -367,7 +376,7 @@ check(!grid.includes("Object.keys(batchResults).length===0")
   && grid.includes("<SendReadiness readiness={quoteReadiness}/>"),
   "JR-55 the Send button and the readiness chip read ONE verdict, so they cannot describe different behaviour");
 
-check(topBar.includes("journey.counts.toFix") && topBar.includes("journey.readiness.canSend")
+check(topBar.includes("batchJourney.counts.toFix") && topBar.includes("batchJourney.next")
   && grid.includes("readiness.items.map"),
   "JR-56 the TopBar count and the toolbar list come from exactly the same checklist");
 
@@ -394,11 +403,12 @@ check(bridge.includes("const completeNewBatchStart=(governedBatch=null,{keepLoca
   && bridge.includes("if(!keepLocalInputs)setBatchRows([]);")
   && /ALWAYS cleared, including on a promotion/.test(bridge)
   && bridge.includes("setBatchResults({});")
-  && bridge.includes("client:batchProfile.client,delivery:batchProfile.delivery,"),
-  "JR-59a a promotion KEEPS the rows and the customer/route, and clears every local price");
+  && bridge.includes("freshBatchProfileValues(governedBatch)")
+  && !bridge.includes("client:batchProfile.client,delivery:batchProfile.delivery,"),
+  "JR-59a a promotion keeps row inputs, uses the saved governed customer/route, and clears local prices");
 
 check(newBatch.includes("completeNewBatchStart(data.batch, { keepLocalInputs: isPromoting?.() === true });")
-  && newBatch.includes("Keeps your SKU rows as inputs and keeps the customer and route."),
+  && newBatch.includes("Keeps your SKU rows as inputs. The chosen governed Customer and route replace local profile text"),
   "JR-59b the creation panel passes the promotion through and states which of the two outcomes applies");
 
 check(newBatch.includes("returnToQuickCalculation?.();"),
@@ -409,15 +419,20 @@ check(laneSlice.includes("laneSelectionApplies(laneSelection, durableBatch)")
   && laneSlice.includes("const clearLaneSelection ="),
   "JR-61 reopening a Batch the selection already covers does not ask again; new work clears the selection");
 
+const batchEntry = read("src/tabs/batch/BatchEntryTab.jsx");
+const batchFirstShell = read("src/tabs/batch/BatchFirstShell.jsx");
 check(grid.includes("<LaneControl lane={journey.lane}")
   && grid.includes("id={FOCUS.lane}") && grid.includes("id={FOCUS.send}")
-  && grid.includes("id={FOCUS.calculate}") && grid.includes("id={FOCUS.workspace}"),
-  "JR-62 every control the Next action names exists on the toolbar and carries its id");
+  && grid.includes("id={FOCUS.calculate}") && grid.includes("id={FOCUS.addProduct}")
+  && batchEntry.includes("id={FOCUS.workspace}") && batchEntry.includes("id={FOCUS.profile}")
+  && batchFirstShell.includes("id={FOCUS.newQuote}"),
+  "JR-62 every control the Next action names exists on the owning Batch surface and carries its id");
 
-check(topBar.includes("document.getElementById(focus)") && topBar.includes("el.focus({ preventScroll: true })")
-  && topBar.includes('const JOURNEY_TABS = new Set(["costing", "batch"])')
-  && topBar.includes('quoteView === "working-items"'),
-  "JR-63 Next focuses the named control, and the journey cue is absent from the governed and history views");
+check(topBar.includes("document.getElementById(id)") && topBar.includes("element.focus?.({ preventScroll: true })")
+  && topBar.includes('setQuoteView("working-items")')
+  && topBar.includes("if (batchFocusMode) setBatchFocusMode(false);")
+  && topBar.includes('tab === "items" && quoteView === "working-items"'),
+  "JR-63 Next restores hidden Batch targets and document review explicitly selects Working Quote Items");
 
 check(governedView.includes("<ShareabilityNote {...revisionShareability(revision)} />")
   && historyView.includes("<ShareabilityNote {...revisionShareability(selectedRevision)} />")

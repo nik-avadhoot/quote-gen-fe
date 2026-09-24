@@ -485,6 +485,24 @@ console.log("-- New Draft / new client: Sector remains the Batch-default authori
   ok("governed nulls inherit while deliberate zero and value survive",
      governed.waste===null&&governed.convRate===null&&governed.margin===null
        &&governed.wastePP===0&&governed.convRatePP===0&&governed.marginPP===9);
+  const selectedCustomer={customer_party_id:202,
+    customer_party:{id:202,display_name:'Second Prospect',lifecycle_state:'prospect'},
+    family:{id:21,name:'Shared Family'},plant:{name:'Nagpur'},sector:{sector_code:'TEXTILE'},
+    pricing_groups:[{status:'active',payment_terms_days:60,
+      delivery_groups:[{status:'active',ship_to_location_id:null,
+        destination_text:'Pune receiving dock, Gate 2'}]}]};
+  const handoff=freshBatchProfileValues(selectedCustomer);
+  ok("governed handoff uses the selected member, not its Family name",
+     handoff.client==='Second Prospect'&&handoff.client!==selectedCustomer.family.name);
+  ok("governed handoff retains typed destination and saved payment terms",
+     handoff.delivery==='Pune receiving dock, Gate 2'&&handoff.paymentDisc==='60');
+  ok("governed handoff keeps optional commercial overrides inherited",
+     inherited.every(key=>handoff[key]===null));
+  const approvedRoute=freshBatchProfileValues({...selectedCustomer,
+    pricing_groups:[{status:'active',payment_terms_days:45,
+      delivery_groups:[{status:'active',ship_to_location:{location_code:'SHIP-102'},route_notes:null}]}]});
+  ok("approved delivery identity survives profile hydration separately from free text",
+     approvedRoute.delivery==='SHIP-102'&&approvedRoute.paymentDisc==='45');
 }
 
 console.log("");

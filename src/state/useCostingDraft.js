@@ -170,6 +170,22 @@ export function useCostingDraft(st){
     if(reviewCopy)setSetAutoFill(reviewCopy.prev.setAutoFill);
     setReviewCopy(null);
   };
+  // The single guarded exit used by every route out of a Costing deep-dive.
+  // Returning false means the caller must leave both the review and the target
+  // navigation untouched.
+  const requestExitReview=()=>{
+    if(!inReview)return true;
+    if(reviewDirty){
+      const index=Math.max(1,batchRows.findIndex(row=>row.id===activeBatchRowId)+1);
+      if(!window.confirm(
+        `Discard unpushed changes to Batch Row ${index}?\n\n`+
+        "Your Costing draft is untouched and will reappear as you left it.\n\n"+
+        "OK = discard review changes  |  Cancel = stay in COSTING DEEP-DIVE"
+      ))return false;
+    }
+    exitReview();
+    return true;
+  };
   const markReviewPushed=(pushedFields,constructionFormalised)=>
     setReviewCopy(rc=>rc===null?rc:({...rc,
       baseline:nextReviewBaseline(rc.baseline,rc.spec,pushedFields,constructionFormalised)}));
@@ -219,5 +235,5 @@ export function useCostingDraft(st){
   return { activeBatchRowId, applyContextCascade, batchDefaults, contextValues,
     draftDirty, exitReview, markDraftSent, markReviewPushed, openReview,
     profileDraft, resetDraft, reviewBaseline, reviewDirty, s, setContextField,
-    setSpec, spec, specRaw };
+    requestExitReview, setSpec, spec, specRaw };
 }

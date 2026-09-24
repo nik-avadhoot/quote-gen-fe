@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/apiClient.js";
 import { isFeatureEnabled } from "../lib/featureFlags.js";
 import { classifyResponse } from "../lib/backendError.js";
@@ -171,8 +171,8 @@ export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, 
           <EvidencePair label="Issued by">{quoteActor(revision.issued_by_actor, revision.issued_by)}</EvidencePair>
           <EvidencePair label="Issued at">{dateTime(revision.issued_at)}</EvidencePair>
         </section>
-        {(revision.addressee_name || (revision.addressee_details && Object.keys(revision.addressee_details).length > 0))
-          && <section className="quote-evidence-section"><h3>Frozen issue presentation</h3>
+        {revision.addressee_details?.identity_authority === "batches.customer_party_id"
+          ? <section className="quote-evidence-section"><h3>Frozen recipient identity</h3>
             <div className="quote-revision-facts">
               <EvidencePair label="Addressee">{revision.addressee_name || "Not recorded"}</EvidencePair>
             </div>
@@ -180,6 +180,9 @@ export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, 
               && <details className="quote-frozen-json"><summary>Frozen addressee details</summary>
                 <pre>{JSON.stringify(revision.addressee_details, null, 2)}</pre>
               </details>}
+          </section>
+          : <section className="quote-evidence-section"><h3>Recipient identity unavailable</h3>
+            <p>This legacy revision has no exact Batch-selected Customer identity. Any earlier addressee text is non-authoritative.</p>
           </section>}
         {revision.return_note && <div className="quote-return-note"><strong>Recorded return note</strong>{revision.return_note}</div>}
         {revision.withdraw_reason && <div className="quote-return-note"><strong>Recorded withdrawal reason</strong>{revision.withdraw_reason}</div>}
@@ -201,7 +204,7 @@ export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, 
 
 export default function QuotesScreen({
   fixtureOnly = false, onExitFixture, onOpenSourceBatch, sourceBatchState,
-  showFixtureBanner = true, toolbarLead = null,
+  showFixtureBanner = true, toolbarLead = null, onContextChange = null,
 }) {
   const [reference, setReference] = useState(fixtureOnly ? U5_QUOTE_ILLUSTRATION.quote_reference : "");
   const [state, setState] = useState(fixtureOnly
@@ -230,6 +233,21 @@ export default function QuotesScreen({
   const selectedRevision = orderedQuoteRevisions(state.quote?.revisions || [])
     .find(row => String(row.id) === String(selectedId))
     || orderedQuoteRevisions(state.quote?.revisions || [])[0];
+  useEffect(() => {
+    if (!onContextChange) return undefined;
+    if (state.status === "ready" && state.quote && selectedRevision) {
+      onContextChange({ kind: "governed", view: "Governed Quote",
+        quoteReference: state.quote.quote_reference || null,
+        batchReference: state.quote.batch?.batch_reference || null,
+        revisionId: selectedRevision.id,
+        revisionNumber: selectedRevision.revision_number ?? null,
+        workflowStatus: selectedRevision.workflow_status || null,
+        customer: state.quote.batch?.customer_family?.name || null });
+    } else {
+      onContextChange(null);
+    }
+    return () => onContextChange(null);
+  }, [onContextChange, selectedRevision, state.quote, state.status]);
   const runWorkflow = async action => {
     if (fixtureOnly || !selectedRevision) return;
     const body = {};
@@ -243,14 +261,11 @@ export default function QuotesScreen({
     } else if (action === "withdraw") {
       const reason = window.prompt("Withdrawal reason (required)"); if (reason == null) return; body.reason = reason;
     } else if (action === "issue") {
-      const addressee = window.prompt("Issue addressee name", selectedRevision.addressee_name || "");
-      if (addressee == null) return;
       const quoteDate = window.prompt("Quote date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10));
       if (quoteDate == null) return;
       const validity = window.prompt("Offer valid to (YYYY-MM-DD, blank if not set)", selectedRevision.offer_validity_to || "");
       if (validity == null) return;
-      Object.assign(body, { addressee_name: addressee, addressee_details: null,
-        quote_date: quoteDate || null, offer_validity_to: validity || null });
+      Object.assign(body, { quote_date: quoteDate || null, offer_validity_to: validity || null });
     } else if (["approve", "create_revision"].includes(action)
       && !window.confirm(`${action === "approve" ? "Approve" : "Create the next revision from"} this immutable revision?`)) return;
     const route = action === "create_revision" ? "create-revision" : action;

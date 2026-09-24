@@ -146,11 +146,13 @@ check(catalogueScreen.includes('detail.status === "empty"')
   && catalogueScreen.includes("No linked Quote evidence is visible")
   && catalogueScreen.includes("No identity or current Batch value was inferred"),
   "U5-FE-31 an absent or RLS-hidden Batch link remains an explicit empty result without inference");
-check(screen.includes("Frozen issue presentation") && screen.includes("Frozen addressee details")
+check(screen.includes("Frozen recipient identity") && screen.includes("Frozen addressee details")
+  && screen.includes("Recipient identity unavailable") && screen.includes("non-authoritative")
   && screen.includes("Recorded withdrawal reason") && screen.includes("Recorded void reason")
   && screen.includes("voided_by_actor"),
   "U5-FE-32 frozen presentation and exceptional standing evidence are no longer silently omitted");
-check(current.addressee_details.city === "Nagpur"
+check(current.addressee_details.identity_authority === "batches.customer_party_id"
+  && current.addressee_details.party_id === "fixture-party-1"
   && current.customer_outcomes.at(-1).acceptance_reference === "FIXTURE-PO-9301"
   && screen.includes("Acceptance date") && screen.includes("acceptance_reference")
   && screen.includes("rounding_rule_version") && screen.includes("effective_interest_pct"),

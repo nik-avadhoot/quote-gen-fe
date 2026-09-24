@@ -201,7 +201,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
     sendAllToQuoteItems,setAutoCodeEnabled,setBatchConstrOverlay,
     setBatchConstrOverlayFilter,setBatchConstrOverlayQuery,setBatchConstrTargetRowId,
     chooseCustomerQuote,chooseQuick,journey,laneSelection,quoteReadiness,returnToQuickCalculation,
-    setBatchProfile,setBatchRows,setBatchWorkspaceRequest,showToast,startNewBatch,togglePinAddOn,toggleRowExpand}=useAppState();
+    setBatchProfile,setBatchRows,setBatchWorkspaceRequest,showToast,togglePinAddOn,toggleRowExpand}=useAppState();
   // D-26: the SET Code value as it stood when the input took focus, so blur can
   // tell an edit from a tab-through and only re-resolve Nos/Set on a real change.
   //
@@ -337,62 +337,63 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
               sendAllToQuoteItems refuses on (lib/quoteJourney.js), so the list
               and the refusal cannot disagree. */}
           <SendReadiness readiness={quoteReadiness}/>
-          <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
-            {/* Profile actions, moved here from the Batch Profile bar. Same handlers. */}
-            {/* CC-08: "Import profile" named neither its source nor its
-                destination. The handler is untouched; only the words say what
-                it copies, and from where. */}
-            <button type="button" onClick={copyCostingToProfile}
-              title="Copy the customer, route and commercial values from the Start Costing screen into this Batch Profile, replacing what is here now."
-              style={{padding:"4px 9px",borderRadius:5,border:"none",background:"#2E6094",
-                color:C.white,fontSize:T.label,cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>
-              ↓ Copy from Costing
-            </button>
-            {/* CC-01 / CC-06: this is the governed door - the only control on
-                this screen that creates a durable, shareable Customer quote -
-                and it read like a local housekeeping action beside "Code tools".
-                The words now say which lane it opens. */}
-            <button type="button" id={FOCUS.workspace} onClick={startNewBatch}
-              title="Start a governed Batch against a Customer Family, Plant and Sector. It gets a permanent Batch reference, persisted calculations and the approval workflow — unlike the quick calculation on this screen."
-              style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.amber}`,background:C.amberL,
-                color:C.amberD,fontSize:T.label,cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>
-              + New customer quote
-            </button>
-            <details style={{position:"relative",flexShrink:0}}>
-              <summary style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.border}`,
-                background:C.white,color:C.slateM,fontSize:T.label,cursor:"pointer",fontWeight:700,
-                whiteSpace:"nowrap",listStyle:"none"}}>Code tools ▾</summary>
-              <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",zIndex:20,
-                width:230,padding:9,border:`1px solid ${C.border}`,borderRadius:7,
-                background:C.white,boxShadow:"0 8px 22px rgba(28,43,58,.18)",
-                display:"grid",gap:7}}>
-                <label style={{display:"flex",alignItems:"center",gap:5,fontSize:T.body,color:C.slateM,cursor:"pointer"}}>
-                  <input type="checkbox" checked={autoCodeEnabled} onChange={e=>setAutoCodeEnabled(e.target.checked)}
-                    style={{accentColor:C.amber}}/>
-                  Auto-code new rows
-                </label>
-                {autoCodeEnabled&&<button onClick={generateMissingCodes}
-                  style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.amber}`,
-                    background:C.amberL,color:C.amberD,fontSize:T.body,cursor:"pointer",fontWeight:600}}>
-                  ↯ Generate Missing Codes</button>}
-                <span style={{fontSize:T.label,color:C.slateL}}>Next format: {generateCode(autoCodeSeq)}</span>
-              </div>
-            </details>
-          </div>
+          {/* S1: the primary customer-Quote door lives in the compact empty-Batch
+              landing. Secondary import and code utilities share one disclosure
+              so the grid toolbar stays one row at the 1366px beta width. */}
+          <details style={{position:"relative",flexShrink:0}}>
+            <summary style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.border}`,
+              background:C.white,color:C.slateM,fontSize:T.label,cursor:"pointer",fontWeight:700,
+              whiteSpace:"nowrap",listStyle:"none"}}>Batch tools ▾</summary>
+            <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",zIndex:20,
+              width:250,padding:9,border:`1px solid ${C.border}`,borderRadius:7,
+              background:C.white,boxShadow:"0 8px 22px rgba(28,43,58,.18)",
+              display:"grid",gap:7}}>
+              <button type="button" onClick={copyCostingToProfile}
+                title="Copy customer, route and commercial values from the private Quick calculation into this Batch Profile."
+                style={{padding:"5px 9px",borderRadius:5,border:"none",background:"#2E6094",
+                  color:C.white,fontSize:T.label,cursor:"pointer",fontWeight:700,textAlign:"left"}}>
+                ↓ Copy context from Quick calculation
+              </button>
+              <label style={{display:"flex",alignItems:"center",gap:5,fontSize:T.body,color:C.slateM,cursor:"pointer"}}>
+                <input type="checkbox" checked={autoCodeEnabled} onChange={e=>setAutoCodeEnabled(e.target.checked)}
+                  style={{accentColor:C.amber}}/>
+                Auto-code new rows
+              </label>
+              {autoCodeEnabled&&<button onClick={generateMissingCodes}
+                style={{padding:"4px 9px",borderRadius:5,border:`1px solid ${C.amber}`,
+                  background:C.amberL,color:C.amberD,fontSize:T.body,cursor:"pointer",fontWeight:600}}>
+                ↯ Generate Missing Codes</button>}
+              <span style={{fontSize:T.label,color:C.slateL}}>Next format: {generateCode(autoCodeSeq)}</span>
+            </div>
+          </details>
           <button onClick={()=>{setBatchConstrOverlay(true);setBatchConstrTargetRowId(null);setBatchConstrOverlayQuery('');setBatchConstrOverlayFilter({sector:'',client:'',});}}
             style={{padding:"3px 10px",borderRadius:5,border:`1px solid ${C.amber}`,
               background:C.amberL,color:C.amberD,fontSize:T.body,cursor:"pointer",fontWeight:700,
               whiteSpace:"nowrap",flexShrink:0}}>
             Constructions ({constructionCatalogue.filter(c=>(c.status||'active')==='active').length})
           </button>
-          <div style={{borderLeft:`1px solid ${C.border}`,paddingLeft:8,display:"flex",gap:6,flexShrink:0}}>
-            {["Box","Plate","Part-L","Part-W"].map(t=>(
-              <button key={t} onClick={()=>addBatchRow(t)}
-                style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${C.border}`,
-                  background:C.white,color:C.slateM,fontSize:T.body,cursor:"pointer",fontWeight:600,
-                  whiteSpace:"nowrap",flexShrink:0}}>
-                 + {t}</button>))}
-          </div>
+          <details id={FOCUS.addProduct} style={{position:"relative",flexShrink:0}}>
+            <summary style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${C.amber}`,
+              background:C.amberL,color:C.amberD,fontSize:T.body,cursor:"pointer",fontWeight:800,
+              whiteSpace:"nowrap",listStyle:"none"}}>+ Add product ▾</summary>
+            <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",zIndex:20,
+              width:210,padding:9,border:`1px solid ${C.border}`,borderRadius:7,
+              background:C.white,boxShadow:"0 8px 22px rgba(28,43,58,.18)",display:"grid",gap:6}}>
+              {durableBatch?.id&&<button type="button"
+                onClick={()=>openWorkspaceAction("row-create",{pricingGroup:durableBatch.pricing_groups?.find(g=>g.status==="active")})}
+                style={{padding:"6px 9px",borderRadius:5,border:`1px solid ${C.amber}`,
+                  background:C.amberL,color:C.amberD,fontSize:T.body,cursor:"pointer",fontWeight:800,
+                  textAlign:"left"}}>+ Add governed SKU row</button>}
+              <span style={{fontSize:T.micro,color:C.slateL,fontWeight:800,letterSpacing:".05em",
+                textTransform:"uppercase"}}>{durableBatch?.id?"Local preview only":"Product type"}</span>
+              {["Box","Plate","Part-L","Part-W"].map(t=>(
+                <button key={t} onClick={()=>addBatchRow(t)}
+                  style={{padding:"5px 9px",borderRadius:5,border:`1px solid ${C.border}`,
+                    background:C.white,color:C.slateM,fontSize:T.body,cursor:"pointer",fontWeight:650,
+                    textAlign:"left",whiteSpace:"nowrap"}}>
+                   + {t}</button>))}
+            </div>
+          </details>
           <span style={{flex:"1 1 auto"}}/>
           {/* Focus mode as the shared expand / collapse icon (SKU Master idiom): it
               fills the Batch Builder area inside the app window - never the browser
@@ -551,7 +552,7 @@ export default function BatchGrid({ focusMode = false, onToggleFocusMode }){
                     ?checkSpecCompliance(buildSpecFromRow(dimRow,constructionCatalogue.find(c=>c.code===row.constructionCode),batchProfile),res):[];
                   return(<Fragment key={`${section.key}:row:${row.id}`}>
                     {sectionHeader}
-                    <tr style={{...compactGridRowSt,background:isActive?"#EEF4FB":ri%2?C.cream:C.white,
+                    <tr id={`batch-row-${row.id}`} tabIndex={-1} style={{...compactGridRowSt,background:isActive?"#EEF4FB":ri%2?C.cream:C.white,
                       borderBottom:`1px solid ${C.border}44`}}>
                       {/* ── FROZEN COL 1: Status (left:0, w:28) — click to expand/collapse sub-row ── */}
                       <td onClick={()=>toggleRowExpand(row.id)}

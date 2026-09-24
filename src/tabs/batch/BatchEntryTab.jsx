@@ -7,20 +7,22 @@
 // header, the overlay is absolutely positioned and renders null when closed,
 // and the grid takes the remaining height.
 // ═══════════════════════════════════════════════════════════════════════════
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import BatchProfileBar from "./BatchProfileBar.jsx";
 import BatchPricingCard from "./BatchPricingCard.jsx";
 import ConstructionOverlay from "./ConstructionOverlay.jsx";
 import BatchGrid from "./BatchGrid.jsx";
+import BatchFirstShell from "./BatchFirstShell.jsx";
 import NewGovernedBatchPanel from "./NewGovernedBatchPanel.jsx";
 import { useAppState } from "../../state/AppStateContext.js";
+import { FOCUS } from "../../lib/quoteJourney.js";
 import { SummaryRow } from "../../ui/dataDisplay.jsx";
 
 export default function BatchEntryTab(){
-  const { batchProfile, durableBatch, newBatchDialogOpen,
+  const { batchFocusMode:focusMode, batchProfile, durableBatch, newBatchDialogOpen,
+    setBatchFocusMode:setFocusMode,
     setSidebarCollapsed, setU3PricingBasisDraft, showToast, sidebarCollapsed,
     u3PricingBasisDraft } = useAppState();
-  const[focusMode,setFocusMode]=useState(false);
   const sidebarBeforeFocus=useRef(sidebarCollapsed);
   const focusModeRef=useRef(false);
   const toggleFocusMode=()=>{
@@ -34,16 +36,26 @@ export default function BatchEntryTab(){
     focusModeRef.current=next;
     setFocusMode(next);
   };
+  useEffect(()=>{
+    if(focusModeRef.current&&!focusMode)setSidebarCollapsed(sidebarBeforeFocus.current);
+    focusModeRef.current=focusMode;
+  },[focusMode,setSidebarCollapsed]);
   useEffect(()=>()=>{
-    if(focusModeRef.current)setSidebarCollapsed(sidebarBeforeFocus.current);
-  },[setSidebarCollapsed]);
+    if(focusModeRef.current){
+      setSidebarCollapsed(sidebarBeforeFocus.current);
+      setFocusMode(false);
+    }
+  },[setFocusMode,setSidebarCollapsed]);
 
   const pricingCard=<BatchPricingCard key={durableBatch?.id || "unbound"}
     fallbackPlantCode={batchProfile.plant} draft={u3PricingBasisDraft}
     setDraft={setU3PricingBasisDraft} showToast={showToast}/>;
   return(
-    <div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
-      <div className={`batch-workspace-profile-card${focusMode?" is-focus-mode":""}`}>
+    <div id={FOCUS.workspace} tabIndex={-1}
+      style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
+      <BatchFirstShell/>
+      <div id={FOCUS.profile} tabIndex={-1}
+        className={`batch-workspace-profile-card${focusMode?" is-focus-mode":""}`}>
         <div className="batch-focus-summary">
           <SummaryRow title="Batch Profile"
             facts={[batchProfile.client||"No client",batchProfile.sector||"No sector",

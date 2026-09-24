@@ -224,9 +224,17 @@ export function freshBatchProfileValues(governedBatch=null){
   if(!governedBatch)return freshNewClientProfileValues();
   const profile=governedBatch.current_profile||{};
   const profileValue=key=>profile[key]??null;
+  const group=governedBatch.pricing_groups?.find(item=>item.status!=='removed')
+    ||governedBatch.pricing_groups?.[0];
+  const route=group?.delivery_groups?.find(item=>item.status!=='removed')
+    ||group?.delivery_groups?.[0];
   return {...freshNewClientProfileValues(),
+    client:governedBatch.customer_party?.display_name||'',
+    customerType:governedBatch.customer_party?.lifecycle_state==='prospect'?'new':'existing',
     sector:governedBatch.sector?.sector_code||'',
     plant:governedBatch.plant?.name||governedBatch.plant?.plant_code||'',
+    delivery:route?.ship_to_location?.location_code||route?.destination_text||'',
+    paymentDisc:group?.payment_terms_days==null?'30':String(group.payment_terms_days),
     waste:profileValue('waste_cbb_pct'),
     convRate:profileValue('conv_box_rate'),
     margin:profileValue('margin_box_pct'),

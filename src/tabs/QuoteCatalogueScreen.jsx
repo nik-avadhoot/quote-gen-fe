@@ -94,7 +94,7 @@ function Notice({ tone = "warn", children }) {
 export default function QuoteCatalogueScreen({
   mode = "history", fixtureOnly = false, initialRevisionId = null, initialBatchId = null,
   requestId = null, onExitFixture, onOpenSourceBatch, sourceBatchState, showFixtureBanner = true,
-  toolbarLead = null,
+  toolbarLead = null, onContextChange = null,
 }) {
   const isInbox = mode === "inbox";
   const noun = isInbox ? "Approval Inbox" : "Quote History";
@@ -221,6 +221,21 @@ export default function QuoteCatalogueScreen({
   const selectedRevision = orderedQuoteRevisions(detail.quote?.revisions || [])
     .find(row => String(row.id) === String(selectedId))
     || orderedQuoteRevisions(detail.quote?.revisions || [])[0];
+  useEffect(() => {
+    if (!onContextChange) return undefined;
+    if (detail.status === "ready" && detail.quote && selectedRevision) {
+      onContextChange({ kind: mode, view: noun,
+        quoteReference: detail.quote.quote_reference || null,
+        batchReference: detail.quote.batch?.batch_reference || null,
+        revisionId: selectedRevision.id,
+        revisionNumber: selectedRevision.revision_number ?? null,
+        workflowStatus: selectedRevision.workflow_status || null,
+        customer: detail.quote.batch?.customer_family?.name || null });
+    } else {
+      onContextChange(null);
+    }
+    return () => onContextChange(null);
+  }, [detail.quote, detail.status, mode, noun, onContextChange, selectedRevision]);
   const selectedActions = selectedRevision?.actions || detail.quote?.actions;
   const selectedLabel = openedBy?.kind === "batch" ? `Batch #${openedBy.id}`
     : selectedRow ? (selectedRow.quote_reference || quoteRevisionLabel(selectedRow))
@@ -244,14 +259,11 @@ export default function QuoteCatalogueScreen({
       if (reason == null) return;
       body.reason = reason;
     } else if (action === "issue") {
-      const addressee = window.prompt("Issue addressee name", selectedRevision.addressee_name || "");
-      if (addressee == null) return;
       const quoteDate = window.prompt("Quote date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10));
       if (quoteDate == null) return;
       const validity = window.prompt("Offer valid to (YYYY-MM-DD, blank if not set)", selectedRevision.offer_validity_to || "");
       if (validity == null) return;
-      Object.assign(body, { addressee_name: addressee, addressee_details: null,
-        quote_date: quoteDate || null, offer_validity_to: validity || null });
+      Object.assign(body, { quote_date: quoteDate || null, offer_validity_to: validity || null });
     } else if (["approve", "create_revision"].includes(action)
       && !window.confirm(`${action === "approve" ? "Approve" : "Create the next revision from"} this immutable revision?`)) return;
 
