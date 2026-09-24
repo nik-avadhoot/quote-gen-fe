@@ -53,13 +53,13 @@ check(Object.values(U5_QUOTE_ILLUSTRATION.actions).every(action =>
   action.enabled === false && action.reason === "fixture_only"),
   "U5-FE-7 fixture mutations remain disabled without inventing backend availability");
 const reportedQuoteActions = quoteActionsFromBackend({
-  approve: { enabled: true, reason: "available" }, issue: { enabled: false, reason: "state_not_approved" },
+  approve: { enabled: true, reason: "available" }, share: { enabled: false, reason: "state_not_approved" },
 });
-check(reportedQuoteActions.approve.enabled && !reportedQuoteActions.issue.enabled
+check(reportedQuoteActions.approve.enabled && !reportedQuoteActions.share.enabled
   && !reportedQuoteActions.submit.enabled,
   "U5-FE-7b only an exact backend-enabled Quote action becomes available");
 check(Object.keys(U5_QUOTE_ILLUSTRATION.actions).join(",")
-  === "calculate,send,submit,approve,return,withdraw,issue,create_revision,amend,reprice"
+  === "calculate,send,submit,approve,return,withdraw,share,create_revision,amend,reprice"
   && catalogueScreen.includes("<GovernedActions") && screen.includes("<GovernedActions"),
   "U5-FE-7a the complete accepted workflow vocabulary stays visible");
 check(screen.includes("/quotes/workspace?reference=") && screen.includes("encodeURIComponent"),
@@ -251,7 +251,7 @@ check(quoteItems.includes("height: 26") && quoteItems.includes("frozenCell(false
 check(!quoteItems.includes('sc+"-f"') && quoteItems.includes("costed ·")
   && quoteItems.includes("SET Rate ₹{setRate.toFixed(2)}/set"),
   "U5-FE-51 each SET is one group row carrying item count, costed count and SET rate");
-check(quoteItems.includes('<ProvenanceTag kind="local" />') && quoteItems.includes("not a governed Quote revision")
+check(quoteItems.includes('<ProvenanceTag kind="local" />') && quoteItems.includes("QUICK CALCULATION — NOT A QUOTE")
   && workspace.includes('{ id: "working-items", label: "Working", name: "Working Quote Items", provenance: "local" }'),
   "U5-FE-52 the Local provenance signal survives on the view switch and in the footer");
 check(quoteItems.includes("checkSETCompleteness()") && quoteItems.includes("warnDivergence();exportFromTemplate(")

@@ -1,4 +1,4 @@
-export const BATCH_ACTION_NAMES = ["calculate", "send", "submit", "approve", "return", "issue"];
+export const BATCH_ACTION_NAMES = ["calculate", "send", "submit", "approve", "return", "share"];
 
 export function batchActionsFromBackend(reported = {}, fallbackReason = "backend_did_not_report_available") {
   return Object.fromEntries(BATCH_ACTION_NAMES.map(name => {

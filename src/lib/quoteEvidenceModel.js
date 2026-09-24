@@ -1,5 +1,5 @@
 export const QUOTE_ACTION_NAMES = [
-  "calculate", "send", "submit", "approve", "return", "withdraw", "issue",
+  "calculate", "send", "submit", "approve", "return", "withdraw", "share",
   "create_revision", "amend", "reprice",
 ];
 

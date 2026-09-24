@@ -44,7 +44,7 @@ export function PendingActions({ actions, reason = "Backend activation pending",
 
 const ACTION_LABEL = {
   calculate: "Calculate", send: "Send", submit: "Submit", approve: "Approve",
-  return: "Return", withdraw: "Withdraw", issue: "Issue",
+  return: "Return", withdraw: "Withdraw", share: "Share with customer",
   create_revision: "Create revision", amend: "Amend", reprice: "Reprice",
 };
 

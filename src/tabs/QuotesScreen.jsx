@@ -99,6 +99,41 @@ function SnapshotCard({ item, index }) {
   </article>;
 }
 
+// Compact customer view.  It reads only the selected revision and its frozen
+// snapshots — never the source Batch, Family, SKU master, or local calculator.
+function CustomerDocumentPreview({ quote, revision }) {
+  const approved = revision.workflow_status === "approved" && revision.standing !== "superseded";
+  const share = revision.share_events?.[0];
+  return <section className="quote-evidence-section" aria-label="Customer document preview">
+    <h3>Customer document preview</h3>
+    <div className="quote-revision-facts">
+      <EvidencePair label="Quote">{quote.quote_reference || "Candidate — not approved"}{revision.revision_no != null ? ` · Revision ${revision.revision_no}` : ""}</EvidencePair>
+      <EvidencePair label="Recipient">{revision.addressee_name || "Exact recipient unavailable"}</EvidencePair>
+      <EvidencePair label="Quote date">{revision.quote_date || "Set when shared"}</EvidencePair>
+      <EvidencePair label="Valid to">{revision.offer_validity_to || "Not recorded"}</EvidencePair>
+      <EvidencePair label="Customer state">{approved ? "Approved current revision — ready to share" : revision.workflow_status === "issued" ? "Shared revision" : "Candidate only — not shareable"}</EvidencePair>
+    </div>
+    <div className="quote-snapshot-card">
+      {(revision.items || []).map((item, index) => {
+        const snapshot = item.calculation_snapshot;
+        const entered = snapshot?.effective_inputs?.entered || {};
+        const provenance = snapshot?.effective_inputs?.provenance || {};
+        const terms = snapshot?.effective_inputs?.resolved?.interest || {};
+        return <div key={item.id} className="quote-evidence-grid" style={{ marginBottom: index < revision.items.length - 1 ? 10 : 0 }}>
+          <EvidencePair label="Product / SKU">{entered.item_name || `Frozen item ${index + 1}`} · {provenance.row_type || "Product"}</EvidencePair>
+          <EvidencePair label="Quantity / MOQ">{entered.volume ?? "Not recorded"} / {entered.sales_moq ?? snapshot?.calc_moq ?? "Not recorded"}</EvidencePair>
+          <EvidencePair label="Quoted rate">{snapshot?.final_rate == null ? "Unavailable" : `₹${snapshot.final_rate}`}</EvidencePair>
+          <EvidencePair label="Commercial terms">{terms.payment_terms_days == null ? "Not recorded" : `${terms.payment_terms_days} payment days`} · freight {snapshot?.effective_freight ?? "not recorded"}</EvidencePair>
+        </div>;
+      })}
+    </div>
+    {share && <div className="quote-revision-facts" style={{ marginTop: 8 }}>
+      <EvidencePair label="Shared by">{quoteActor(share.shared_by_actor, share.shared_by)}</EvidencePair>
+      <EvidencePair label="Sharing evidence">{share.channel} · {share.shared_on}{share.external_reference ? ` · ${share.external_reference}` : ""}</EvidencePair>
+    </div>}
+  </section>;
+}
+
 export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, sourceBatchState }) {
   const revisions = useMemo(() => orderedQuoteRevisions(quote.revisions), [quote.revisions]);
   const revision = revisions.find(row => String(row.id) === String(selectedId)) || revisions[0];
@@ -171,6 +206,7 @@ export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, 
           <EvidencePair label="Issued by">{quoteActor(revision.issued_by_actor, revision.issued_by)}</EvidencePair>
           <EvidencePair label="Issued at">{dateTime(revision.issued_at)}</EvidencePair>
         </section>
+        <CustomerDocumentPreview quote={quote} revision={revision} />
         {revision.addressee_details?.identity_authority === "batches.customer_party_id"
           ? <section className="quote-evidence-section"><h3>Frozen recipient identity</h3>
             <div className="quote-revision-facts">
@@ -212,6 +248,8 @@ export default function QuotesScreen({
     : { status: "idle", quote: null });
   const [selectedId, setSelectedId] = useState(null);
   const [workflow, setWorkflow] = useState({ status: "idle", message: "" });
+  const [shareOpen, setShareOpen] = useState(false);
+  const [share, setShare] = useState({ channel: "Email", shared_on: new Date().toISOString().slice(0, 10), external_reference: "" });
 
   const openQuote = async event => {
     event?.preventDefault();
@@ -250,6 +288,7 @@ export default function QuotesScreen({
   }, [onContextChange, selectedRevision, state.quote, state.status]);
   const runWorkflow = async action => {
     if (fixtureOnly || !selectedRevision) return;
+    if (action === "share") return setShareOpen(true);
     const body = {};
     if (action === "submit") {
       const expected = state.quote?.batch?.content_version;
@@ -260,12 +299,6 @@ export default function QuotesScreen({
       const note = window.prompt("Return note (required)"); if (note == null) return; body.note = note;
     } else if (action === "withdraw") {
       const reason = window.prompt("Withdrawal reason (required)"); if (reason == null) return; body.reason = reason;
-    } else if (action === "issue") {
-      const quoteDate = window.prompt("Quote date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10));
-      if (quoteDate == null) return;
-      const validity = window.prompt("Offer valid to (YYYY-MM-DD, blank if not set)", selectedRevision.offer_validity_to || "");
-      if (validity == null) return;
-      Object.assign(body, { quote_date: quoteDate || null, offer_validity_to: validity || null });
     } else if (["approve", "create_revision"].includes(action)
       && !window.confirm(`${action === "approve" ? "Approve" : "Create the next revision from"} this immutable revision?`)) return;
     const route = action === "create_revision" ? "create-revision" : action;
@@ -282,6 +315,24 @@ export default function QuotesScreen({
       else await openQuote();
     } catch {
       setWorkflow({ status: "error", message: "The workflow service could not be reached. Refresh before retrying." });
+    }
+  };
+  const submitShare = async event => {
+    event.preventDefault();
+    if (fixtureOnly || !selectedRevision) return;
+    setWorkflow({ status: "busy", message: "Recording customer sharing…" });
+    try {
+      const response = await apiFetch(`/quotes/revisions/${encodeURIComponent(selectedRevision.id)}/share`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(share),
+      });
+      const data = await response.json().catch(() => ({}));
+      const result = classifyResponse({ ok: response.ok, status: response.status, data });
+      if (!response.ok) return setWorkflow({ status: "error", message: result.message });
+      setShareOpen(false);
+      setWorkflow({ status: "success", message: "Sharing was recorded. Downloading the frozen workbook…" });
+      await exportQuote();
+    } catch {
+      setWorkflow({ status: "error", message: "Sharing may not have been recorded. Refresh before retrying." });
     }
   };
 
@@ -347,6 +398,16 @@ export default function QuotesScreen({
         ↓ Quote workbook</button>
       <span style={{ flex: "1 1 auto" }} />
     </div>
+    {shareOpen && selectedRevision && <form onSubmit={submitShare} style={{ display: "flex", gap: 8, alignItems: "end",
+      padding: "8px 12px", borderBottom: `1px solid ${C.border}`, background: C.white, fontSize: T.label }}>
+      <strong style={{ color: C.amberD }}>Share exact revision with {selectedRevision.addressee_name || "the frozen recipient"}</strong>
+      <label>Channel<select value={share.channel} onChange={event => setShare(value => ({ ...value, channel: event.target.value }))} style={control}>
+        {["Email", "WhatsApp", "Printed/hand-delivered", "Customer portal", "Other"].map(value => <option key={value}>{value}</option>)}</select></label>
+      <label>Date<input required type="date" value={share.shared_on} onChange={event => setShare(value => ({ ...value, shared_on: event.target.value }))} style={control} /></label>
+      <label>External reference <input maxLength="200" value={share.external_reference} onChange={event => setShare(value => ({ ...value, external_reference: event.target.value }))} style={control} /></label>
+      <button type="submit" disabled={workflow.status === "busy"} style={{ ...control, borderColor: C.green, color: C.green, fontWeight: 700 }}>Record and download</button>
+      <button type="button" onClick={() => setShareOpen(false)} style={control}>Cancel</button>
+    </form>}
     <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "10px 12px 16px" }}>
       {workflow.status !== "idle" && <div className="quote-error-state" role="status">
         <strong>Workflow</strong><span>{workflow.message}</span>

@@ -26,13 +26,9 @@ export function useQuoteItemsState(st){
   const[quoteDate,setQuoteDate]=useState(today);
   const[effectiveFrom,setEffectiveFrom]=useState('');
   const[effectiveTo,setEffectiveTo]=useState('');
-  const[quoteRef,setQuoteRef]=useState(()=>{
-    const d=new Date();
-    return`QR-${String(d.getFullYear()).slice(-2)}${String(d.getMonth()+1).padStart(2,"0")}-001`;
-  });
   const makerName=profile?.display_name||""; // sourced from the logged-in account, not free text
   const[templateB64,setTemplateB64]=useState(()=>{try{return getItem('cbb_template')||null;}catch(e){return null;}});
   useEffect(()=>{try{setItem('cbb_quoteitems',JSON.stringify(items));}catch(e){}},[items]);
 
-  return { effectiveFrom, effectiveTo, importRef, items, makerName, quoteDate, quoteRef, restoreRef, savedQuotes, setEffectiveFrom, setEffectiveTo, setItems, setQuoteDate, setQuoteRef, setSavedQuotes, setTemplateB64, setTemplateLoaded, templateB64, templateLoaded, templateRef, today };
+  return { effectiveFrom, effectiveTo, importRef, items, makerName, quoteDate, restoreRef, savedQuotes, setEffectiveFrom, setEffectiveTo, setItems, setQuoteDate, setSavedQuotes, setTemplateB64, setTemplateLoaded, templateB64, templateLoaded, templateRef, today };
 }

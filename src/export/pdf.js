@@ -101,7 +101,7 @@ export const exportAllPDF=(items,meta={})=>{
     </div>
     <div style="color:#4A647D;font-size:11px;margin-bottom:2px">Avadhoot Packaging Solutions</div>
     <div class="meta">
-      <div><strong>To:</strong> ${client}${meta.quoteRef?` &nbsp;|&nbsp; <strong>Ref:</strong> ${meta.quoteRef}`:""}</div>
+      <div><strong>To:</strong> ${client} &nbsp;|&nbsp; <strong>QUICK CALCULATION — NOT A QUOTE</strong></div>
       <div><strong>Date:</strong> ${today} &nbsp;|&nbsp; <strong>Items:</strong> ${items.filter(i=>i.result).length}${meta.makerName?` &nbsp;|&nbsp; <strong>Prepared by:</strong> ${meta.makerName}`:""}</div>
     </div>
     <table><thead><tr>
