@@ -78,15 +78,13 @@
 // the read-only Construction Library and Plant Construction Adoption screens;
 // access is still the read_construction_library capability, never the flag.
 const BUILD_DEFAULTS = ["u1_producing_plants", "u1_customer_families", "u3_pricing_basis", "u2_gsm_master",
-  "u2_sku_master", "u1_batch_party_link", "u2_construction_library"];
+  "u2_sku_master", "u1_batch_party_link", "u2_construction_library", "customer_pricing_history"];
 const PRODUCTION_DEFAULTS = ["limited_beta"];
 // ── 2026-09-23: customer_pricing_history (Phase 0, P0.1) ───────────────────
-// DEVELOPMENT ONLY until the separate activation commit. The five pricing
-// migrations are now present in the authorised Beta database, but keeping the
-// flag here lets the implementation deploy and settle before users can enter
-// it. Moving it into BUILD_DEFAULTS is the reversible activation step.
+// Activated for the authorised Beta environment after all five pricing
+// migrations and the flag-off frontend/backend deployments were verified.
 // The flag controls mounting only - access is read_party_master, never this.
-const DEVELOPMENT_DEFAULTS = ["customer_pricing_history"];
+const DEVELOPMENT_DEFAULTS = [];
 
 const RAW = import.meta.env.VITE_FEATURE_FLAGS || "";
 const ENABLED = new Set([

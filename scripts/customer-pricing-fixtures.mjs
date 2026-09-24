@@ -427,9 +427,9 @@ ok("shape: Family Details mounts the workspace behind the feature flag",
   /isFeatureEnabled\("customer_pricing_history"\)/.test(screen) && /<CustomerPricingHistory party=\{party\}/.test(screen));
 ok("shape: the pricing grid is its own module, not inlined in the Family screen",
   !/negotiationSummary|pricingMutation/.test(screen));
-ok("shape: feature flag is development-only until the Beta enablement step",
-  /DEVELOPMENT_DEFAULTS = \["customer_pricing_history"\]/.test(read("src/lib/featureFlags.js"))
-  && !/BUILD_DEFAULTS = \[[^\]]*customer_pricing_history/.test(read("src/lib/featureFlags.js")));
+ok("shape: feature flag is enabled by the explicit Beta activation step",
+  /BUILD_DEFAULTS = \[[^\]]*customer_pricing_history/.test(read("src/lib/featureFlags.js"))
+  && /DEVELOPMENT_DEFAULTS = \[\]/.test(read("src/lib/featureFlags.js")));
 ok("shape: add-round reuses one request id until success",
   /setRequestId\(newClientRequestId\(\)\)/.test(read("src/tabs/customer-pricing/PricingLineDetail.jsx")));
 

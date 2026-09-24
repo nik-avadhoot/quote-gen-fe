@@ -16,7 +16,7 @@ Go-live authority: Product Owner
 | Beta URL | `https://quote-gen-fe.vercel.app` (backend `https://quote-gen-be.vercel.app`) — the only surface beta users can reach |
 | Admin | `nikunj@avadhootpacks.in` / NikunjRL — active login; no beta fence change yet |
 | Alongside period | First week; every system result compared with the existing spreadsheet |
-| Production build flag | PO ruling 2026-09-18, Vercel = localhost: `src/lib/featureFlags.js` enables `u1_producing_plants`, `u1_customer_families`, `u3_pricing_basis`, `u2_gsm_master`, `u2_sku_master` and `u1_batch_party_link` in every build, plus `limited_beta` in production builds only. `u2_construction_library` and `freight_authority_v2` stay off, as on localhost. No environment file changed |
+| Production build flag | PO ruling 2026-09-18, Vercel = localhost: `src/lib/featureFlags.js` enables `u1_producing_plants`, `u1_customer_families`, `u3_pricing_basis`, `u2_gsm_master`, `u2_sku_master`, `u1_batch_party_link`, `u2_construction_library` and, from the authorised 2026-09-24 interim activation, `customer_pricing_history` in every build; `limited_beta` remains production-only. `freight_authority_v2` stays off. No environment file changed |
 | Customer issue | Not permitted until the PO declares go-live |
 | Job work | **OUT OF SCOPE** — keep every job-work enquiry on the spreadsheet |
 
@@ -121,6 +121,14 @@ bits); `QCA_KEY_ID` must match the database keyring identifier. Never paste eith
 document, a repository file, a command transcript or chat. Confirm only that both names are present.
 
 ## Known issues before entry
+
+### Customer Pricing History interim activation — 2026-09-24
+
+Customer Pricing History was deployed before the final clean-slate Beta cutover so the Product
+Owner and testers can use it. The five pricing migrations are recorded as `20260924164751`,
+`20260924164806`, `20260924164820`, `20260924164835` and `20260924164850`; their 25 catalogue
+checks passed. Test pricing records created before the final cutover are disposable. The future
+clean reset remains a separate, explicitly authorised operation and was not performed here.
 
 ### Live U1 beta-exit evidence — 2026-09-18
 
