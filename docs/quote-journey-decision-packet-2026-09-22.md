@@ -1,5 +1,11 @@
 # Quote journey — Product Owner decision packet, 2026-09-22
 
+**Simplification resolution, 2026-09-22:** D-1..D-9 are selected for the quotation
+simplification programme in
+[`quotation-simplification-h0-s1-evidence-2026-09-22.md`](quotation-simplification-h0-s1-evidence-2026-09-22.md).
+The alternatives below remain the rationale record; they are no longer an open S1 implementation
+gate.
+
 **Purpose:** one batch of the product decisions that the reshaping of the frontend around the
 customer's quote genuinely needs. Nothing here is a design proposal awaiting approval before work
 can continue — slice 1 is already implemented and locally verified

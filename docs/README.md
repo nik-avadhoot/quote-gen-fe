@@ -66,6 +66,9 @@ without explicit Product Owner scope.
 - [`quote-journey-slice-2-closure.md`](quote-journey-slice-2-closure.md) — slice 2: the lane is an
   explicit persisted choice rather than an inference, shareability belongs to a Quote revision, and
   partial calculation stops reading as ready. Locally verified, fixture-browser only.
+- [`quotation-simplification-h0-s1-evidence-2026-09-22.md`](quotation-simplification-h0-s1-evidence-2026-09-22.md)
+  — Product Owner D-1..D-9 selections for the simplification programme, H0 handoff evidence, and
+  the locally verified Batch-first S1 shell.
 
 ## Current open work
 
@@ -79,9 +82,9 @@ without explicit Product Owner scope.
 - [`u2-location-applicability-decision-packet.md`](u2-location-applicability-decision-packet.md) —
   accepted decision packet for governed SKU Master Location applicability (Amendment 05).
 - [`quote-journey-decision-packet-2026-09-22.md`](quote-journey-decision-packet-2026-09-22.md) —
-  open Product Owner decisions D-1..D-9 for reshaping the frontend around the customer's quote.
-  Three of the questions it was asked were already settled canonically and are restated, not
-  re-asked. It does not block work.
+  original D-1..D-9 alternatives. The simplification programme's selections are now recorded in
+  `quotation-simplification-h0-s1-evidence-2026-09-22.md`; the packet remains rationale, not an
+  open implementation gate.
 
 ## Active S9 material — do not archive
 
