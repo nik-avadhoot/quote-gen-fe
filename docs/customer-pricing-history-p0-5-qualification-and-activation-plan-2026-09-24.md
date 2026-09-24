@@ -7,7 +7,7 @@ deployed, no Beta or production data changed. Authority: the Phase 0 plan
 (`customer-pricing-history-phase-0-implementation-plan-2026-09-23.md` §10 P0.5, §11).
 
 **Correction (same day):** the governed **Void negotiation round** journey was added before activation
-(successor migration `20260924153827_customer_pricing_history_p0_5_void_round.sql`, route
+(successor migration `20260924164850_customer_pricing_history_p0_5_void_round.sql`, route
 `POST /masters/pricing-events/<id>/void`, confirmation UI). Totals, activation order and decisions below
 include it.
 
@@ -196,7 +196,7 @@ Measured with element offsets (the pane's screenshots are scaled). Beta resoluti
 | `src/lib/customerPricingModel.js` | `validateVoidReason` (trimmed 3–500), `voidRoundBody` |
 | `src/lib/customerPricingFixture.js` | Voided round carries `void_reason`; its change entry records it |
 | `scripts/customer-pricing-fixtures.mjs` | P0.5 caps/hover checks (2) and void checks (24) |
-| `quote-gen-be/supabase/migrations/20260924153827_customer_pricing_history_p0_5_void_round.sql` | New successor migration: `void_reason` + check, status-only void guard trigger, `app_private.cph_void_round` (SECURITY DEFINER, empty `search_path`, caller + `read_party_master` + event-to-Customer ownership + CAS), public SECURITY INVOKER wrapper, EXECUTE for `authenticated` only, `tests.cph_p0_5_catalogue()` |
+| `quote-gen-be/supabase/migrations/20260924164850_customer_pricing_history_p0_5_void_round.sql` | New successor migration: `void_reason` + check, status-only void guard trigger, `app_private.cph_void_round` (SECURITY DEFINER, empty `search_path`, caller + `read_party_master` + event-to-Customer ownership + CAS), public SECURITY INVOKER wrapper, EXECUTE for `authenticated` only, `tests.cph_p0_5_catalogue()` |
 | `quote-gen-be/server.py` | `POST /masters/pricing-events/<id>/void`; `ROUND_VOIDED` error; event read returns `void_reason`; paste refuses BF overrides on a voided round |
 | `quote-gen-be/tests/test_customer_pricing_p0_5_void_routes.py` | New void route gate (26) |
 | `quote-gen-be/tests/cph_p0_5_qualification_rehearsal.sql` | New qualification rehearsal (lints, scenarios, authorization, concurrency, independence) |
@@ -264,11 +264,11 @@ Calculate/Send.
 Apply, in this order, each file's exact text through the MCP `apply_migration` route (the CLI route
 needs `supabase login`, a credential change):
 
-1. `20260923150000_customer_pricing_history_p0_1.sql`
-2. `20260923183000_customer_pricing_history_p0_2.sql`
-3. `20260924044157_customer_pricing_history_p0_4.sql`
-4. `20260924100057_customer_pricing_history_p0_4_1_sob_allocated_boxes.sql`
-5. `20260924153827_customer_pricing_history_p0_5_void_round.sql`
+1. `20260924164751_customer_pricing_history_p0_1.sql`
+2. `20260924164806_customer_pricing_history_p0_2.sql`
+3. `20260924164820_customer_pricing_history_p0_4.sql`
+4. `20260924164835_customer_pricing_history_p0_4_1_sob_allocated_boxes.sql`
+5. `20260924164850_customer_pricing_history_p0_5_void_round.sql`
 
 Do **not** apply `20260923170000_quote_revision_exact_recipient.sql` as part of this activation.
 
