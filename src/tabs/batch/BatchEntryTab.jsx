@@ -14,14 +14,17 @@ import ConstructionOverlay from "./ConstructionOverlay.jsx";
 import BatchGrid from "./BatchGrid.jsx";
 import BatchFirstShell from "./BatchFirstShell.jsx";
 import NewGovernedBatchPanel from "./NewGovernedBatchPanel.jsx";
+import BatchWorkspacePanel from "./BatchWorkspacePanel.jsx";
 import { useAppState } from "../../state/AppStateContext.js";
 import { FOCUS } from "../../lib/quoteJourney.js";
+import { isS3GovernedBrowserFixture } from "../../lib/s1BrowserFixture.js";
 import { SummaryRow } from "../../ui/dataDisplay.jsx";
 
 export default function BatchEntryTab(){
-  const { batchFocusMode:focusMode, batchProfile, durableBatch, newBatchDialogOpen,
+  const s3Fixture=isS3GovernedBrowserFixture();
+  const { batchFocusMode:focusMode, batchProfile, batchWorkspaceRequest, durableBatch, newBatchDialogOpen,
     setBatchFocusMode:setFocusMode,
-    setSidebarCollapsed, setU3PricingBasisDraft, showToast, sidebarCollapsed,
+    setDurableBatch, setSidebarCollapsed, setU3PricingBasisDraft, showToast, sidebarCollapsed,
     u3PricingBasisDraft } = useAppState();
   const sidebarBeforeFocus=useRef(sidebarCollapsed);
   const focusModeRef=useRef(false);
@@ -64,12 +67,21 @@ export default function BatchEntryTab(){
             onExpandedChange={toggleFocusMode}
             style={{border:0,borderRadius:0,borderBottom:"2px solid #D97B2E"}}/>
         </div>
-        <div className="batch-profile-full">
-          <BatchProfileBar pricingCard={pricingCard}/>
+        <div className={`batch-profile-full${durableBatch?.id ? " is-governed" : ""}`}>
+          {durableBatch?.id
+            ? <div className="batch-profile-pricing-card is-governed-primary">{pricingCard}</div>
+            : <BatchProfileBar pricingCard={pricingCard}/>}
         </div>
       </div>
-      <ConstructionOverlay/>
-      <BatchGrid focusMode={focusMode} onToggleFocusMode={toggleFocusMode}/>
+      {!durableBatch?.id && <>
+        <ConstructionOverlay/>
+        <BatchGrid focusMode={focusMode} onToggleFocusMode={toggleFocusMode}/>
+      </>}
+      {durableBatch?.id && <BatchWorkspacePanel
+        key={`${durableBatch.id}-${batchWorkspaceRequest?.requestId || "primary"}`}
+        embedded batchId={durableBatch.id} fixtureOnly={s3Fixture} fixtureWorkspace={durableBatch}
+        initialDeliveryAction={batchWorkspaceRequest}
+        showToast={showToast} onBatchChange={next => setDurableBatch(current => ({ ...current, ...next }))}/>}
       {newBatchDialogOpen && <NewGovernedBatchPanel/>}
     </div>
   );

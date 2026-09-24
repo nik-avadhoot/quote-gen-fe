@@ -109,6 +109,11 @@ export function useCostingBatchBridge(st){
         "OK = discard and open this row  |  Cancel = stay in the current review"
       ))return false;
     }
+    if(activeBatchRowId!==row.id){
+      const prior=batchRows.find(item=>item.id===activeBatchRowId);
+      if(prior?.durableRowId!=null)
+        setBatchRows(current=>current.filter(item=>item.id!==prior.id));
+    }
     // C4: builds the SESSION-ONLY review copy. The persisted START draft is not
     // touched. openReview captures START's workspace flags BEFORE the two
     // setters below overwrite them.

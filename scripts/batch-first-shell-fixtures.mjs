@@ -51,9 +51,9 @@ check(shell.includes('if (durableBatch?.id) return null;')
 
 check(topBar.includes('aria-label="Active Batch journey"')
   && topBar.includes("durableBatch?.batch_reference")
-  && topBar.includes("currentStage?.label") && topBar.includes("batchJourney.next.label")
-  && topBar.includes("batchJourney.counts.toFix"),
-  "S1-6 active Batch identity, stage, Next and blocker count share the existing header");
+  && topBar.includes("currentStage?.label") && topBar.includes("headerNext.label")
+  && topBar.includes("governedBatchReadiness.blockers.length"),
+  "S1-6 active Batch identity, stage, governed Next and governed blocker count share the existing header");
 check(topBarCss.includes("height: 48px") && topBarCss.includes("flex: 0 0 48px")
   && topBarCss.includes("white-space: nowrap") && !topBarCss.includes("flex-wrap"),
   "S1-7 the persistent journey stays one header line rather than adding a vertical band");
@@ -89,8 +89,9 @@ check(batchWorkspace.includes("const openInCosting = row =>")
   && batchWorkspace.includes("openDurableRowInCosting({")
   && batchWorkspace.includes("transition: loadBatchRowIntoCosting")
   && batchWorkspace.includes("commitLocalPreview(row, preview, existing, targetProfile)")
-  && batchWorkspace.includes("Open in Costing"),
-  "S2-1 a selected durable row opens Costing only through its existing local-preview review bridge");
+  && batchWorkspace.includes("Costing deep-dive")
+  && !batchWorkspace.includes("Copy to local preview"),
+  "S2-1 a selected durable row opens Costing through an internal session adapter, never a second visible grid");
 check(topBar.includes("reviewRow?.durableRowId")
   && topBar.includes('mode: "row-focus"')
   && batchWorkspace.includes('id={`batch-workspace-row-${row.id}`} tabIndex={-1}')

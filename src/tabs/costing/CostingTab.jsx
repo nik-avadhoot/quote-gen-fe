@@ -54,7 +54,7 @@ const Subtab=({label,active,onClick,title})=>(
 export default function CostingTab(){
   const {
     activeBatchRowId, batchRows, discardNewDraft,
-    constructionCatalogue, newDraftKeepClient, newDraftNewClient, profileDraft,
+    constructionCatalogue, durableBatch, newDraftKeepClient, newDraftNewClient, profileDraft,
     requestExitReview, sendCostingToBatch, setSpec, setTab, showToast, spec, startNewSku, _sendReady,
   } = useAppState();
   const inReview=!!activeBatchRowId;
@@ -128,7 +128,9 @@ export default function CostingTab(){
               color:newBatch?"#2E6094":C.amberD,
               border:`1px solid ${newBatch?"#6A9FD4":C.amber}44`,
               whiteSpace:"nowrap"}}>
-              {newBatch
+              {durableReview
+                ?`Governed Batch · ${(durableBatch?.batch_rows||[]).filter(row=>row.status==="active").length} product${(durableBatch?.batch_rows||[]).filter(row=>row.status==="active").length===1?"":"s"}`
+                :newBatch
                 ?`✦ Scratchpad · ${batchRows.length} row${batchRows.length!==1?"s":""} parked in Batch Entry`
                 :`🔗 Batch active · ${batchRows.length} row${batchRows.length!==1?"s":""}`}
             </span>)}

@@ -46,7 +46,7 @@ import { CONTEXT_ONLY_FIELDS, DRAFT_CORRUPT_KEY, DRAFT_KEY, DRAFT_VERSION,
   shouldAdvanceSkuValue } from "./costingDraftModel.js";
 
 export function useCostingDraft(st){
-  const { batchProfile, batchRows, setAutoFill, setSetAutoFill } = st;
+  const { batchProfile, batchRows, setAutoFill, setBatchRows, setSetAutoFill } = st;
 
   const[draft,setDraft]=useState(()=>{
     const raw=getItem(DRAFT_KEY);
@@ -168,6 +168,13 @@ export function useCostingDraft(st){
     setReviewCopy(freshReviewCopy(rowId,rowSpec,{setAutoFill}));
   const exitReview=()=>{
     if(reviewCopy)setSetAutoFill(reviewCopy.prev.setAutoFill);
+    const reviewedRow=reviewCopy
+      ?batchRows.find(row=>row.id===reviewCopy.rowId):null;
+    // A governed-origin Costing row is a session-only review adapter, never a
+    // second Batch row system. Remove it as the review closes; the durable row
+    // remains untouched unless the explicit governed apply already succeeded.
+    if(reviewedRow?.durableRowId!=null)
+      setBatchRows(rows=>rows.filter(row=>row.id!==reviewCopy.rowId));
     setReviewCopy(null);
   };
   // The single guarded exit used by every route out of a Costing deep-dive.

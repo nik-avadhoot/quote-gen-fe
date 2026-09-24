@@ -405,9 +405,6 @@ export default function BatchPricingBasisWorkspace({
         aria-label={batch ? "Open another Batch by reference" : "Open Batch"}>↗</button>
       {batch && <button type="button" onClick={reopen} disabled={status === "loading"}
         title="Reopen persisted selection" aria-label="Reopen persisted selection">↻</button>}
-      {batch && <button type="button" onClick={() => setWorkspaceOpen(true)}
-        title="View durable Batch identity, profile, people and groups"
-        aria-label="View Batch workspace">▤</button>}
       {batch && !fixtureOnly && <button type="button" onClick={closeDurableBatch}
         title="Close this governed Batch and release its edit lock"
         aria-label="Close Batch">✕</button>}
@@ -446,13 +443,6 @@ export default function BatchPricingBasisWorkspace({
               draft={draft} setDraft={setDraft} batchOpenControls={batchOpenControls}
               batchReferenceField={batchReferenceField} batchStatusNote={batchStatusNote} />}
       </section>
-      {workspaceVisible && batch && <BatchWorkspacePanel
-        key={`${batch.id}-${batchWorkspaceRequest?.requestId || "manual"}`} batchId={batch.id}
-        fixtureOnly={fixtureOnly} fixtureWorkspace={batch}
-        initialDeliveryAction={batchWorkspaceRequest}
-        showToast={showToast}
-        onBatchChange={next => updateBatch({ ...batch, ...next })}
-        onClose={closeWorkspace} />}
       {fixtureDialog}
     </>;
   }

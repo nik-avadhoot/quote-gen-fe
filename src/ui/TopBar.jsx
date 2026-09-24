@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AccountMenu from "../AccountMenu.jsx";
+import { governedReadinessCounts } from "../lib/governedReadiness.js";
 import { FOCUS, journeyStageDisclosure } from "../lib/quoteJourney.js";
 import { useAppState } from "../state/AppStateContext.js";
 import "./TopBar.css";
@@ -37,7 +38,7 @@ function focusControl(id) {
 export default function TopBar() {
   const {
     activeBatchRowId, batchFocusMode, batchJourney, batchProfile, batchRows,
-    durableBatch, handleBackup, handleRestore, handleRestoreFile,
+    durableBatch, governedBatchReadiness, handleBackup, handleRestore, handleRestoreFile,
     quoteHeaderContext, quoteView, requestExitReview, restoreRef,
     setBatchFocusMode, setBatchWorkspaceRequest, setQuoteView, setShowChangePassword,
     setShowProfile, setTab, tab,
@@ -57,6 +58,21 @@ export default function TopBar() {
     && (tab === "batch" || workingQuotes));
   const showQuoteContext = tab === "items"
     || (tab === "approvalinbox" && !!quoteHeaderContext?.revisionId);
+  const governedResultMatches = !!durableBatch?.id && governedBatchReadiness?.status === "ready"
+    && String(governedBatchReadiness.batchId) === String(durableBatch.id);
+  const governedCounts = governedReadinessCounts(governedResultMatches ? governedBatchReadiness : null);
+  const governedNext = governedResultMatches
+    ? governedBatchReadiness.canSend
+      ? { label: "Create the draft Quote candidate", surface: "batch", focus: FOCUS.send,
+        detail: "Every active durable row is current. Atomic Send creates the immutable draft candidate." }
+      : governedBatchReadiness.canCalculate
+        ? { label: "Calculate the batch", surface: "batch", focus: FOCUS.calculate,
+          detail: `${governedCounts.sendCurrent} of ${governedCounts.total} active durable rows are current for Send.` }
+        : { label: "Fix governed readiness", surface: "batch", focus: "batch-workspace-preparation-title",
+          detail: governedBatchReadiness.blockers[0]?.message || governedBatchReadiness.message }
+    : { label: "Recheck governed readiness", surface: "batch", focus: "batch-workspace-preparation-title",
+      detail: governedBatchReadiness?.message || "Governed readiness is not available yet." };
+  const headerNext = durableBatch?.id ? governedNext : batchJourney.next;
 
   useEffect(() => {
     if (!journeyOpen) return undefined;
@@ -101,7 +117,7 @@ export default function TopBar() {
   };
 
   const goToNext = () => {
-    const next = batchJourney?.next;
+    const next = headerNext;
     if (!next) return;
     setJourneyOpen(false);
     if (next.surface === "items") {
@@ -170,11 +186,16 @@ export default function TopBar() {
         </div>}
       </div>
       <button type="button" className="app-topbar__next" onClick={goToNext}
-        title={batchJourney.next.detail}>
-        <b>Next:</b> <span>{batchJourney.next.label}</span>
+        title={headerNext.detail}>
+        <b>Next:</b> <span>{headerNext.label}</span>
       </button>
-      {batchJourney.counts.rows > 0 && batchJourney.counts.toFix > 0
-        && <span className="app-topbar__blockers">{batchJourney.counts.toFix} to fix</span>}
+      {durableBatch?.id
+        ? governedResultMatches
+          ? governedCounts.total > 0 && governedBatchReadiness.blockers.length > 0
+            && <span className="app-topbar__blockers">{governedBatchReadiness.blockers.length} to fix</span>
+          : <span className="app-topbar__blockers">Readiness unavailable</span>
+        : batchJourney.counts.rows > 0 && batchJourney.counts.toFix > 0
+          && <span className="app-topbar__blockers">{batchJourney.counts.toFix} to fix</span>}
     </div>}
 
     {showQuoteContext && <div className="app-topbar__quote-context" aria-label="Quote view context">

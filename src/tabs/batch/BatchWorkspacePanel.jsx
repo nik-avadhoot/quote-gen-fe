@@ -2,19 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../../lib/apiClient.js";
 import { classifyResponse } from "../../lib/backendError.js";
 import { ownerStaleLockReclaimRequest } from "../../lib/batchLockModel.js";
-import { DURABLE_ROW_TYPES, durableBatchPreparation, durableRowSelection,
-  durableRowSpecificationEvidence, durableRowToLocalPreview, localPreviewState,
-  openDurableRowInCosting }
+import { DURABLE_ROW_TYPES, durableRowSelection, openDurableRowInCosting }
   from "../../lib/batchRowModel.js";
+import { emptyGovernedReadiness, governedBlockerTarget, governedReadinessCounts,
+  governedReadinessFromResponse, staleGovernedReadiness } from "../../lib/governedReadiness.js";
 import { applyFixturePricingGroupUpdate, deliveryGroupStatusBody,
   PRICING_GROUP_FREIGHT_MODES, PRICING_GROUP_PAYMENT_DAYS, pricingGroupCreateBody,
   pricingGroupCreateValidation, pricingGroupDraft, pricingGroupDraftValidation,
   pricingGroupStatusBody, pricingGroupUpdateBody } from "../../lib/pricingGroupModel.js";
 import { runMutation } from "../../lib/runMutation.js";
 import { batchSkuChoices } from "../../lib/batchSkuChoice.js";
-import { governedBatchActionState } from "../../lib/governedBatchActions.js";
+import { FOCUS } from "../../lib/quoteJourney.js";
 import { useAppState } from "../../state/AppStateContext.js";
-import { freshBatchProfileValues } from "../../state/costingDraftModel.js";
 
 const shown = value => value === null || value === undefined || value === "" ? "—" : String(value);
 
@@ -35,103 +34,53 @@ function ProfileValue({ label, value }) {
   </div>;
 }
 
-const FRESHNESS_LABELS = {
-  unknown: "Freshness unavailable · calculation evidence denied",
-  not_calculated: "No persisted governed calculation",
-  fresh: "Fresh · calculation and presentation match",
-  needs_send_only: "Calculation fresh · presentation changed",
-  calculation_stale: "Calculation stale · recalculate before Send",
-};
-
-function EffectiveInputEvidence({ evidence }) {
-  if (!evidence || evidence.status === "idle") return null;
-  if (evidence.status !== "ready") return <div className={`batch-workspace-effective-state is-${evidence.status}`}>
-    {evidence.message}
-  </div>;
-  const resolved = evidence.resolution?.effective_inputs?.resolved || {};
-  const binding = evidence.resolution?.binding || {};
-  return <div className="batch-workspace-effective">
-    <div className={`batch-workspace-freshness is-${evidence.freshness}`}>
-      <strong>{FRESHNESS_LABELS[evidence.freshness] || evidence.freshness}</strong>
-      <small>Current calculation fingerprint {binding.calculation_fingerprint || "unavailable"}</small>
-      <small>Current presentation fingerprint {binding.presentation_fingerprint || "unavailable"}</small>
-    </div>
-    <div className="batch-workspace-effective-grid">
-      {["waste", "conv", "margin", "freight", "interest"].map(key => {
-        const item = resolved[key] || {};
-        return <div key={key}><span>{key}</span>
-          <strong>{item.value == null ? "Unresolved" : shown(item.value)}</strong>
-          <small>{item.source ? `source · ${item.source}` : "no authority source"}</small></div>;
-      })}
-    </div>
-    <p>Governed resolution preview only. It does not persist a calculation. Supplier-credit terms are not Batch Calculate inputs.</p>
-  </div>;
-}
-
-const PREPARATION_LABELS = {
-  incomplete: "Preparation incomplete",
-  source_changed: "Governed row changed · refresh local preview",
-  preview_pending: "Local preview pending",
-  specification_review: "Specification review required",
-  local_review_ready: "Local preview reviewed",
-};
-
-function BatchPreparationSummary({ batch, localRows, localResults, effectiveByRow, busy, fixtureOnly,
+function GovernedReadinessSummary({ readiness, busy, fixtureOnly, onBlocker,
   onRefreshReadiness, onCalculateAll, onSend }) {
-  const preparation = durableBatchPreparation(batch, localRows, localResults, effectiveByRow);
-  const actions = governedBatchActionState(batch, preparation.structuralBlockers, effectiveByRow);
+  const counts = governedReadinessCounts(readiness);
+  const ready = readiness.status === "ready";
+  const label = ready
+    ? readiness.canSend ? "Calculate and Send available"
+      : readiness.canCalculate ? "Calculate available · Send blocked" : "Calculate and Send blocked"
+    : readiness.status === "loading" ? "Checking every active row…"
+      : readiness.status === "stale" ? "Governed readiness stale" : "Readiness unavailable";
   return <section className="batch-workspace-preparation" aria-labelledby="batch-workspace-preparation-title">
     <div className="batch-workspace-section-title">
       <div><h3 id="batch-workspace-preparation-title">Preparation and readiness</h3>
-        <p>Durable structure, local preview and governed evidence are reported separately.</p></div>
-      <span className={`batch-workspace-preparation-state is-${preparation.status}`}>
-        {PREPARATION_LABELS[preparation.status]}
+        <p>One backend result evaluates every active durable row. No local preview decides these actions.</p></div>
+      <span className={`batch-workspace-preparation-state is-${ready && readiness.canSend ? "local_review_ready" : "incomplete"}`}>
+        {label}
       </span>
     </div>
     <div className="batch-workspace-preparation-grid">
-      <div><span>Durable rows</span><strong>{preparation.rowCount}</strong><small>active governed identities</small></div>
-      <div><span>Delivery routes</span><strong>{preparation.completeRouteCount}/{preparation.routeCount}</strong><small>complete Bill-to + Ship-to</small></div>
-      <div><span>Local previews</span><strong>{preparation.previewed}/{preparation.rowCount}</strong><small>not persisted calculations</small></div>
-      <div><span>Governed inputs</span><strong>{preparation.resolved}/{preparation.rowCount}</strong><small>resolved on demand</small></div>
-      <div><span>Specification review</span><strong>{preparation.specificationReview}</strong><small>BS/GSM checks needing review</small></div>
-      <div><span>Send-current rows</span><strong>{actions.freshCount + actions.sendOnlyCount}/{actions.rowCount}</strong>
-        <small>{actions.staleCount} stale · {actions.notCalculatedCount} not calculated · {actions.unverifiedCount} unchecked</small></div>
+      <div><span>Active governed rows</span><strong>{counts.total}</strong><small>all evaluated together</small></div>
+      <div><span>Inputs ready</span><strong>{counts.inputReady}/{counts.total}</strong><small>governed calculation gatherer</small></div>
+      <div><span>Send-current rows</span><strong>{counts.sendCurrent}/{counts.total}</strong>
+        <small>{counts.stale} stale · {counts.notCalculated} not calculated · {counts.unknown} unchecked</small></div>
+      <div><span>Calculate</span><strong>{ready && readiness.canCalculate ? "Available" : "Blocked"}</strong><small>all rows must pass</small></div>
+      <div><span>Send</span><strong>{ready && readiness.canSend ? "Available" : "Blocked"}</strong><small>all rows must be current</small></div>
+      <div><span>Checked</span><strong>{readiness.evaluatedAt ? new Date(readiness.evaluatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</strong><small>{readiness.message}</small></div>
     </div>
-    {preparation.structuralBlockers.length > 0 && <div className="batch-workspace-preparation-blockers">
-      {preparation.structuralBlockers.map(item => <span key={item}>{item}</span>)}
-    </div>}
-    {actions.sendBlockers.length > 0 && <div className="batch-workspace-send-blockers">
-      {actions.sendBlockers.map(item => <span key={item}>{item}</span>)}
+    {readiness.blockers.length > 0 && <div className="batch-workspace-readiness-blockers">
+      {readiness.blockers.map((item, index) => <button type="button"
+        key={`${item.scope}-${item.row_id || item.pricing_group_id || "batch"}-${item.code}-${index}`}
+        onClick={() => onBlocker(item)}>
+        <strong>{item.scope === "row" ? `Row #${item.row_id}`
+          : item.scope === "group" ? `Pricing Group #${item.pricing_group_id}` : "Batch"}</strong>
+        <span>{item.message}</span><small>Open {item.field || "affected field"} →</small>
+      </button>)}
     </div>}
     <div className="batch-workspace-governed-actions">
-      <button type="button" onClick={onRefreshReadiness} disabled={busy || fixtureOnly || !actions.rowCount}>
-        Check governed readiness
+      <button type="button" onClick={() => onRefreshReadiness({ announce: true })} disabled={busy || fixtureOnly}>
+        Recheck governed readiness
       </button>
-      <button type="button" className="is-primary" onClick={onCalculateAll}
-        disabled={busy || fixtureOnly || !actions.canCalculate}>Calculate all active rows</button>
-      <button type="button" className="is-send" onClick={onSend}
-        disabled={busy || fixtureOnly || !actions.canSend}>Atomic Send · create draft candidate</button>
+      <button type="button" id={FOCUS.calculate} className="is-primary" onClick={onCalculateAll}
+        disabled={busy || fixtureOnly || !ready || !readiness.canCalculate}>Calculate all active rows</button>
+      <button type="button" id={FOCUS.send} className="is-send" onClick={onSend}
+        disabled={busy || fixtureOnly || !ready || !readiness.canSend}>Atomic Send · create draft candidate</button>
     </div>
     <p className="batch-workspace-preparation-boundary">Calculate runs the trusted executor and the database writer as this caller.
       Atomic Send creates one immutable, unnumbered draft candidate; it does not submit or issue it to the customer.</p>
   </section>;
-}
-
-function RowSpecificationEvidence({ evidence }) {
-  const { targets, gaps, status } = evidence;
-  return <div className={`batch-workspace-spec-evidence is-${status}`}>
-    <div><strong>{status === "not_evaluated" ? "Specification not evaluated"
-      : status === "review" ? "Specification review required" : "Current BS/GSM preview is within tolerance"}</strong>
-      <small>{status === "not_evaluated"
-        ? "Run the local preview to compare calculation-supported targets."
-        : gaps.length ? gaps.map(item => `${item.field}: ${item.pct > 0 ? "+" : ""}${item.pct}%`).join(" · ")
-          : "No BS/GSM variance above the current 5% review threshold."}</small></div>
-    <div className="batch-workspace-spec-targets">
-      <span>BS <b>{shown(targets.bs)}</b></span><span>GSM <b>{shown(targets.gsm)}</b></span>
-      <span>BCT <b>{shown(targets.bct)}</b></span><span>ECT <b>{shown(targets.ect)}</b></span>
-    </div>
-    <p>BCT and ECT are preserved specification references; the current preview engine does not evaluate their compliance.</p>
-  </div>;
 }
 
 function Location({ role, locationId, location }) {
@@ -357,7 +306,7 @@ function BatchRowEditor({ row, groups, skus, constructionOptions, batch, loading
   const complete = skuId && versionId && groupId && rowType;
   const identity = value => fixtureOnly ? value : Number(value);
 
-  return <form className="batch-workspace-row-editor" onSubmit={event => {
+  return <form id={`batch-workspace-row-editor-${row?.id || "new"}`} className="batch-workspace-row-editor" onSubmit={event => {
     event.preventDefault();
     if (!complete) return;
     onSave({
@@ -383,7 +332,7 @@ function BatchRowEditor({ row, groups, skus, constructionOptions, batch, loading
       <small>Caller-visible recent use is shown first. Select an exact SKU and Version.</small>
     </label>}
     <label>Customer SKU
-      <select value={skuId} disabled={disabled || loading || Boolean(row)} onChange={event => {
+      <select id={`batch-row-field-${row?.id || "new"}-sku`} value={skuId} disabled={disabled || loading || Boolean(row)} onChange={event => {
         setSkuId(event.target.value);
         setSkuQuery("");
         const nextSku = skus.find(item => String(item.id) === event.target.value);
@@ -430,7 +379,7 @@ function BatchRowEditor({ row, groups, skus, constructionOptions, batch, loading
       </div>}
     </div>}
     <label>SKU Version · Construction
-      <select value={versionId} disabled={disabled || loading} onChange={event => setVersionId(event.target.value)}>
+      <select id={`batch-row-field-${row?.id || "new"}-construction`} value={versionId} disabled={disabled || loading} onChange={event => setVersionId(event.target.value)}>
         <option value="">Select SKU version</option>
         {/* Amendment 04 D-01: an unapproved version is quotable, as a Prospect is - labelled, never hidden. */}
         {versions.map(version => <option key={version.id} value={version.id}>
@@ -439,7 +388,7 @@ function BatchRowEditor({ row, groups, skus, constructionOptions, batch, loading
       </select>
     </label>
     <label>Pricing Group
-      <select value={groupId} disabled={disabled} onChange={event => setGroupId(event.target.value)}>
+      <select id={`batch-row-field-${row?.id || "new"}-pricing_group`} value={groupId} disabled={disabled} onChange={event => setGroupId(event.target.value)}>
         {activeGroups.map(group => <option key={group.id} value={group.id}>
           {group.label || "Unnamed"} · #{group.id}
         </option>)}
@@ -573,9 +522,10 @@ function MembershipCreator({ setItem, rows, disabled, initialRowId, onCancel, on
 }
 
 export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixtureWorkspace,
-  initialDeliveryAction, showToast, onBatchChange, onClose }) {
-  const { batchResults, batchRows: localRows, invalidateBatchRow, loadBatchRowIntoCosting,
-    setBatchProfile, setBatchRows: setLocalRows, setBatchWorkspaceRequest, setQuoteView,
+  initialDeliveryAction, showToast, onBatchChange, onClose, embedded = false }) {
+  const { batchRows: localRows, invalidateBatchRow, loadBatchRowIntoCosting,
+    governedBatchReadiness: readiness, setBatchProfile, setBatchRows: setLocalRows,
+    setBatchWorkspaceRequest, setGovernedBatchReadiness: setReadiness, setQuoteView,
     setQuoteWorkspaceRequest, setTab } = useAppState();
   const [state, setState] = useState(() => fixtureOnly
     ? { status: "ready", batch: fixtureWorkspace, message: "Fixture-only workspace illustration." }
@@ -626,10 +576,10 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
           construction: version.construction }))) }
     : { status: requestedRowEditor ? "loading" : "idle", skus: [], constructionOptions: [] });
   const [busy, setBusy] = useState(false);
-  const [effectiveByRow, setEffectiveByRow] = useState({});
   const [sentRevisionId, setSentRevisionId] = useState(null);
 
-  const acceptBatch = (next, message) => {
+  const acceptBatch = (next, message, { readinessChanged = true } = {}) => {
+    if (readinessChanged) setReadiness(current => staleGovernedReadiness(current));
     setState({ status: "ready", batch: next, message });
     onBatchChange?.(next);
   };
@@ -675,6 +625,49 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
   const batchSets = batch?.batch_sets || [];
   const lock = batch?.edit_lock;
   const reclaimRequest = ownerStaleLockReclaimRequest(batch);
+  const readinessRequest = useRef(0);
+
+  const refreshGovernedReadiness = async ({ announce = false } = {}) => {
+    if (!batch?.id) return null;
+    if (fixtureOnly) return readiness;
+    const requestId = ++readinessRequest.current;
+    setReadiness(current => ({ ...current, status: "loading", canCalculate: false,
+      canSend: false, message: "Checking every active durable row…" }));
+    try {
+      const response = await apiFetch(`/batches/${batch.id}/readiness`);
+      const data = await response.json().catch(() => ({}));
+      if (requestId !== readinessRequest.current) return null;
+      const outcome = classifyResponse({ ok: response.ok, status: response.status, data });
+      if (outcome.kind === "ok") {
+        const next = governedReadinessFromResponse(data);
+        setReadiness(next);
+        if (announce) showToast?.("Governed readiness checked for every active row.", "success", 5000);
+        return next;
+      }
+      const next = { ...emptyGovernedReadiness(),
+        status: outcome.kind === "access-denied" ? "denied" : "error",
+        message: outcome.message || "Governed readiness is unavailable. Calculate and Send remain blocked." };
+      setReadiness(next);
+      if (announce) showToast?.(`⚠️ ${next.message}`, "error", 8500);
+      return null;
+    } catch {
+      if (requestId !== readinessRequest.current) return null;
+      const next = { ...emptyGovernedReadiness(), status: "error",
+        message: "The governed readiness service could not be reached. Calculate and Send remain blocked." };
+      setReadiness(next);
+      if (announce) showToast?.(`⚠️ ${next.message}`, "error", 8500);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!batch?.id || fixtureOnly) return undefined;
+    const timer = window.setTimeout(() => refreshGovernedReadiness(), 0);
+    return () => { window.clearTimeout(timer); readinessRequest.current += 1; };
+    // A governed edit advances content_version. One read then replaces the
+    // visibly-stale state; no callback or response object can create a loop.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batch?.id, batch?.content_version, fixtureOnly]);
 
   const loadRowCatalogue = async () => {
     if (fixtureOnly || rowCatalogue.status === "ready" || rowCatalogue.status === "loading") return;
@@ -701,72 +694,21 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     await loadRowCatalogue();
   };
 
-  const loadEffectiveInputs = async row => {
-    setEffectiveByRow(current => ({ ...current, [row.id]: {
-      status: "loading", message: "Resolving governed effective inputs…",
-    } }));
-    if (fixtureOnly) {
-      setEffectiveByRow(current => ({ ...current, [row.id]: row.fixture_effective || {
-        status: "not-ready", message: "FIXTURE ONLY · governed resolution is unavailable for this row.",
-      } }));
-      return;
-    }
-    try {
-      const response = await apiFetch(`/batches/${batch.id}/rows/${row.id}/effective-inputs`);
-      const data = await response.json().catch(() => ({}));
-      const outcome = classifyResponse({ ok: response.ok, status: response.status, data });
-      if (outcome.kind === "ok") {
-        const evidence = {
-          status: "ready", resolution: data.resolution, calculation: data.calculation,
-          freshness: data.freshness,
-        };
-        setEffectiveByRow(current => ({ ...current, [row.id]: evidence }));
-        return evidence;
-      } else {
-        setEffectiveByRow(current => ({ ...current, [row.id]: {
-          status: response.status === 422 ? "not-ready"
-            : outcome.kind === "access-denied" ? "denied" : "error",
-          message: outcome.message || data.error || "Governed effective inputs are unavailable.",
-        } }));
-        return null;
-      }
-    } catch {
-      setEffectiveByRow(current => ({ ...current, [row.id]: {
-        status: "error", message: "Effective-input service could not be reached. No values were inferred.",
-      } }));
-      return null;
-    }
-  };
-
   const calculateRow = async (row, { announce = true } = {}) => {
+    setReadiness(current => staleGovernedReadiness(current,
+      `Calculating row #${row.id}. Readiness will be checked again when it finishes…`));
     const data = await runMutation(`/batches/${batch.id}/rows/${row.id}/calculate`, {}, {
       showToast, successMessage: announce ? `Governed calculation persisted for row #${row.id}` : undefined,
     });
     if (!data?.batch_calculation_id) return false;
-    await loadEffectiveInputs(row);
     return true;
   };
 
   const calculateOne = async row => {
     setBusy(true);
     await calculateRow(row);
+    await refreshGovernedReadiness();
     setBusy(false);
-  };
-
-  const refreshGovernedReadiness = async () => {
-    setBusy(true);
-    const activeRows = durableRows.filter(row => row.status === "active");
-    let checked = 0;
-    for (const row of activeRows) {
-      if (await loadEffectiveInputs(row)) checked += 1;
-    }
-    setBusy(false);
-    if (checked === activeRows.length) {
-      showToast?.("Governed calculation freshness checked for every active row.", "success", 5000);
-    } else {
-      showToast?.(`Governed readiness could be checked for ${checked}/${activeRows.length} active rows. Unresolved rows remain blocked.`,
-        "error", 8500);
-    }
   };
 
   const calculateAll = async () => {
@@ -777,6 +719,7 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
       if (!await calculateRow(row, { announce: false })) break;
       completed += 1;
     }
+    await refreshGovernedReadiness();
     setBusy(false);
     if (completed === activeRows.length) {
       showToast?.(`Governed calculations persisted for ${completed} active row${completed === 1 ? "" : "s"}.`,
@@ -789,6 +732,8 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
 
   const atomicSend = async () => {
     setBusy(true);
+    setReadiness(current => staleGovernedReadiness(current,
+      "Creating the immutable draft candidate. Readiness will be refreshed from the governed Batch…"));
     const data = await runMutation(`/batches/${batch.id}/send`, {
       expected_content_version: batch.content_version,
     }, { showToast, successMessage: "Immutable draft Quote candidate created" });
@@ -852,6 +797,43 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
       setCatalogue({ status: "error", locations: [], parties: [],
         message: "Customer Locations could not be loaded. No fixture was substituted." });
     }
+  };
+
+  const focusAfterOpen = (targetId, fieldId = null) => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const target = document.getElementById(fieldId || targetId)
+        || document.getElementById(targetId);
+      target?.scrollIntoView({ block: "center" });
+      target?.focus?.({ preventScroll: true });
+    }));
+  };
+
+  const openReadinessBlocker = async blocker => {
+    const target = governedBlockerTarget(blocker);
+    if (target.kind === "row") {
+      const row = durableRows.find(item => String(item.id) === String(target.rowId));
+      if (row && target.opensEditor) {
+        await openRowEditor(row);
+        const field = target.field === "dimensions" ? "construction" : target.field;
+        focusAfterOpen(target.targetId, `batch-row-field-${row.id}-${field}`);
+        return;
+      }
+    }
+    if (target.kind === "group") {
+      const group = groups.find(item => String(item.id) === String(target.pricingGroupId));
+      if (group && target.opensDelivery) {
+        await openEditor(group);
+        focusAfterOpen(target.targetId);
+        return;
+      }
+      if (group && target.opensGroupEditor) setGroupEditing(group.id);
+    }
+    if (target.opensNewRow) {
+      await openRowEditor(null);
+      focusAfterOpen(target.targetId, "batch-workspace-row-editor-new");
+      return;
+    }
+    focusAfterOpen(target.targetId);
   };
 
   useEffect(() => {
@@ -1027,7 +1009,6 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     }
     setBusy(false);
     if (data?.batch) {
-      setEffectiveByRow({});
       setGroupEditing(null);
     }
   };
@@ -1065,7 +1046,6 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     }
     setBusy(false);
     if (data?.batch) {
-      setEffectiveByRow({});
       setGroupEditing(null);
       setEditing(null);
     }
@@ -1088,7 +1068,6 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     }
     setBusy(false);
     if (data?.batch) {
-      setEffectiveByRow({});
       setEditing(null);
     }
   };
@@ -1167,7 +1146,6 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     }
     setBusy(false);
     if (saved) {
-      setEffectiveByRow({});
       if (row) setRowEditing(null);
       else {
         setRowCreateSerial(serial => serial + 1);
@@ -1246,7 +1224,6 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     }
     setBusy(false);
     if (data?.batch) {
-      setEffectiveByRow({});
       setRowEditing(null);
       setPendingRowStatus(null);
     }
@@ -1271,7 +1248,6 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     }
     setBusy(false);
     if (data?.batch) {
-      setEffectiveByRow({});
       setProfileEditing(false);
     }
   };
@@ -1295,7 +1271,6 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     }
     setBusy(false);
     if (data?.batch) {
-      setEffectiveByRow({});
       setSetEditor(null);
     }
   };
@@ -1320,7 +1295,6 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     }
     setBusy(false);
     if (data?.batch) {
-      setEffectiveByRow({});
       setSetEditor(null);
     }
   };
@@ -1341,7 +1315,6 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
       if (data?.batch) acceptBatch(data.batch, "Governed membership and database-derived SET state were read back.");
     }
     setBusy(false);
-    setEffectiveByRow({});
   };
 
   // The Profile committed with a preview is the governed Batch's own
@@ -1353,15 +1326,9 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
       : [...current, preview]);
     if (existing) invalidateBatchRow(existing.id);
     setBatchProfile(targetProfile);
-    showToast?.("Copied exact governed row inputs to the local preview grid. No calculation was persisted.",
+    showToast?.("Opened the exact governed row in a session-only Costing deep-dive. No calculation was persisted.",
       "success", 6500);
     return preview;
-  };
-
-  const copyToLocalPreview = row => {
-    const existing = localRows.find(item => String(item.durableRowId) === String(row.id));
-    const preview = durableRowToLocalPreview(row, existing?.id || `local-durable-${row.id}`, batch);
-    return commitLocalPreview(row, preview, existing, freshBatchProfileValues(batch));
   };
 
   const openInCosting = row => {
@@ -1383,18 +1350,19 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     });
   };
 
-  return <div className="batch-workspace-panel-scrim" role="presentation">
-    <aside className="batch-workspace-panel" role="dialog" aria-modal="true"
+  return <div className={embedded ? "batch-workspace-primary" : "batch-workspace-panel-scrim"} role="presentation">
+    <aside className={`batch-workspace-panel${embedded ? " is-embedded" : ""}`}
+      role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : "true"}
       aria-labelledby="batch-workspace-panel-title">
       <header>
         <div>
-          <span className="batch-workspace-panel-kicker">U4 · DURABLE BATCH</span>
-          <h2 id="batch-workspace-panel-title">Batch workspace</h2>
+          <span className="batch-workspace-panel-kicker">GOVERNED BATCH</span>
+          <h2 id="batch-workspace-panel-title">Products and readiness</h2>
           <p>{fixtureOnly
             ? "FIXTURE ONLY · isolated presentation · no authoritative read or write"
             : "Authenticated caller-visible workspace · Delivery Group writes remain governed by the active Batch lock"}</p>
         </div>
-        <button type="button" onClick={onClose} aria-label="Close Batch workspace">×</button>
+        {!embedded && <button type="button" onClick={onClose} aria-label="Close Batch workspace">×</button>}
       </header>
 
       {state.status !== "ready" && <div className={`batch-workspace-panel-state is-${state.status}`}
@@ -1408,8 +1376,8 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
               {" "}Hidden values have not been inferred.</>}
         </div>}
 
-        <section aria-labelledby="batch-workspace-identity-title">
-          <h3 id="batch-workspace-identity-title">Durable identity</h3>
+        <section className="batch-workspace-identity-section" aria-labelledby="batch-workspace-identity-title">
+          <h3 id="batch-workspace-identity-title" tabIndex={-1}>Durable identity</h3>
           <div className="batch-workspace-identity-grid">
             <Identity label="Batch reference" value={batch.batch_reference} detail={`Batch #${batch.id}`} />
             <Identity label="Customer Family" value={batch.family?.name || `#${batch.family_id}`}
@@ -1441,14 +1409,14 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
           </div>
         </section>
 
-        <div className="batch-workspace-quote-link">
+        <div className="batch-workspace-quote-link batch-workspace-advanced-section">
           <div><strong>Linked immutable Quote evidence</strong>
             <span>Resolve only the caller-visible Quote family attached to exact Batch identity #{batch.id}. A missing link remains an explicit empty result.</span></div>
           <button type="button" onClick={openLinkedQuote} disabled={fixtureOnly}>Open Quote evidence</button>
         </div>
 
-        <section aria-labelledby="batch-workspace-access-title">
-          <h3 id="batch-workspace-access-title">People and edit lock</h3>
+        <section className="batch-workspace-access-section" aria-labelledby="batch-workspace-access-title">
+          <h3 id="batch-workspace-access-title" tabIndex={-1}>People and edit lock</h3>
           <div className="batch-workspace-access-row">
             <div><span>Active lock</span><strong>{lock
               ? `${lock.holder?.display_name || `User #${lock.holder_user_id}`}` : "No active lock"}</strong>
@@ -1467,8 +1435,8 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
           </div>}
         </section>
 
-        <BatchPreparationSummary batch={batch} localRows={localRows} localResults={batchResults}
-          effectiveByRow={effectiveByRow} busy={busy} fixtureOnly={fixtureOnly}
+        <GovernedReadinessSummary readiness={readiness} busy={busy} fixtureOnly={fixtureOnly}
+          onBlocker={openReadinessBlocker}
           onRefreshReadiness={refreshGovernedReadiness} onCalculateAll={calculateAll}
           onSend={atomicSend} />
         {sentRevisionId != null && <div className="batch-workspace-send-result">
@@ -1477,7 +1445,7 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
           <button type="button" onClick={openSentQuote}>Open immutable draft evidence</button>
         </div>}
 
-        <section aria-labelledby="batch-workspace-profile-title">
+        <section className="batch-workspace-profile-section" aria-labelledby="batch-workspace-profile-title">
           <div className="batch-workspace-section-title">
             <h3 id="batch-workspace-profile-title">Current Batch Profile · version {profile?.version_no ?? "unavailable"}</h3>
             {!profileEditing && <button type="button" onClick={() => setProfileEditing(true)}
@@ -1496,10 +1464,10 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
             onSave={saveProfile} />}
         </section>
 
-        <section aria-labelledby="batch-workspace-rows-title">
-          <h3 id="batch-workspace-rows-title">Durable Batch rows</h3>
+        <section className="batch-workspace-products" aria-labelledby="batch-workspace-rows-title">
+          <h3 id="batch-workspace-rows-title" tabIndex={-1}>Products</h3>
           <p className="batch-workspace-group-explainer">
-            A row pins one Customer SKU Version and its authoritative Construction Version to one Pricing Group. The local preview is a separate, non-authoritative working copy.
+            These durable governed rows are the only products in this customer Batch. Costing opens one row as a session-only deep-dive and returns here.
           </p>
           {!batch.caller_holds_lock && <div className="batch-workspace-warning">
             Adding or revising a durable row requires the active governed Batch lock.
@@ -1509,12 +1477,10 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
             {rowCatalogue.message} Hidden SKU or Construction identities have not been invented.
           </div>}
           {!durableRows.length && <div className="batch-workspace-empty">
-            No caller-visible durable rows. This is distinct from the local preview grid.
+            No products yet. Use Add product below to select an established SKU or create a proposed SKU.
           </div>}
           <div className="batch-workspace-rows">
             {durableRows.map(row => {
-              const preview = localPreviewState(row, localRows, batchResults);
-              const specification = durableRowSpecificationEvidence(row, localRows, batchResults);
               const assignedGroup = groups.find(group => String(group.id) === String(row.pricing_group_id));
               return <article id={`batch-workspace-row-${row.id}`} tabIndex={-1}
                 className="batch-workspace-row" key={row.id}>
@@ -1568,18 +1534,10 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
                   Construction detail is partial for this caller; its exact stored Version ID remains visible.
                 </div>}
                 <div className="batch-workspace-row-actions">
-                  <span className={`is-${preview.state}`}>{preview.label}</span>
-                  <button type="button" onClick={() => copyToLocalPreview(row)} disabled={row.status !== "active"}>
-                    {preview.state === "not-copied" ? "Copy to local preview" : "Refresh local preview"}
-                  </button>
                   <button type="button" className="is-primary" onClick={() => openInCosting(row)}
                     disabled={row.status !== "active"}
                     title="Open a session-only Costing review of this exact durable row. Governed state is unchanged.">
-                    Open in Costing
-                  </button>
-                  <button type="button" onClick={() => loadEffectiveInputs(row)}
-                    disabled={row.status !== "active" || effectiveByRow[row.id]?.status === "loading"}>
-                    {effectiveByRow[row.id]?.status === "loading" ? "Resolving…" : "Resolve values & freshness"}
+                    Costing deep-dive
                   </button>
                   <button type="button" className="is-calculate" onClick={() => calculateOne(row)}
                     disabled={fixtureOnly || row.status !== "active" || batch.status !== "working"
@@ -1592,8 +1550,6 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
                     {row.status === "active" ? "Remove row" : "Restore row"}
                   </button>
                 </div>
-                <EffectiveInputEvidence evidence={effectiveByRow[row.id]} />
-                <RowSpecificationEvidence evidence={specification} />
                 {rowEditing === row.id && <BatchRowEditor key={`${row.id}-${row.content_version}`}
                   row={row} groups={groups} skus={rowCatalogue.skus}
                   constructionOptions={rowCatalogue.constructionOptions} batch={batch}
@@ -1613,13 +1569,13 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
             disabled={!batch.caller_holds_lock || busy || ["denied", "error"].includes(rowCatalogue.status)}
             fixtureOnly={fixtureOnly} onCancel={() => setRowEditing(null)}
             onSave={body => saveRow(null, body)} onProposeSku={proposeSku} />}
-          {rowEditing !== "new" && <button type="button" className="batch-workspace-add-row"
+          {rowEditing !== "new" && <button type="button" id={FOCUS.addProduct} className="batch-workspace-add-row"
             onClick={() => openRowEditor(null)} disabled={!batch.caller_holds_lock || busy || !groups.length}>
-            + Add durable row
+            + Add product
           </button>}
         </section>
 
-        <section aria-labelledby="batch-workspace-sets-title">
+        <section className="batch-workspace-sets-section" aria-labelledby="batch-workspace-sets-title">
           <h3 id="batch-workspace-sets-title">SET membership</h3>
           <p className="batch-workspace-group-explainer">
             A SET has one Box parent and one or more component rows. Active/dissolved state and component count are database-derived.
@@ -1669,8 +1625,8 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
                 onClick={() => setSetEditor({ kind: "new" })}>+ Start SET</button>}
         </section>
 
-        <section aria-labelledby="batch-workspace-groups-title">
-          <h3 id="batch-workspace-groups-title">Pricing and Delivery Groups</h3>
+        <section className="batch-workspace-groups-section" aria-labelledby="batch-workspace-groups-title">
+          <h3 id="batch-workspace-groups-title" tabIndex={-1}>Pricing and Delivery Groups</h3>
           <p className="batch-workspace-group-explainer">
             Delivery routes inside one Pricing Group share its price. Add another Pricing Group only when the price must differ.
           </p>
@@ -1681,7 +1637,7 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
             {catalogue.message} Delivery route editing is unavailable; hidden Locations have not been invented.
           </div>}
           {!groups.length && <div className="batch-workspace-empty">No caller-visible Pricing Groups.</div>}
-          {groups.map(group => <article id={`batch-workspace-pricing-group-${group.id}`}
+          {groups.map(group => <article id={`batch-workspace-pricing-group-${group.id}`} tabIndex={-1}
             className={`batch-workspace-group is-${group.status}`} key={group.id}>
             <div className="batch-workspace-group-head">
               <div><strong>{group.label || "Unnamed Pricing Group"}</strong>
