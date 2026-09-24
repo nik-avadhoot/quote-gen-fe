@@ -70,11 +70,17 @@ import {
 } from "../ui/screenStandards.js";
 import { panelLayout } from "../lib/panelSplit.js";
 import CapabilityGate from "../ui/CapabilityGate.jsx";
+import CustomerPricingHistory from "./customer-pricing/CustomerPricingHistory.jsx";
+import { isFeatureEnabled } from "../lib/featureFlags.js";
 import { Btn, Inp, Sel } from "../ui/primitives.jsx";
 import { inputSt } from "../ui/styles.js";
 import { C, T, mono, sans } from "../theme.js";
 
 const MANAGE = "manage_customer_master";
+// Customer Pricing History (Phase 0). The flag mounts the entry point only; the
+// server and RLS decide access (read_party_master). The workspace lives in its
+// own module so this screen never becomes the pricing grid.
+const PRICING_HISTORY = isFeatureEnabled("customer_pricing_history");
 const CREATE_CAPS = [MANAGE, "make_quote"]; // mirrors the DB's own OR condition (propose / prospect)
 
 const overlaySt = { position: "fixed", inset: 0, background: "rgba(28,43,58,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000 };
@@ -1005,7 +1011,7 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
               <tr>
                 <th scope="col" style={{ ...denseHead, ...frozenCell(false, true) }}
                   title="Current Customers / Prospects of this Family">Customer · {current.length} current</th>
-                {["Name", "Status", "Locations", "References", "Actions"].map(h =>
+                {["Name", "Status", "Locations", "References", ...(PRICING_HISTORY ? ["Pricing"] : []), "Actions"].map(h =>
                   <th key={h} scope="col" style={denseHead}>{h}</th>)}
               </tr>
             </thead>
@@ -1019,7 +1025,8 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
           // each has its own toggle; opening one never reveals the other.
           const locationsOpen = expandedParty?.id === party.id && expandedParty.section === "locations";
           const referencesOpen = expandedParty?.id === party.id && expandedParty.section === "references";
-          const open = locationsOpen || referencesOpen;
+          const pricingOpen = PRICING_HISTORY && expandedParty?.id === party.id && expandedParty.section === "pricing";
+          const open = locationsOpen || referencesOpen || pricingOpen;
           return (
             <Fragment key={m.id}>
               <tr style={{ height: 26, background: open ? "#FEF3E8" : C.white }}>
@@ -1047,6 +1054,14 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
                     {partyRefs.length} {partyRefs.length === 1 ? "reference" : "references"} {referencesOpen ? "▴" : "▾"}
                   </button>
                 </td>
+                {PRICING_HISTORY && <td style={{ ...denseCell, padding: "2px 8px" }}>
+                  <button type="button" aria-expanded={pricingOpen}
+                    title="Mechanism, pricing cycles and every negotiation round for this Customer/Prospect"
+                    onClick={() => setExpandedParty(pricingOpen ? null : { id: party.id, section: "pricing" })}
+                    style={{ ...rowButton, borderColor: pricingOpen ? C.amber : C.border }}>
+                    Pricing history {pricingOpen ? "▴" : "▾"}
+                  </button>
+                </td>}
                 <td style={{ ...denseCell, padding: "2px 8px" }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                     {isEditingParty ? (
@@ -1071,9 +1086,11 @@ function FamilyDetail({ family, aliases, memberships, parties, families, locatio
                 </td>
               </tr>
               {open && <tr>
-                <td colSpan={6} style={{ ...denseCell, whiteSpace: "normal", maxWidth: "none", background: "#FBF8F3",
+                <td colSpan={PRICING_HISTORY ? 7 : 6} style={{ ...denseCell, whiteSpace: "normal", maxWidth: "none", background: "#FBF8F3",
                   padding: "6px 10px 8px 26px" }}>
-                  {locationsOpen
+                  {pricingOpen
+                    ? <CustomerPricingHistory party={party} showToast={showToast} />
+                    : locationsOpen
                     ? <LocationsList party={party} locations={partyLocations} locationVersions={locationVersions}
                         profile={profile} currentFamilyId={family.id} openModal={openModal} />
                     : <ExternalReferencesList refs={partyRefs} />}

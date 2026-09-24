@@ -80,11 +80,19 @@
 const BUILD_DEFAULTS = ["u1_producing_plants", "u1_customer_families", "u3_pricing_basis", "u2_gsm_master",
   "u2_sku_master", "u1_batch_party_link", "u2_construction_library"];
 const PRODUCTION_DEFAULTS = ["limited_beta"];
+// ── 2026-09-23: customer_pricing_history (Phase 0, P0.1) ───────────────────
+// DEVELOPMENT ONLY until the separate activation commit. The five pricing
+// migrations are now present in the authorised Beta database, but keeping the
+// flag here lets the implementation deploy and settle before users can enter
+// it. Moving it into BUILD_DEFAULTS is the reversible activation step.
+// The flag controls mounting only - access is read_party_master, never this.
+const DEVELOPMENT_DEFAULTS = ["customer_pricing_history"];
 
 const RAW = import.meta.env.VITE_FEATURE_FLAGS || "";
 const ENABLED = new Set([
   ...BUILD_DEFAULTS,
   ...(import.meta.env.PROD ? PRODUCTION_DEFAULTS : []),
+  ...(import.meta.env.DEV ? DEVELOPMENT_DEFAULTS : []),
   ...RAW.split(",").map(s => s.trim()).filter(Boolean),
 ]);
 

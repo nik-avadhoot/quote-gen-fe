@@ -11,7 +11,9 @@
 //        cbb_batchprofile, cbb_quoteitems, cbb_batch_autosave, cbb_template,
 //        cbb_pinned_addons, qgos_sidebar_collapsed, and from C3
 //        cbb_costing_draft plus its cbb_costing_draft_corrupt preserve-once
-//        companion (state/useCostingDraft.js).
+//        companion (state/useCostingDraft.js), and qgos_cph_layout:<user>:<party>
+//        - Customer Pricing History LAYOUT preferences only, never pricing
+//        data (lib/customerPricingLayout.js).
 //   OUT: the Supabase auth session. That lives in its own key and is handled
 //        by lib/apiClient.js on purpose - it is not part of the cbb_* data
 //        model and must not be routed through here.

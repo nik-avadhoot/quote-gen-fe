@@ -6,6 +6,7 @@ import QuoteCatalogueScreen from "./tabs/QuoteCatalogueScreen.jsx";
 import MyBatchesScreen from "./tabs/MyBatchesScreen.jsx";
 import SkuMasterScreen from "./tabs/SkuMasterScreen.jsx";
 import ConstructionLibraryScreen from "./tabs/ConstructionLibraryScreen.jsx";
+import CustomerPricingFixturePreview from "./tabs/customer-pricing/CustomerPricingFixturePreview.jsx";
 import { AuthProvider, useAuth } from "./AuthContext.jsx";
 import { C, sans } from "./theme.js";
 import { useState } from "react";
@@ -16,7 +17,7 @@ function Gate() {
   const [fixtureIllustration, setFixtureIllustration] = useState(() => {
     if (!import.meta.env.DEV) return null;
     const requested = new URLSearchParams(window.location.search).get("fixture");
-    return ["u5", "u5-inbox", "u5-history", "u3-u4", "u4-batches", "u2-skus", "u2-constructions"].includes(requested) ? requested : null;
+    return ["u5", "u5-inbox", "u5-history", "u3-u4", "u4-batches", "u2-skus", "u2-constructions", "p03-pricing"].includes(requested) ? requested : null;
   });
 
   if (loading) {
@@ -60,6 +61,11 @@ function Gate() {
     return <AppStateProvider>
       <ConstructionLibraryScreen fixtureOnly initialView="adoption" onExitFixture={() => setFixtureIllustration(null)} />
     </AppStateProvider>;
+  }
+  // Customer Pricing History P0.3 presentation over an in-memory payload; the
+  // pricing migrations are unapplied, so this is fixture-browser evidence only.
+  if (!profile && import.meta.env.DEV && fixtureIllustration === "p03-pricing") {
+    return <CustomerPricingFixturePreview />;
   }
   if (!profile) return <LoginScreen
     onU2ConstructionIllustration={import.meta.env.DEV ? () => setFixtureIllustration("u2-constructions") : undefined}
