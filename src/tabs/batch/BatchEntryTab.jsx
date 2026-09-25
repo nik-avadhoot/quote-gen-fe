@@ -13,19 +13,29 @@ import BatchPricingCard from "./BatchPricingCard.jsx";
 import ConstructionOverlay from "./ConstructionOverlay.jsx";
 import BatchGrid from "./BatchGrid.jsx";
 import BatchFirstShell from "./BatchFirstShell.jsx";
-import NewGovernedBatchPanel from "./NewGovernedBatchPanel.jsx";
+import NewGovernedBatchPanel, { DRAFT_KEY } from "./NewGovernedBatchPanel.jsx";
 import BatchWorkspacePanel from "./BatchWorkspacePanel.jsx";
 import { useAppState } from "../../state/AppStateContext.js";
 import { FOCUS } from "../../lib/quoteJourney.js";
 import { isS3GovernedBrowserFixture } from "../../lib/s1BrowserFixture.js";
+import { getItem } from "../../lib/persist.js";
 import { SummaryRow } from "../../ui/dataDisplay.jsx";
 
 export default function BatchEntryTab(){
   const s3Fixture=isS3GovernedBrowserFixture();
   const { batchFocusMode:focusMode, batchProfile, batchWorkspaceRequest, durableBatch, newBatchDialogOpen,
     setBatchFocusMode:setFocusMode,
-    setDurableBatch, setSidebarCollapsed, setU3PricingBasisDraft, showToast, sidebarCollapsed,
-    u3PricingBasisDraft } = useAppState();
+    setDurableBatch, setNewBatchDialogOpen, setSidebarCollapsed, setU3PricingBasisDraft, showToast,
+    sidebarCollapsed, u3PricingBasisDraft } = useAppState();
+  // A trip to Customer Families to clear a readiness gap (see
+  // NewGovernedBatchPanel's DRAFT_KEY) unmounts this tab and returns here
+  // fresh - reopen the dialog automatically so "Open Customer Families" reads
+  // as a detour, not a restart. Only on mount, so it fires once per return
+  // and never fights a caller who closes the dialog on purpose.
+  useEffect(() => {
+    if (!durableBatch?.id && getItem(DRAFT_KEY)) setNewBatchDialogOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const sidebarBeforeFocus=useRef(sidebarCollapsed);
   const focusModeRef=useRef(false);
   const toggleFocusMode=()=>{

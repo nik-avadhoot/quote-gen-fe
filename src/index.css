@@ -1282,7 +1282,7 @@ code {
 
 .new-batch-panel h2 {
   margin-top: 2px;
-  font-size: 17px;
+  font-size: 15px;
 }
 
 .new-batch-panel header span {
@@ -1292,27 +1292,21 @@ code {
   letter-spacing: .11em;
 }
 
-.new-batch-panel header p {
-  margin-top: 3px;
-  color: #718096;
-  font-size: 9px;
-}
-
 .new-batch-panel header button {
-  width: 29px;
-  height: 29px;
+  width: 26px;
+  height: 26px;
   flex: 0 0 auto;
   border: 1px solid #d9cdbd;
   border-radius: 5px;
   background: #fff;
   color: #344861;
   cursor: pointer;
-  font-size: 19px;
+  font-size: 17px;
 }
 
 .new-batch-panel-content {
   overflow: auto;
-  padding: 13px 17px 16px;
+  padding: 10px 15px 13px;
 }
 
 .new-batch-impact,
@@ -1321,13 +1315,32 @@ code {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  margin-bottom: 9px;
-  padding: 8px 9px;
+  margin-bottom: 8px;
+  padding: 7px 9px;
   border: 1px solid #d9cdbd;
   border-radius: 6px;
   background: #fff;
   font-size: 9px;
 }
+
+.new-batch-impact-toggle {
+  display: block;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #9a7a52;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  cursor: pointer;
+  text-align: left;
+}
+
+.new-batch-impact-toggle:hover,
+.new-batch-impact-toggle:focus-visible { color: #b5641f; }
+
+.new-batch-impact-toggle span { margin-left: 3px; }
 
 .new-batch-impact.is-warning,
 .new-batch-state.is-error {
@@ -1336,12 +1349,50 @@ code {
   color: #9a5418;
 }
 
+.new-batch-readiness-gate,
+.new-batch-readiness-note {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+  padding: 10px 11px;
+  border-radius: 6px;
+  font-size: 10px;
+}
+
+.new-batch-readiness-gate {
+  border: 1px solid #c0392b;
+  background: #fdecea;
+  color: #8a231a;
+}
+
+.new-batch-readiness-note {
+  border: 1px solid #d9cdbd;
+  background: #fff6e8;
+  color: #9a5418;
+}
+
+.new-batch-readiness-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.new-batch-readiness-actions button {
+  font-size: 9px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  background: transparent;
+  cursor: pointer;
+}
+
 .new-batch-panel form > label,
 .new-batch-two-fields label {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   color: #718096;
   font-size: 8.5px;
   font-weight: 750;
@@ -1351,9 +1402,9 @@ code {
 .new-batch-panel select {
   box-sizing: border-box;
   width: 100%;
-  height: 30px;
+  height: 27px;
   min-width: 0;
-  padding: 4px 6px;
+  padding: 3px 6px;
   border: 1px solid #d9cdbd;
   border-radius: 5px;
   background: #fff;
@@ -1361,18 +1412,15 @@ code {
   font-size: 10px;
 }
 
-.new-batch-family-search {
-  margin-bottom: 7px;
-}
-
 .new-batch-find-toggle {
-  margin: 0 0 7px;
+  height: 24px;
+  margin: 0 0 6px;
   border: 1px solid #d97825;
   border-radius: 5px;
   background: #fff;
   color: #9a5418;
-  padding: 5px 8px;
-  font-size: 10px;
+  padding: 0 8px;
+  font-size: 9px;
   font-weight: 750;
   cursor: pointer;
   text-align: left;
@@ -1380,11 +1428,21 @@ code {
 
 .new-batch-find-toggle span { margin-left: 4px; }
 
+.new-batch-family-search {
+  margin-bottom: 5px;
+}
+
+.new-batch-family-search input {
+  height: 24px;
+}
+
 .new-batch-search-choices {
   display: grid;
-  gap: 3px;
-  margin: 0 0 8px;
-  padding: 7px;
+  gap: 2px;
+  max-height: 150px;
+  overflow-y: auto;
+  margin: 0 0 6px;
+  padding: 6px;
   border: 1px solid #d9cdbd;
   border-radius: 6px;
   background: #fffaf4;
@@ -1395,8 +1453,8 @@ code {
   border-radius: 4px;
   background: #fff;
   color: #344861;
-  padding: 5px 7px;
-  font-size: 10px;
+  padding: 4px 7px;
+  font-size: 9.5px;
   text-align: left;
   cursor: pointer;
 }
@@ -1412,19 +1470,19 @@ code {
 
 .new-batch-prospect-entry {
   display: grid;
-  gap: 6px;
-  padding: 8px;
-  margin-bottom: 8px;
+  gap: 5px;
+  padding: 7px;
+  margin-bottom: 6px;
   border: 1px solid #d9cdbd;
   border-radius: 6px;
   background: #fffaf4;
   color: #344861;
-  font-size: 10px;
+  font-size: 9.5px;
 }
 
-.new-batch-prospect-entry label { display: grid; gap: 3px; }
+.new-batch-prospect-entry label { display: grid; gap: 2px; }
 .new-batch-prospect-entry small { color: #718096; }
-.new-batch-prospect-matches { display: grid; gap: 3px; }
+.new-batch-prospect-matches { display: grid; gap: 2px; max-height: 110px; overflow-y: auto; }
 .new-batch-prospect-matches button { text-align: left; }
 
 .new-batch-panel label small {
@@ -1448,19 +1506,19 @@ code {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .new-batch-panel-actions {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
-  margin-top: 13px;
+  margin-top: 10px;
 }
 
 .new-batch-panel-actions button {
-  min-height: 29px;
-  padding: 5px 9px;
+  min-height: 26px;
+  padding: 4px 9px;
   border: 1px solid #d9cdbd;
   border-radius: 5px;
   background: #fff;

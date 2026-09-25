@@ -4,8 +4,17 @@ import { apiFetch } from "../../lib/apiClient.js";
 import { classifyResponse } from "../../lib/backendError.js";
 import { runMutation } from "../../lib/runMutation.js";
 import { createProspectBody, likelyMatches } from "../../lib/batchQuickCreate.js";
+import { getItem, removeItem, setItem } from "../../lib/persist.js";
 
 const normalized = value => (value || "").trim().toLocaleLowerCase();
+
+// A trip to Customer Families to fix a readiness gap (missing Sector or
+// approved Location) unmounts this panel, since it lives inside the Batch
+// tab. This is the ONE stash that survives that unmount so the caller's
+// in-progress selection resumes instead of starting over. Single-use: read
+// once on the next dialog open, then removed.
+export const DRAFT_KEY = "cbb_new_batch_draft";
+const DRAFT_MAX_AGE_MS = 60 * 60 * 1000;
 
 const familySearchText = family => [
   family.name,
@@ -22,7 +31,7 @@ export default function NewGovernedBatchPanel({
 }) {
   const { batchProfile, bindGovernedBatch, completeNewBatchStart, durableBatch,
     isPromoting, laneSelection, newBatchDialogOpen, profileDraft, returnToQuickCalculation,
-    setNewBatchDialogOpen, showToast } = useAppState();
+    setNewBatchDialogOpen, setTab, showToast } = useAppState();
   const [state, setState] = useState(() => fixtureOnly
     ? { status: "ready", families: fixtureOptions?.families || [],
       plants: fixtureOptions?.plants || [], sectors: fixtureOptions?.sectors || [] }
@@ -46,6 +55,7 @@ export default function NewGovernedBatchPanel({
   const [paymentDays, setPaymentDays] = useState("");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [impactOpen, setImpactOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [addingProspect, setAddingProspect] = useState(false);
   const [prospectName, setProspectName] = useState("");
@@ -76,6 +86,34 @@ export default function NewGovernedBatchPanel({
           familySectorsDenied: data.family_sectors_denied === true,
           locationsDenied: data.locations_denied === true });
 
+        const storedDraft = (() => {
+          try { return JSON.parse(getItem(DRAFT_KEY) || "null"); } catch { return null; }
+        })();
+        const draftFresh = storedDraft && Date.now() - (storedDraft.savedAt || 0) < DRAFT_MAX_AGE_MS;
+        const draftFamily = draftFresh
+          && families.find(family => String(family.id) === String(storedDraft.familyId));
+        if (draftFamily) {
+          removeItem(DRAFT_KEY);
+          const draftParty = draftFamily.members?.find(member => String(member.id) === String(storedDraft.partyId));
+          setFamilyId(String(draftFamily.id));
+          setPartyId(draftParty ? String(draftParty.id) : "");
+          setShipToId(storedDraft.shipToId || "");
+          setBillToId(storedDraft.billToId || "");
+          setDestinationText(storedDraft.destinationText || "");
+          setBillingText(storedDraft.billingText || "");
+          setPaymentDays(storedDraft.paymentDays || "");
+          setQuery(storedDraft.query || "");
+          const draftPlant = plants.find(plant => String(plant.id) === String(storedDraft.plantId));
+          setPlantId(draftPlant ? String(draftPlant.id) : plants.length === 1 ? String(plants[0].id) : "");
+          const draftSectorIds = new Set((draftFamily.sector_ids || []).map(String));
+          setSectorId(storedDraft.sectorId && draftSectorIds.has(String(storedDraft.sectorId))
+            ? String(storedDraft.sectorId)
+            : draftFamily.sector_ids?.length ? String(draftFamily.sector_ids[0]) : "");
+          showToast?.(`Resumed your Batch draft for ${draftFamily.name}.`, "success", 4000);
+          return;
+        }
+        if (storedDraft) removeItem(DRAFT_KEY);
+
         const client = normalized(batchProfile.client);
         const matchingFamilies = families.filter(family =>
           normalized(family.name) === client
@@ -105,6 +143,10 @@ export default function NewGovernedBatchPanel({
       }
     })();
     return () => { cancelled = true; };
+  // showToast is deliberately not a dependency: it comes from the same
+  // provider this effect's own showToast?.() call re-renders, so depending on
+  // it re-fires this effect right after the draft restore below, consuming
+  // the already-removed draft a second time and falling through to blank.
   }, [newBatchDialogOpen, fixtureOnly, batchProfile.client, batchProfile.plant, batchProfile.sector]);
 
   const matchingFamilies = useMemo(() => {
@@ -122,6 +164,26 @@ export default function NewGovernedBatchPanel({
   const billingLocations = selectedParty?.billing_locations || [];
   const allowedSectorIds = new Set((selectedFamily?.sector_ids || []).map(String));
   const availableSectors = state.sectors.filter(sector => allowedSectorIds.has(String(sector.id)));
+  const sectorGated = Boolean(selectedFamily) && availableSectors.length === 0
+    && !(state.sectorsDenied || state.familySectorsDenied);
+  const pendingShipTo = selectedParty?.pending_ship_to_count || 0;
+  const pendingBillTo = selectedParty?.pending_bill_to_count || 0;
+  const locationGaps = selectedParty ? [
+    !deliveryLocations.length && (pendingShipTo
+      ? `${pendingShipTo} Ship-to Location${pendingShipTo > 1 ? "s" : ""} pending approval — freight stays on quote-specific text until one is approved`
+      : "no approved Ship-to Location — freight will stay on quote-specific text"),
+    !billingLocations.length && (pendingBillTo
+      ? `${pendingBillTo} Bill-to Location${pendingBillTo > 1 ? "s" : ""} pending approval — billing stays on quote-specific text until one is approved`
+      : "no approved Bill-to Location — billing will stay on quote-specific text"),
+  ].filter(Boolean) : [];
+  const openCustomerFamilies = () => {
+    if (!fixtureOnly) {
+      setItem(DRAFT_KEY, JSON.stringify({ familyId, partyId, plantId, sectorId, shipToId, billToId,
+        destinationText, billingText, paymentDays, query, savedAt: Date.now() }));
+    }
+    setNewBatchDialogOpen(false);
+    setTab("families");
+  };
   const existingParties = useMemo(() => state.families.flatMap(family => family.members || []), [state.families]);
   const searchMatches = useMemo(() => likelyMatches(query, existingParties, { limit: 6 }),
     [query, existingParties]);
@@ -204,6 +266,7 @@ export default function NewGovernedBatchPanel({
     && (shipToId || destinationText.trim()) && (billToId || billingText.trim())
     && paymentDays && !busy;
   const cancel = () => {
+    removeItem(DRAFT_KEY);
     setNewBatchDialogOpen(false);
     if (laneSelection?.lane === "customer" && !laneSelection.batchId) {
       returnToQuickCalculation?.();
@@ -229,6 +292,7 @@ export default function NewGovernedBatchPanel({
     event.preventDefault();
     if (!ready) return;
     setBusy(true);
+    removeItem(DRAFT_KEY);
     if (fixtureOnly) {
       const created = structuredClone(fixtureBatch);
       created.family_id = familyId;
@@ -299,6 +363,7 @@ export default function NewGovernedBatchPanel({
 
   const clearLocalOnly = async () => {
     setBusy(true);
+    removeItem(DRAFT_KEY);
     if (fixtureOnly) {
       onFixtureCreated?.(null);
       setNewBatchDialogOpen(false);
@@ -323,9 +388,6 @@ export default function NewGovernedBatchPanel({
         <div>
           <span>{fixtureOnly ? "U4 · FIXTURE-ONLY CREATION" : "U4 · GOVERNED CREATION"}</span>
           <h2 id="new-governed-batch-title">Start a new Batch</h2>
-          <p>{fixtureOnly
-            ? "This isolated illustration creates an in-memory Batch, default Pricing Group, default Delivery Group and edit lock. Nothing is persisted."
-            : "The permanent reference, Pricing Basis, default Pricing Group, default Delivery Group and edit lock are created together."}</p>
         </div>
         <button type="button" onClick={cancel} disabled={busy}
           aria-label="Cancel new Batch">×</button>
@@ -337,12 +399,16 @@ export default function NewGovernedBatchPanel({
           {fixtureOnly ? " will be replaced only in isolated memory." : " will remain unchanged and be unbound from this screen."}
           {!fixtureOnly && durableBatch.caller_holds_lock ? " Its edit lock will be released after the new Batch is created." : ""}
         </div>}
-        <div className="new-batch-impact">
-          <strong>On success</strong>
+        <button type="button" className="new-batch-impact-toggle" aria-expanded={impactOpen}
+          onClick={() => setImpactOpen(open => !open)}>
+          What this creates, and what it clears <span aria-hidden="true">{impactOpen ? "▾" : "▸"}</span>
+        </button>
+        {impactOpen && <div className="new-batch-impact">
           {fixtureOnly ? <>
             <span>Replaces only this labelled, in-memory fixture workspace.</span>
             <span>Creates no Batch reference, database record, calculation, Quote or workflow action.</span>
           </> : <>
+            <span>Creates the permanent reference, Pricing Basis, default Pricing Group, default Delivery Group and edit lock together.</span>
             <span>{isPromoting?.()
               ? "Keeps your SKU rows as inputs. The chosen governed Customer and route replace local profile text; every local price and Quote Item is cleared."
               : "Replaces the local profile with the saved Customer, route and terms; clears SKU rows, results and Quote Items."}</span>
@@ -351,7 +417,7 @@ export default function NewGovernedBatchPanel({
               : "Discards the same-Batch Costing draft because it belongs to the Batch being left."}</span>
             <span>Unlinks any Deep-Dive review. No calculation, Quote or workflow action is created.</span>
           </>}
-        </div>
+        </div>}
 
         {state.status === "loading" && <div className="new-batch-state" role="status">Loading governed Customer, Plant and Sector identities…</div>}
         {(state.status === "denied" || state.status === "error") && <div className="new-batch-state is-error" role="status">
@@ -457,7 +523,28 @@ export default function NewGovernedBatchPanel({
             {!selectedFamily.members?.length && <small>No caller-visible current member Customer is available.</small>}
           </label>}
 
-          <div className="new-batch-two-fields">
+          {selectedFamily && selectedParty && (sectorGated || locationGaps.length > 0) &&
+            <div className={sectorGated ? "new-batch-readiness-gate" : "new-batch-readiness-note"}
+              role={sectorGated ? "alert" : "status"}>
+              {sectorGated ? <>
+                <strong>This Customer Family isn't ready for a governed Batch yet</strong>
+                <span>{selectedFamily.name} has no caller-visible Sector classification, and a Sector is
+                  required to create a Batch. Classify it in Customer Families, then come back here.</span>
+              </> : <>
+                <strong>Before you finish this Batch</strong>
+                {locationGaps.map(gap => <span key={gap}>{selectedParty.display_name} has {gap}.</span>)}
+                <span>You can continue with typed destinations below, or {pendingShipTo || pendingBillTo
+                  ? "approve the pending Location" : "add the approved Location"} first.</span>
+              </>}
+              <div className="new-batch-readiness-actions">
+                {sectorGated && <button type="button" onClick={cancel} disabled={busy}>Cancel</button>}
+                <button type="button" onClick={openCustomerFamilies}>
+                  {pendingShipTo || pendingBillTo ? "Open Customer Families to approve" : "Open Customer Families"}
+                </button>
+              </div>
+            </div>}
+
+          {!sectorGated && <><div className="new-batch-two-fields">
             <label>Producing Plant
               <select value={plantId} onChange={event => setPlantId(event.target.value)} required>
                 <option value="">Select Maker Plant</option>
@@ -478,12 +565,7 @@ export default function NewGovernedBatchPanel({
               {(state.sectorsDenied || state.familySectorsDenied) && <small>
                 Sector classification is denied to this caller; Batch creation is unavailable.
               </small>}
-              {selectedFamily && !availableSectors.length && <small>
-                This Customer Family has no caller-visible Sector classification. Classify it in Customer Families before creating a Batch.
-              </small>}
-              {availableSectors.length > 0 && <small>
-                The first attached Sector is suggested. This Batch uses exactly one; all guidance and inheritance follow the selected Sector only.
-              </small>}
+              {availableSectors.length > 0 && <small>First Sector suggested; this Batch uses exactly one.</small>}
             </label>
           </div>
 
@@ -519,7 +601,7 @@ export default function NewGovernedBatchPanel({
             <input value={destinationText} maxLength={500}
               onChange={event => setDestinationText(event.target.value)}
               placeholder="Enter the delivery address or destination" required={!shipToId} />
-            <small>Saved as Batch context, not an approved Location. Master-backed freight remains blocked until a Ship-to is linked.</small>
+            {deliveryLocations.length > 0 && <small>Saved as Batch context, not an approved Location — master-backed freight stays blocked.</small>}
           </label>}
           {selectedParty && <label>Bill-to Location (when available)
             <select value={billToId} onChange={event => {
@@ -537,7 +619,7 @@ export default function NewGovernedBatchPanel({
             <input value={billingText} maxLength={500}
               onChange={event => setBillingText(event.target.value)}
               placeholder="Enter the billing address or destination" required={!billToId} />
-            <small>Saved as Batch context, not an approved Location. Route readiness remains blocked until a Bill-to is linked.</small>
+            {billingLocations.length > 0 && <small>Saved as Batch context, not an approved Location — route readiness stays blocked.</small>}
           </label>}
 
           <div className="new-batch-panel-actions">
@@ -548,7 +630,7 @@ export default function NewGovernedBatchPanel({
             <button type="submit" className="is-primary" disabled={!ready}>
               {busy ? "Creating…" : fixtureOnly ? "Create fixture Batch in memory" : "Create governed Batch"}
             </button>
-          </div>
+          </div></>}
         </form>}
       </div>
 
