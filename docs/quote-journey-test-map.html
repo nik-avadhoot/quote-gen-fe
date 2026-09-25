@@ -1,0 +1,627 @@
+<title>Quote Journey Test Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#F4F6F5; --surface:#FFFFFF; --sunk:#EAEEEC; --ink:#1B2220; --ink2:#4A5552; --ink3:#78837F;
+  --line:#D5DCD9; --accent:#0F6E6A; --accent-soft:#DCEFEC;
+  --pass:#2E7D32; --pass-soft:#E3F2E4; --hurdle:#A85C07; --hurdle-soft:#FBEBD5;
+  --fail:#B3261E; --fail-soft:#FBE3E1; --hop:#5B4FC4; --hop-soft:#E7E4FA; --na:#78837F;
+  --diagram-bg:#FBFCFB;
+  --sans:"IBM Plex Sans",-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#121716; --surface:#1A201F; --sunk:#222a28; --ink:#E6ECEA; --ink2:#AAB5B1; --ink3:#7F8B87;
+    --line:#2E3836; --accent:#4FC1B8; --accent-soft:#16312F;
+    --pass:#6BC46F; --pass-soft:#1B2E1C; --hurdle:#F0A64A; --hurdle-soft:#33260F;
+    --fail:#F2786F; --fail-soft:#3A1C1A; --hop:#A79CF5; --hop-soft:#26223F; --na:#7F8B87;
+    --diagram-bg:#E9EDEB;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#121716; --surface:#1A201F; --sunk:#222a28; --ink:#E6ECEA; --ink2:#AAB5B1; --ink3:#7F8B87;
+  --line:#2E3836; --accent:#4FC1B8; --accent-soft:#16312F;
+  --pass:#6BC46F; --pass-soft:#1B2E1C; --hurdle:#F0A64A; --hurdle-soft:#33260F;
+  --fail:#F2786F; --fail-soft:#3A1C1A; --hop:#A79CF5; --hop-soft:#26223F; --na:#7F8B87;
+  --diagram-bg:#E9EDEB;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;margin:0}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px;padding-block:28px 80px}
+h1,h2,h3{text-wrap:balance;margin:0}
+h1{font-size:28px;font-weight:700;letter-spacing:-.01em}
+h2{font-size:19px;font-weight:700}
+h3{font-size:15px;font-weight:600}
+p{margin:0}
+.lede{color:var(--ink2);max-width:70ch;margin-top:8px}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3);font-weight:600}
+.ui{font-family:var(--mono);font-size:12.5px;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:0 4px;white-space:nowrap}
+section.block{margin-top:36px;display:grid;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.note{font-size:13px;color:var(--ink2)}
+
+/* header bar */
+.runbar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-top:18px}
+.runbar label{display:grid;gap:3px;font-size:12px;color:var(--ink3);font-weight:600}
+.runbar input{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 9px;min-width:0;width:220px;max-width:100%}
+.storage{font-size:12px;color:var(--ink3);padding-bottom:7px}
+.storage b{color:var(--ink2)}
+
+/* summary */
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:2px}
+.stat .n{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat .l{font-size:12px;color:var(--ink3);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.stat.pass .n{color:var(--pass)} .stat.hurdle .n{color:var(--hurdle)} .stat.fail .n{color:var(--fail)}
+.progress{height:8px;border-radius:99px;background:var(--sunk);overflow:hidden;display:flex}
+.progress i{display:block;height:100%}
+
+/* diagram */
+.diagram{background:var(--diagram-bg);border:1px solid var(--line);border-radius:10px;overflow-x:auto;padding:12px}
+.diagram pre.mermaid{margin:0;min-width:760px;background:transparent;color:#1B2220}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--ink2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:3px;border:1.5px solid}
+
+/* tables */
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:640px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);background:var(--sunk)}
+tr:last-child td{border-bottom:0}
+td.num{font-family:var(--mono);color:var(--ink3);width:36px;font-variant-numeric:tabular-nums}
+
+/* rubric */
+.rubric{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.rubric div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:4px}
+.rubric b{font-size:13.5px}
+.rubric span{font-size:13px;color:var(--ink2)}
+
+/* filters */
+.filters{display:flex;flex-wrap:wrap;gap:6px;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:10px;border-bottom:1px solid var(--line)}
+.chip{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);border-radius:99px;padding:4px 12px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.chip:focus-visible,.seg button:focus-visible,.btn:focus-visible,textarea:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* journeys */
+details.journey{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+details.journey>summary{list-style:none;cursor:pointer;padding:14px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+details.journey>summary::-webkit-details-marker{display:none}
+.jid{font-family:var(--mono);font-weight:600;color:var(--accent);font-size:13px;min-width:28px}
+.jtitle{flex:1 1 260px;display:grid;gap:2px}
+.jtitle small{color:var(--ink3);font-size:12.5px}
+.jmini{display:flex;gap:8px;font-size:12px;font-family:var(--mono);color:var(--ink3);font-variant-numeric:tabular-nums}
+.jmini .h{color:var(--hurdle)} .jmini .f{color:var(--fail)} .jmini .p{color:var(--pass)}
+.chev{color:var(--ink3);transition:transform .15s}
+details[open]>summary .chev{transform:rotate(90deg)}
+@media (prefers-reduced-motion: reduce){.chev{transition:none}}
+.steps{border-top:1px solid var(--line);display:grid}
+.step{display:grid;grid-template-columns:64px 1fr 230px;gap:14px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.step:last-child{border-bottom:0}
+.step[data-s="pass"]{box-shadow:inset 3px 0 0 var(--pass)}
+.step[data-s="hurdle"]{box-shadow:inset 3px 0 0 var(--hurdle)}
+.step[data-s="fail"]{box-shadow:inset 3px 0 0 var(--fail)}
+.step[data-s="na"]{box-shadow:inset 3px 0 0 var(--na)}
+.sid{font-family:var(--mono);font-size:12.5px;color:var(--ink3);display:grid;gap:6px;align-content:start}
+.screen{font-family:var(--sans);font-size:11px;font-weight:600;border-radius:4px;padding:1px 6px;background:var(--accent-soft);color:var(--accent);justify-self:start;line-height:1.5}
+.screen.hop{background:var(--hop-soft);color:var(--hop)}
+.body{display:grid;gap:7px;min-width:0}
+.row{display:grid;grid-template-columns:62px 1fr;gap:8px;font-size:13.5px}
+.row>b{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);padding-top:2px}
+.row.watch>b{color:var(--hurdle)}
+.row.ideal>b{color:var(--pass)}
+.tag{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:3px;padding:0 5px;margin-left:4px;vertical-align:1px}
+.tag.hop{background:var(--hop-soft);color:var(--hop)}
+.tag.pred{background:var(--hurdle-soft);color:var(--hurdle)}
+.act{display:grid;gap:8px;align-content:start}
+.seg{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{font:inherit;font-size:12px;font-weight:600;border:0;border-right:1px solid var(--line);background:var(--surface);color:var(--ink2);padding:6px 0;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"][data-v="pass"]{background:var(--pass);color:#fff}
+.seg button[aria-pressed="true"][data-v="hurdle"]{background:var(--hurdle);color:#fff}
+.seg button[aria-pressed="true"][data-v="fail"]{background:var(--fail);color:#fff}
+.seg button[aria-pressed="true"][data-v="na"]{background:var(--na);color:#fff}
+.act select,.act textarea{font:inherit;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 7px;width:100%}
+.act textarea{min-height:58px;resize:vertical}
+.saved{font-size:11px;color:var(--ink3);min-height:14px}
+@media (max-width:760px){
+  .step{grid-template-columns:1fr}
+  .sid{grid-auto-flow:column;justify-content:start;align-items:center}
+  .row{grid-template-columns:1fr;gap:0}
+}
+
+.btn{font:inherit;font-size:13.5px;font-weight:600;border-radius:7px;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.btn.danger{color:var(--fail);border-color:var(--fail)}
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.confirm{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--fail-soft);border:1px solid var(--fail);border-radius:8px;padding:8px 12px;font-size:13px}
+#mdout{width:100%;min-height:160px;font-family:var(--mono);font-size:12px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+ol.flat{margin:0;padding-left:20px;display:grid;gap:5px;font-size:13.5px}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Quotation module · self-test · built from the frontend source on 26 Sep 2026</div>
+  <h1>Quote Journey Test Map</h1>
+  <p class="lede">A map of the whole quote journey as the app implements it today: creating a quote, getting it approved, sharing it, recording the customer's response and revising it. It marks every screen switch and every likely hurdle. Work through the journeys below, mark each step, and write what you see. Your marks save to this page, and <b>Copy findings</b> at the bottom turns them into a list you can share.</p>
+  <p class="lede note">I built this from reading the code, not from a signed-in run. Each <span class="tag pred">Predicted</span> item is a hurdle the code suggests. Your test decides whether it is real.</p>
+
+  <div class="runbar">
+    <label for="runLabel">Test run name<input id="runLabel" placeholder="e.g. Run 1 · 1366×768 · Chrome"></label>
+    <label for="tester">Tester<input id="tester" placeholder="Your name"></label>
+    <div class="storage" id="storage">Storage: <b>checking…</b></div>
+  </div>
+
+  <section class="block" aria-labelledby="sumH">
+    <h2 id="sumH">Progress</h2>
+    <div class="summary" id="summary"></div>
+    <div class="progress" id="bar" aria-hidden="true"></div>
+  </section>
+
+  <section class="block" aria-labelledby="mapH">
+    <h2 id="mapH">The journey as built</h2>
+    <p class="note">Each band is one screen. Purple double-edged boxes mean you leave the screen you were on. Amber boxes are hurdles I expect from the code. Dashed lines are optional side trips.</p>
+    <div class="legend">
+      <span><i class="sw" style="background:#FFFFFF;border-color:#0F6E6A"></i>Step on the current screen</span>
+      <span><i class="sw" style="background:#E7E4FA;border-color:#5B4FC4"></i>Switch to another screen</span>
+      <span><i class="sw" style="background:#FBEBD5;border-color:#A85C07"></i>Expected hurdle</span>
+      <span><i class="sw" style="background:#E3F2E4;border-color:#2E7D32"></i>Customer-facing milestone</span>
+    </div>
+    <div class="diagram">
+<pre class="mermaid">
+%%{init: {"theme":"base","flowchart":{"curve":"basis","nodeSpacing":28,"rankSpacing":38},"themeVariables":{"fontFamily":"IBM Plex Sans, Segoe UI, sans-serif","fontSize":"13px","primaryColor":"#FFFFFF","primaryBorderColor":"#0F6E6A","primaryTextColor":"#1B2220","textColor":"#1B2220","nodeTextColor":"#1B2220","lineColor":"#4A5552","clusterBkg":"#F1F4F3","clusterBorder":"#C9D2CE","edgeLabelBackground":"#FBFCFB"}}}%%
+flowchart TD
+  START(["Sign in"]) --> BB
+
+  subgraph S1["Batch Builder · no active Batch"]
+    BB["Strip: 'No governed Batch is active'"]
+    LOCAL["Local Batch Profile bar + local grid still shown below"]:::hurdle
+    BB --- LOCAL
+  end
+
+  BB -->|"New customer quote"| DLG
+  BB -.->|"Open active Batch"| AB
+
+  subgraph S2["Dialog · Start a new Batch"]
+    DLG["Search hidden behind 'Find or create' toggle · Family dropdown first"]:::hurdle
+    DLG --> FOUND{"Customer found?"}:::decision
+    FOUND -->|"No"| PROS["Create Prospect inline: name, Family, Sector"]
+    FOUND -->|"Yes"| SECT{"Family has a Sector?"}:::decision
+    PROS --> SECT
+    SECT -->|"Yes"| TERMS["Plant · Sector · Delivery · Bill-to · Payment days"]
+    TERMS --> LOC{"Approved Location?"}:::decision
+    LOC -->|"No: typed address"| FRBLK["Freight / route blocked later, warned only in small print"]:::hurdle
+  end
+
+  SECT -->|"No"| CF[["Customer Families screen"]]:::hop
+  CF -.->|"Return: draft resumes within 60 min"| DLG
+
+  LOC -->|"Yes"| WS
+  FRBLK --> WS
+
+  subgraph S3["Batch Builder · governed workspace 'Products and readiness'"]
+    WS["Identity, Sectors, Quote evidence, Prior Quote, Lock, Readiness sit ABOVE Products"]:::hurdle
+    WS --> LOCK{"Holding the edit lock?"}:::decision
+    LOCK -->|"No"| ACQ["Acquire edit lock"]:::hurdle
+    ACQ --> ADD
+    LOCK -->|"Yes"| ADD["Add durable row"]
+    ADD --> SKU{"SKU exists?"}:::decision
+    SKU -->|"Yes"| PICK["Select established SKU (dropdown)"]
+    SKU -->|"No"| PROP["+ Create proposed SKU + Construction"]
+    PICK --> CALC
+    PROP --> CALC
+    CALC["Calculate all active rows"] --> BLK{"Blockers?"}:::decision
+    BLK -->|"Yes"| FIX["'Row #id … Open field →'"]
+    FIX --> CALC
+    BLK -->|"No"| SEND["Atomic Send · create draft candidate"]:::hurdle
+  end
+
+  CALC -.->|"Costing deep-dive"| CD[["Quick calculation tab · row review"]]:::hop
+  CD -.->|"Apply to Batch row / ← Batch Builder"| WS
+
+  SEND -->|"Open immutable draft evidence"| HIST
+
+  subgraph S4["Quotes · History view"]
+    HIST[["Draft candidate, no reference yet"]]:::hop
+    HIST --> SUB["Submit"]
+  end
+
+  SUB --> INBOX
+  subgraph S5["Approval Inbox · Checker"]
+    INBOX[["Submitted revision"]]:::hop
+    INBOX --> DEC{"Decision"}:::decision
+    DEC -->|"Return: browser prompt for note"| RET["Returned"]:::hurdle
+    DEC -->|"Approve: browser confirm"| APP["Approved · NAG/QUO/… reference allocated"]:::good
+  end
+  RET -.-> WS
+
+  APP --> GOV
+  subgraph S6["Quotes · Governed view"]
+    GOV[["Opens only by typing the permanent reference"]]:::hurdle
+    GOV --> PREV["Customer document preview"]:::good
+    PREV --> SHARE["Share with customer: channel · date · ref"]
+    SHARE --> DL["Record and download workbook (Excel only)"]:::good
+    DL --> RESP{"Customer response"}:::decision
+    RESP -->|"Record response"| OUT["Accepted / Rejected / Expired / Awaiting"]:::good
+    RESP -->|"Negotiate"| REV["Create revision: browser confirm"]
+  end
+
+  REV -->|"Source Batch reopens"| WS
+  OUT --> DONE(["In history · shows as 'Previous approved Quote' next time"])
+
+  subgraph S7["Side doors that still exist"]
+    QC["Quick calculation: private scratch"]
+    WK["Quotes · Working view: local items, Excel + PDF export"]:::hurdle
+    AB["Active Batches list"]
+  end
+  AB -->|"Open Batch"| WS
+
+  classDef default fill:#FFFFFF,stroke:#0F6E6A,stroke-width:1.2px,color:#1B2220
+  classDef decision fill:#DCEFEC,stroke:#0F6E6A,stroke-width:1.5px,color:#1B2220
+  classDef hop fill:#E7E4FA,stroke:#5B4FC4,stroke-width:1.5px,color:#1B2220
+  classDef hurdle fill:#FBEBD5,stroke:#A85C07,stroke-width:1.5px,color:#1B2220
+  classDef good fill:#E3F2E4,stroke:#2E7D32,stroke-width:1.5px,color:#1B2220
+</pre>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="hopH">
+    <h2 id="hopH">Screen switches on the main path</h2>
+    <p class="note">This is the shortest path: an existing customer, one product, and the same person approving. Count what you actually do and compare. The target is for the whole quote to live on one page, with approval and sharing as states of that page.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>From → to</th><th>Why you are moved</th><th>Could it stay in place?</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td>Batch Builder → New Batch dialog</td><td>Choose customer, plant and terms</td><td>Yes, a modal is fine. Put customer search first.</td></tr>
+        <tr><td class="num">2</td><td>Dialog → Customer Families → back</td><td>Family has no Sector, or a Location needs approval</td><td>Fix it inline in the dialog</td></tr>
+        <tr><td class="num">3</td><td>Workspace → Quick calculation tab → back</td><td>Detailed row review (Costing deep-dive)</td><td>Open as a side panel over the row</td></tr>
+        <tr><td class="num">4</td><td>Workspace → Quotes › History</td><td>After Atomic Send, to see and Submit the draft</td><td>Preview and submit from the workspace</td></tr>
+        <tr><td class="num">5</td><td>History → Approval Inbox</td><td>A Checker approves (even when that is you)</td><td>Offer "Approve" in place when you hold check_quote</td></tr>
+        <tr><td class="num">6</td><td>Inbox → Quotes › Governed (type the reference)</td><td>Preview, share, download</td><td>Land on the approved quote automatically</td></tr>
+        <tr><td class="num">7</td><td>Governed → Batch Builder</td><td>Create revision reopens the source Batch</td><td>Revise inside the quote page</td></tr>
+        <tr><td class="num">8</td><td>Batch Builder → Quotes (repeat 4–6)</td><td>Send, submit, approve and share revision 2</td><td>Same as above</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="block" aria-labelledby="rubH">
+    <h2 id="rubH">How to judge each step</h2>
+    <p class="note">Mark a step <b>Pass</b> only when it meets all six tests. If it works but breaks one, mark it <b>Hurdle</b>. If you cannot finish it, mark it <b>Fail</b>.</p>
+    <div class="rubric">
+      <div><b>Five-second rule</b><span>Without hovering, you can tell what the next action is.</span></div>
+      <div><b>Your words, not the system's</b><span>Labels say customer, product, price, quote, send. No Batch, durable, governed, candidate or lineage.</span></div>
+      <div><b>One obvious primary action</b><span>Exactly one button looks like the thing to press.</span></div>
+      <div><b>Stay in place</b><span>You finish the task without changing screens or retyping a reference.</span></div>
+      <div><b>Forgiving</b><span>Mistakes can be undone. Warnings come before the click, not in a toast afterwards.</span></div>
+      <div><b>Consistent</b><span>The same word and the same control mean the same thing on every screen.</span></div>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="jH">
+    <h2 id="jH">Test journeys</h2>
+    <div class="filters" role="toolbar" aria-label="Filter steps">
+      <button class="chip" data-f="all" aria-pressed="true">All steps</button>
+      <button class="chip" data-f="open" aria-pressed="false">Not yet tested</button>
+      <button class="chip" data-f="issues" aria-pressed="false">Hurdles and fails</button>
+      <button class="chip" data-f="hop" aria-pressed="false">Screen switches only</button>
+      <button class="chip" id="expandAll" aria-pressed="false">Expand all</button>
+    </div>
+    <div id="journeys" style="display:grid;gap:12px"></div>
+  </section>
+
+  <section class="block" aria-labelledby="outH">
+    <h2 id="outH">Findings</h2>
+    <p class="note">Every step marked Hurdle or Fail, with your notes, grouped by journey. Paste it into a chat with Claude to turn it into a fix list.</p>
+    <div class="actions">
+      <button class="btn primary" id="copyMd">Copy findings</button>
+      <button class="btn" id="showMd">Show as text</button>
+      <button class="btn danger" id="resetBtn">Clear all marks…</button>
+      <span class="saved" id="copyState" role="status"></span>
+    </div>
+    <div id="confirmBox" hidden class="confirm">This deletes every mark and note in this test run. <button class="btn danger" id="resetYes">Delete everything</button><button class="btn" id="resetNo">Keep them</button></div>
+    <textarea id="mdout" hidden readonly aria-label="Findings as text"></textarea>
+  </section>
+</div>
+
+<script>
+const J = [
+ {id:"J0",title:"Before you start",goal:"Set up so that the hurdles you find come from the design, not from missing data.",steps:[
+  {id:"J0-1",sc:"Browser",d:"Set the browser window to 1366×768, the beta laptop size, before signing in.",e:"Nothing scrolls sideways and no toolbar wraps onto two rows.",w:"Batch Builder toolbars have wrapped to two rows at 1366 before, while a 1440 screen hides it."},
+  {id:"J0-2",sc:"Data",d:"Pick test data: one existing customer whose Family has a Sector and approved Ship-to and Bill-to Locations, one SKU for that customer at NAG, and one published, adopted Construction.",e:"All of it can be found in under a minute.",w:"If anything is missing you will meet detours in J2 and J3. Record each detour as a finding."},
+  {id:"J0-3",sc:"Access",d:"Check your account has make_quote at NAG. For approval, use one with check_quote (self-approval is allowed).",e:"You can tell your permissions from the app.",w:"Approval Inbox appears in the sidebar only with check_quote. Nothing explains why it is missing."},
+  {id:"J0-4",sc:"Method",d:"Keep a stopwatch and a tally of screen switches for each journey. Write both in the last step's notes.",e:"—",w:"—"}
+ ]},
+ {id:"J1",title:"First arrival",goal:"Can a salesperson see how to start a quote without being taught?",steps:[
+  {id:"J1-1",sc:"Batch Builder",d:"Sign in and look at the first screen without clicking.",e:"A home screen that says 'New quote' and lists your recent and pending quotes.",w:"You land on Batch Builder. A strip reads «No governed Batch is active» with «New customer quote» and «Open active Batch». Below it the older local Batch Profile bar and local grid still render, so one screen has two ways to start.",p:1},
+  {id:"J1-2",sc:"Sidebar",d:"Read the sidebar as a salesperson would.",e:"Three or four destinations named in commercial words.",w:"Workspace has 5 entries. Reference data has about 10, some greyed out as Planned, Disabled or Restricted, and there is an Administration group. The «Quotes» badge counts local working items, not real quotes.",p:1},
+  {id:"J1-3",sc:"Top bar",d:"Read the top bar.",e:"It says where you are and what to do next.",w:"With no active Batch it shows only the screen name. The journey cue appears only once a Batch exists."},
+  {id:"J1-4",sc:"Batch Builder",d:"Five-second test: say out loud how you would start a quote for customer X. Write down how many seconds it took.",e:"Under 5 seconds.",w:"'Batch' versus 'quote': does the word Batch slow you down?"}
+ ]},
+ {id:"J2",title:"Start a quote for an existing customer",goal:"From 'customer rang' to an open quote with the customer, plant and terms set.",steps:[
+  {id:"J2-1",sc:"New Batch dialog",d:"Click «New customer quote».",e:"A short sheet titled with the customer question, e.g. 'Who is this quote for?'.",w:"The header shows an internal code, «U4 · GOVERNED CREATION». The title says «Start a new Batch»: the button said quote, the dialog says Batch.",p:1},
+  {id:"J2-2",sc:"New Batch dialog",d:"Type part of the customer's name.",e:"The search box already has the cursor and results appear as you type.",w:"Search is hidden behind the «Find or create Customer/Prospect ▾» toggle. The first visible field is a «Customer Family» dropdown that reads 'code · name · #id'.",p:1},
+  {id:"J2-3",sc:"New Batch dialog",d:"Choose the exact customer.",e:"One pick.",w:"For a Family with several members, a second «Customer or Prospect» dropdown appears. Check that picking from search fills both."},
+  {id:"J2-4",sc:"Customer Families",hop:1,d:"Use a customer whose Family has no Sector, or has a pending Location. Follow the fix, then come back.",e:"You fix it inline and never leave the quote.",w:"A red 'isn't ready' box offers «Open Customer Families», which leaves the dialog. On return the dialog should reopen with your draft (kept for 60 minutes). Check that everything you typed survived.",p:1},
+  {id:"J2-5",sc:"New Batch dialog",d:"Choose Plant and Sector.",e:"Filled in for you when there is only one option.",w:"Options read 'code · name · #id'. The Sector hint says «First Sector suggested; this Batch uses exactly one». Is that meaningful to a salesperson?"},
+  {id:"J2-6",sc:"New Batch dialog",d:"Delivery: first pick a saved Location, then try typing an address instead.",e:"Saved locations appear first, and a typed address works just as well.",w:"The small print under a typed address says it is 'not an approved Location — master-backed freight stays blocked'. That blocker only bites later, at Calculate (J4-5). Did you notice the small print here?",p:1},
+  {id:"J2-7",sc:"New Batch dialog",d:"Set Bill-to and Payment terms.",e:"Defaulted from the customer.",w:"Typed billing text also leaves route readiness blocked. Payment offers only ≤30, 45, 60 or 90 days, with no customer default."},
+  {id:"J2-8",sc:"New Batch dialog",d:"Read the buttons at the bottom before you click.",e:"One clear primary button, and the consequences spelled out beside it.",w:"«Cancel», a red «Clear local draft only» and «Create governed Batch». What gets created and cleared is folded inside «What this creates, and what it clears».",p:1},
+  {id:"J2-9",sc:"Workspace",d:"Click Create. Count the scrolls until you reach the place to add a product.",e:"You land inside the quote with the cursor on 'Add product'.",w:"The workspace heading is «Products and readiness». Seven sections come before Products: Durable identity, Family Sectors, Linked immutable Quote evidence, Previous approved Quote, People and edit lock, Preparation and readiness, and Batch Profile.",p:1},
+  {id:"J2-10",sc:"Top bar",d:"Compare the top bar with the workspace.",e:"Both give the same next action and the same count.",w:"The top bar shows 'Batch <ref> · customer', a stage 'n of 7 ▾', «Next: …» and 'n to fix'. Check these against the workspace's readiness label."}
+ ]},
+ {id:"J2B",title:"Start a quote for a new prospect",goal:"Quote someone who is not yet in the customer list.",steps:[
+  {id:"J2B-1",sc:"New Batch dialog",d:"Search for a name that does not exist.",e:"'Add \"name\" as a new prospect' appears at the top of the results.",w:"«⊕ Create “name” as a new Prospect…» appears. Is it easy to spot?"},
+  {id:"J2B-2",sc:"New Batch dialog",d:"Fill in the Prospect form.",e:"Only the name and one sector.",w:"A 'Check similar existing Customers first' list appears, the Family defaults to «Create a proposed Family with this Prospect», and Sector is required. Is the idea of a Family explained?"},
+  {id:"J2B-3",sc:"New Batch dialog",d:"Click «Create and select Prospect», then finish Plant, Delivery and Payment.",e:"You go straight on to adding products.",w:"A new prospect has no approved Locations, so the address has to be typed, which means freight is blocked later. Can a new prospect reach a price without a trip to Customer Families? Record what happens.",p:1}
+ ]},
+ {id:"J3",title:"Add products",goal:"Put one existing SKU and one new product into the quote.",steps:[
+  {id:"J3-1",sc:"Workspace",d:"Check whether you can edit. Then leave the Batch, reopen it from Active Batches, and check again.",e:"Editing just works. A lock only shows up when someone else is editing.",w:"On reopen the workspace may be read-only ('Read-only until a governed lock is acquired') with every control disabled. «Acquire edit lock» sits several sections above Products.",p:1},
+  {id:"J3-2",sc:"Workspace",d:"Add the existing SKU.",e:"Type the customer's reference or item code and pick from the matches.",w:"The button says «Add durable row», then «Select established SKU», a dropdown of every visible SKU ('Customer · code · item · status · used recently'). Can you type to search in it? How long is the list?",p:1},
+  {id:"J3-3",sc:"Workspace",d:"Enter the quantity and MOQ.",e:"Quantity sits next to the product name.",w:"Find where volume and MOQ are entered. Blank and 0 mean different things, so check that the screen makes the difference clear."},
+  {id:"J3-4",sc:"Workspace",d:"Add a new product with «+ Create proposed SKU».",e:"Dimensions and board, with sensible defaults.",w:"Count the required fields. The Construction picker has «+ New». Did you need to visit SKU Master or the Construction Library?"},
+  {id:"J3-5",sc:"Workspace",d:"Make a SET: a box plus its partition.",e:"'Group as a set' in plain words.",w:"«Start SET» and «Attach component» in a separate 'SET membership' section. Is it clear which row is the parent?"},
+  {id:"J3-6",sc:"Workspace",d:"Remove a row, then restore it.",e:"Undo is one click.",w:"An inline confirmation says 'It remains in history…'. This is good; confirm it works."},
+  {id:"J3-7",sc:"Workspace",d:"If you had rows in the old local grid, look for the import banner.",e:"Clear wording about what moves across and what is lost.",w:"«Review and import» or «Discard these local rows». Is it clear which rows win?"}
+ ]},
+ {id:"J4",title:"Price and readiness",goal:"Get a trustworthy price for every row and clear every blocker.",steps:[
+  {id:"J4-1",sc:"Workspace",d:"Price the quote.",e:"One 'Calculate price' button. If a row fails, you see which one and why, and nothing else is left half-done.",w:"There are three buttons: «Recheck governed readiness», «Calculate all active rows» and each row's «Calculate governed row». The batch run stops at the first refused row, so earlier rows stay calculated.",p:1},
+  {id:"J4-2",sc:"Workspace",d:"Find the price per unit and the total for the whole quote.",e:"Rate and total are the most prominent numbers on the screen.",w:"Write down where ₹/unit appears and whether a quote total exists at all.",p:1},
+  {id:"J4-3",sc:"Workspace",d:"Click each blocker in the readiness list.",e:"Each click takes you to the exact field, with the problem named beside it.",w:"Blockers read 'Row #<database id>' rather than row 1, 2, 3, followed by 'Open <field> →'. Does each one land you on the field?",p:1},
+  {id:"J4-4",sc:"Workspace",d:"Change the commercial terms with «Edit commercial terms» (Pricing Group).",e:"Freight, interest and payment terms in plain language.",w:"Freight mode, and 'Required when the override differs from derived Interest'. Is the Pricing Group idea necessary for a one-product quote?"},
+  {id:"J4-5",sc:"Workspace",d:"Fix the route for a typed address (from J2-6) with «Edit route» or «Add Location route».",e:"You fix it here, once.",w:"Does it send you back to Customer Families to approve a Location?",p:1},
+  {id:"J4-6",sc:"Workspace",d:"Change the margin with «Revise profile».",e:"A margin field you can edit in place.",w:"The save button is «Create profile revision». Box and PP conversion, waste and margin all show together."},
+  {id:"J4-7",sc:"Quick calculation",hop:1,d:"Open «Costing deep-dive» on a row, change something, apply it, and come back.",e:"The detail opens beside the row, and closing it keeps your place.",w:"It switches to the Quick calculation tab, with «← Batch Builder» and 'Row n' in the top bar. The review lasts only for this session: edits come back through «Apply to Batch row», and a reload loses anything not applied. Clicking the sidebar asks whether to exit the review.",p:1},
+  {id:"J4-8",sc:"Workspace",d:"After applying, look at that row.",e:"It shows 'price out of date' and one click recalculates it.",w:"Is the row shown as stale? Do you need to recalculate by hand?"},
+  {id:"J4-9",sc:"Top bar",d:"Click «Next:» in the top bar.",e:"Focus lands on the right control.",w:"For a governed Batch it says «Calculate the batch» or «Create the draft Quote candidate»."}
+ ]},
+ {id:"J5",title:"Customer document, approval and sharing",goal:"From a priced quote to a document the customer has received, recorded as shared.",steps:[
+  {id:"J5-1",sc:"Workspace",d:"Click «Atomic Send · create draft candidate».",e:"A 'Preview quote' step that shows exactly what the customer will get.",w:"The words 'Atomic Send' and 'candidate'. The result banner reads 'Immutable draft candidate #N was created' with «Open immutable draft evidence».",p:1},
+  {id:"J5-2",sc:"Quotes · History",hop:1,d:"Open it.",e:"You see the document you are about to send.",w:"You move to Quotes, History view, with a Working/Governed/History switch. The Quote reference says 'Allocated on first approval'. Can you see the customer's document at this point?",p:1},
+  {id:"J5-3",sc:"Quotes · History",d:"Click «Submit».",e:"'Send for approval' as the obvious primary button.",w:"The button sits inside a small 'Workflow' group in the toolbar. You may see 'Reload the source Batch before Submit' if the content version is missing."},
+  {id:"J5-4",sc:"Approval Inbox",hop:1,d:"As the Checker, open «Approval Inbox» and approve. Also try Return on another quote.",e:"Approve in place, with a note field in the app for Return.",w:"Approve uses a browser confirm pop-up. Return and Withdraw use browser prompt boxes for the note. Is self-approval explained?",p:1},
+  {id:"J5-5",sc:"Quotes",d:"Find the customer document preview for the approved quote.",e:"The preview opens right after approval.",w:"«Customer document preview» is built into the Governed view. Check whether the History and Inbox views show it too.",p:1},
+  {id:"J5-6",sc:"Quotes · Governed",hop:1,d:"Get to the Governed view of this quote.",e:"One click.",w:"The Governed view opens only when you type or paste the permanent reference (NAG/QUO/…) into a box. Count the steps it takes.",p:1},
+  {id:"J5-7",sc:"Quotes",d:"Click «Share with customer». Try it once from the Governed view and once from the History view.",e:"One sheet asking channel and date, then the download.",w:"The Governed view shows Channel, Date and External reference, then «Record and download». The History view's code has no share form, so the button may fire without asking anything. Write down any error text word for word.",p:1},
+  {id:"J5-8",sc:"Quotes · Governed",d:"Download the document and open it.",e:"A polished PDF or Excel carrying the reference, recipient and validity.",w:"«↓ Quote workbook» gives Excel only. PDF exists only on the local Working view. Check the reference, the recipient and the BETA marking.",p:1},
+  {id:"J5-9",sc:"Top bar",d:"On the governed Batch, open the stage menu (▾) and click 'Customer document', 'Approval' or 'Shared'.",e:"It opens this quote's document.",w:"The code sends those stages to Quotes › Working, the local browser-only items, not to your governed quote.",p:1}
+ ]},
+ {id:"J6",title:"Customer response",goal:"Record what the customer said.",steps:[
+  {id:"J6-1",sc:"Quotes",d:"Click «Record response» and record 'Accepted' with a PO number. Try it from both the Governed and History views.",e:"Plain choices: Accepted, Rejected, Expired, Waiting.",w:"The options appear as raw words ('awaiting response', 'accepted'…). Accepted asks for a date and a PO reference. The History view may have no form, as in J5-7.",p:1},
+  {id:"J6-2",sc:"Quotes",d:"Check where the response now appears.",e:"On the quote, and on any future quote for this customer.",w:"The 'Customer response' section, with the full history folded away. It should also appear later on the 'Previous approved Quote' card (J8-5)."}
+ ]},
+ {id:"J7",title:"Revise after negotiation",goal:"The customer wants 3% off. Make revision 2, get it approved and share it, keeping revision 1 intact.",steps:[
+  {id:"J7-1",sc:"Batch Builder",hop:1,d:"On the shared revision, click «Create revision».",e:"'Revise' opens an editable copy right here.",w:"A long browser confirm pop-up, then Batch Builder reopens the source Batch. Do you hold the lock? Are the old values there?",p:1},
+  {id:"J7-2",sc:"Workspace",d:"Lower the price by margin or terms, then recalculate.",e:"Change one number and see the new price at once.",w:"You must recalculate the rows and Send again, repeating J4-1 and J5-1."},
+  {id:"J7-3",sc:"Approval Inbox",hop:1,d:"Submit and approve revision 2 (repeat J5-3 and J5-4). Count the screen switches.",e:"Same count as the first time, or fewer.",w:"History → Inbox → Governed again."},
+  {id:"J7-4",sc:"Quotes",d:"Compare revision 2 with revision 1.",e:"The first line reads 'Rate ₹X → ₹Y, total ₹A → ₹B'.",w:"The comparison is titled «Compare with source revision». 'Authority differences' (Pricing Basis, engine, rounding…) appear as raw JSON.",p:1},
+  {id:"J7-5",sc:"Quotes · Governed",d:"Share revision 2. Then open revision 1.",e:"Revision 1 is clearly marked as replaced, and you can see which revision the customer has.",w:"Look for the 'superseded' standing badge on revision 1 and the revision rail labels."},
+  {id:"J7-6",sc:"Quotes",d:"Withdraw a draft you don't need.",e:"A confirmation in the app, with an optional reason.",w:"A browser prompt box asks for a required reason."}
+ ]},
+ {id:"J8",title:"Find and resume",goal:"Next morning: pick up where you left off, and use this customer's history.",steps:[
+  {id:"J8-1",sc:"Sidebar",d:"Find yesterday's quote for customer X.",e:"One search box on a quotes list, by customer.",w:"There are three candidate places: Active Batches (Batches), Quotes › History (revisions) and Quotes › Governed (needs the reference). Which did you try first?",p:1},
+  {id:"J8-2",sc:"Active Batches",d:"Scan the Active Batches list.",e:"Customer, value, status ('waiting approval') and last change.",w:"The columns are Customer Family, Plant, Sector, Pricing Basis, State and Owner, with «Open Batch» and «Quote evidence». There is no price and no quote status."},
+  {id:"J8-3",sc:"Batch Builder",d:"Reload the browser in the middle of a quote.",e:"You come back to the same quote.",w:"The active governed Batch is held only for the session, so a reload may drop you back to 'No governed Batch is active'.",p:1},
+  {id:"J8-4",sc:"Quotes",d:"While editing Batch A, try to open Batch B from Quotes with «Open current Batch».",e:"It switches cleanly and saves A.",w:"The error reads 'Close <ref> in Batch Builder first so its current edit lock can be released safely'. Is there a Close button anywhere?",p:1},
+  {id:"J8-5",sc:"Workspace",d:"Start a new quote for the same customer and plant. Use the 'Previous approved Quote' card.",e:"Last price, date and outcome, one click away.",w:"«Open and compare» takes you away to Quotes. Can you compare without leaving the new quote?"},
+  {id:"J8-6",sc:"Quotes · History",d:"Filter Quote History for an older quote.",e:"Every quote you are allowed to see is searchable.",w:"The filter tooltip says it only filters the bounded list already in this browser. Can you reach older records?"}
+ ]},
+ {id:"J9",title:"Side doors and traps",goal:"Paths that still exist and could lead a user into the wrong kind of work.",steps:[
+  {id:"J9-1",sc:"Quick calculation",hop:1,d:"Open «Quick calculation» from the sidebar and price something.",e:"It is obviously a scratchpad, and there is a way to turn it into a quote.",w:"The top bar says 'Private · no Batch context'. Can the inputs move into a customer quote? Does anything look like a quote?"},
+  {id:"J9-2",sc:"Quotes · Working",hop:1,d:"Click «Quotes» in the sidebar and see which view opens first.",e:"Your real quotes.",w:"The default view may be Working: local items kept only in this browser, with Excel and PDF export and a «Drafts» menu. Could that export pass for a real quote?",p:1},
+  {id:"J9-3",sc:"Batch Builder",d:"With no active Batch, use the local grid: add a row, click «Calculate All», then send to Quote Items.",e:"This path should be gone, or labelled beyond doubt.",w:"There are LOCAL tags. Would a new user believe they had made a quote?",p:1},
+  {id:"J9-4",sc:"Various",d:"List every browser pop-up you met: Approve, Return, Withdraw, Create revision, Clear All, Issue.",e:"None. Confirmations belong inside the app.",w:"The code uses window.confirm and window.prompt for these actions."},
+  {id:"J9-5",sc:"Various",d:"Vocabulary check: in the note, write down every term below that you saw without knowing what it meant.",e:"Fewer than five.",w:"Batch, governed, durable, immutable, candidate, Atomic Send, evidence, lineage, content version, Pricing Basis Release, Pricing Group, Delivery Group, SET, edit lock, Customer Family, Party, snapshot, fingerprint, standing."},
+  {id:"J9-6",sc:"Workspace",d:"Open the same Batch in two tabs, or as two users.",e:"The second one is told who is editing, in plain words.",w:"You may see «Reclaim stale lock» with 'heartbeat' wording."},
+  {id:"J9-7",sc:"New Batch dialog",d:"Keyboard only: tab through the New Batch dialog, press Esc, and press Enter in the search.",e:"Tab order follows the form, Esc closes the dialog, Enter picks the top match.",w:"Enter in the search is blocked on purpose. Check that Esc closes the search and then the dialog."}
+ ]}
+];
+
+// ---------- state ----------
+const LS_KEY = "qjtm_results_v1", LS_META = "qjtm_meta_v1";
+let results = {};           // stepId -> {s, sev, note, t}
+let meta = {label:"", tester:""};
+let db = null;
+let filter = "all";
+const lsGet = k => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } };
+const lsSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+results = lsGet(LS_KEY) || {};
+meta = lsGet(LS_META) || meta;
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt = s => esc(s).replace(/«(.*?)»/g, '<span class="ui">$1</span>');
+const STATUSES = [["pass","Pass"],["hurdle","Hurdle"],["fail","Fail"],["na","N/A"]];
+
+// ---------- render ----------
+const openSet = new Set(["J1"]);
+function render(){
+  const host = document.getElementById("journeys");
+  const focusId = document.activeElement?.id;
+  host.innerHTML = "";
+  for (const j of J){
+    const steps = j.steps.filter(st => {
+      const r = results[st.id];
+      if (filter === "open") return !r?.s;
+      if (filter === "issues") return r?.s === "hurdle" || r?.s === "fail";
+      if (filter === "hop") return !!st.hop;
+      return true;
+    });
+    if (!steps.length && filter !== "all") continue;
+    const c = count(j.steps);
+    const det = document.createElement("details");
+    det.className = "journey"; det.dataset.j = j.id;
+    if (openSet.has(j.id) || filter !== "all") det.open = true;
+    det.addEventListener("toggle", () => { det.open ? openSet.add(j.id) : openSet.delete(j.id); });
+    det.innerHTML = `<summary><span class="chev" aria-hidden="true">▸</span><span class="jid">${j.id}</span>
+      <span class="jtitle"><h3>${esc(j.title)}</h3><small>${esc(j.goal)}</small></span>
+      <span class="jmini"><span>${c.done}/${j.steps.length}</span><span class="p">✓${c.pass}</span><span class="h">▲${c.hurdle}</span><span class="f">✕${c.fail}</span></span></summary>`;
+    const list = document.createElement("div"); list.className = "steps";
+    for (const st of steps){
+      const r = results[st.id] || {};
+      const el = document.createElement("div");
+      el.className = "step"; el.dataset.s = r.s || "";
+      el.innerHTML = `
+        <div class="sid"><span>${st.id}</span><span class="screen${st.hop ? " hop" : ""}">${esc(st.sc)}</span></div>
+        <div class="body">
+          <div class="row"><b>Do</b><span>${fmt(st.d)}${st.hop ? '<span class="tag hop">Screen switch</span>' : ""}</span></div>
+          <div class="row ideal"><b>Ideal</b><span>${fmt(st.e)}</span></div>
+          <div class="row watch"><b>Watch</b><span>${fmt(st.w)}${st.p ? '<span class="tag pred">Predicted</span>' : ""}</span></div>
+        </div>
+        <div class="act">
+          <div class="seg" role="group" aria-label="Result for ${st.id}">
+            ${STATUSES.map(([v,l]) => `<button type="button" data-v="${v}" aria-pressed="${r.s===v}">${l}</button>`).join("")}
+          </div>
+          <select id="sev-${st.id}" aria-label="Severity for ${st.id}">
+            ${[["","Severity…"],["high","High · blocks or misleads"],["med","Medium · repeated friction"],["low","Low · polish"]].map(([v,l]) => `<option value="${v}" ${r.sev===v?"selected":""}>${l}</option>`).join("")}
+          </select>
+          <textarea id="note-${st.id}" aria-label="Notes for ${st.id}" placeholder="What happened? Exact wording, clicks, seconds…">${esc(r.note || "")}</textarea>
+          <span class="saved" id="saved-${st.id}">${r.t ? "Saved " + new Date(r.t).toLocaleString() : ""}</span>
+        </div>`;
+      el.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+        const cur = results[st.id]?.s;
+        save(st.id, { s: cur === b.dataset.v ? "" : b.dataset.v });
+      }));
+      el.querySelector("select").addEventListener("change", e => save(st.id, { sev: e.target.value }));
+      const ta = el.querySelector("textarea");
+      let timer = null;
+      ta.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => save(st.id, { note: ta.value }, true), 900); });
+      ta.addEventListener("blur", () => { clearTimeout(timer); if ((results[st.id]?.note || "") !== ta.value) save(st.id, { note: ta.value }, true); });
+      list.appendChild(el);
+    }
+    det.appendChild(list);
+    host.appendChild(det);
+  }
+  if (focusId){ const f = document.getElementById(focusId); if (f) f.focus({preventScroll:true}); }
+  renderSummary();
+}
+function count(steps){
+  const c = {pass:0,hurdle:0,fail:0,na:0,done:0};
+  for (const st of steps){ const s = results[st.id]?.s; if (s){ c[s]++; c.done++; } }
+  return c;
+}
+function renderSummary(){
+  const all = J.flatMap(j => j.steps);
+  const c = count(all);
+  const hops = all.filter(s => s.hop).length;
+  document.getElementById("summary").innerHTML = `
+    <div class="stat"><span class="n">${c.done}/${all.length}</span><span class="l">Steps tested</span></div>
+    <div class="stat pass"><span class="n">${c.pass}</span><span class="l">Pass</span></div>
+    <div class="stat hurdle"><span class="n">${c.hurdle}</span><span class="l">Hurdle</span></div>
+    <div class="stat fail"><span class="n">${c.fail}</span><span class="l">Fail</span></div>
+    <div class="stat"><span class="n">${hops}</span><span class="l">Screen-switch steps</span></div>`;
+  const pct = n => (100 * n / all.length) + "%";
+  document.getElementById("bar").innerHTML =
+    `<i style="width:${pct(c.pass)};background:var(--pass)"></i><i style="width:${pct(c.hurdle)};background:var(--hurdle)"></i><i style="width:${pct(c.fail)};background:var(--fail)"></i><i style="width:${pct(c.na)};background:var(--na)"></i>`;
+}
+
+// ---------- persistence ----------
+async function save(id, patch, quiet){
+  const next = { ...(results[id] || {}), ...patch, t: Date.now() };
+  results = { ...results, [id]: next };
+  lsSet(LS_KEY, results);
+  if (!quiet) render(); else { renderSummary(); const s = document.getElementById("saved-" + id); if (s) s.textContent = "Saving…"; }
+  if (db){
+    try { await db.doc("results/" + id).set(next); }
+    catch (e) { setStorage("this browser only (couldn't reach the shared store: " + (e?.code || "error") + ")"); }
+  }
+  const s = document.getElementById("saved-" + id);
+  if (s) s.textContent = "Saved " + new Date(next.t).toLocaleString();
+}
+let metaTimer = null;
+function saveMeta(){
+  meta = { label: document.getElementById("runLabel").value, tester: document.getElementById("tester").value };
+  lsSet(LS_META, meta);
+  clearTimeout(metaTimer);
+  metaTimer = setTimeout(async () => { if (db) { try { await db.doc("meta/run").set(meta); } catch {} } }, 800);
+}
+function setStorage(t){ document.getElementById("storage").innerHTML = "Storage: <b>" + esc(t) + "</b>"; }
+
+async function connect(){
+  setStorage("this browser only");
+  try {
+    if (!window.claude?.use) return;
+    const d = await window.claude.use("db");
+    if (!d) return;
+    db = d;
+    setStorage("saved to this page");
+    const m = await db.doc("meta/run").get().catch(() => null);
+    if (m?.exists){ meta = { ...meta, ...m.data() }; applyMeta(); }
+    db.collection("results").onSnapshot(snap => {
+      const incoming = {};
+      snap.docs.forEach(doc => { incoming[doc.id] = doc.data(); });
+      // keep any local mark newer than the store's copy
+      const merged = { ...incoming };
+      for (const [k,v] of Object.entries(results)) if (!incoming[k] || (v.t || 0) > (incoming[k].t || 0)) merged[k] = v;
+      const active = document.activeElement;
+      const typing = active && active.tagName === "TEXTAREA";
+      results = merged; lsSet(LS_KEY, results);
+      if (typing) renderSummary(); else render();
+    }, () => setStorage("this browser only"));
+  } catch { /* stays local */ }
+}
+function applyMeta(){
+  document.getElementById("runLabel").value = meta.label || "";
+  document.getElementById("tester").value = meta.tester || "";
+}
+
+// ---------- findings export ----------
+function findingsText(){
+  const sevLabel = {high:"High",med:"Medium",low:"Low","":"—"};
+  let out = `# Quote journey self-test findings\n\nRun: ${meta.label || "(unnamed)"} · Tester: ${meta.tester || "—"} · Exported ${new Date().toLocaleString()}\n`;
+  const all = J.flatMap(j => j.steps); const c = count(all);
+  out += `Tested ${c.done}/${all.length} · Pass ${c.pass} · Hurdle ${c.hurdle} · Fail ${c.fail} · N/A ${c.na}\n`;
+  for (const j of J){
+    const hits = j.steps.filter(st => ["hurdle","fail"].includes(results[st.id]?.s) || (results[st.id]?.note || "").trim());
+    if (!hits.length) continue;
+    out += `\n## ${j.id} ${j.title}\n`;
+    for (const st of hits){
+      const r = results[st.id] || {};
+      out += `- **${st.id}** [${(r.s || "untested").toUpperCase()} · ${sevLabel[r.sev || ""]}] (${st.sc}) ${st.d.replace(/[«»]/g,"")}\n`;
+      if ((r.note || "").trim()) out += `  - Observed: ${r.note.trim().replace(/\n+/g," / ")}\n`;
+    }
+  }
+  return out;
+}
+document.getElementById("copyMd").addEventListener("click", () => {
+  const text = findingsText(); const state = document.getElementById("copyState");
+  const ta = document.getElementById("mdout"); ta.value = text;
+  try {
+    navigator.clipboard.writeText(text).then(() => { state.textContent = "Findings copied."; },
+      () => { ta.hidden = false; ta.select(); state.textContent = "Couldn't copy automatically. The text is selected below."; });
+  } catch { ta.hidden = false; ta.select(); state.textContent = "Couldn't copy automatically. The text is selected below."; }
+});
+document.getElementById("showMd").addEventListener("click", () => {
+  const ta = document.getElementById("mdout"); ta.value = findingsText(); ta.hidden = !ta.hidden;
+});
+document.getElementById("resetBtn").addEventListener("click", () => { document.getElementById("confirmBox").hidden = false; });
+document.getElementById("resetNo").addEventListener("click", () => { document.getElementById("confirmBox").hidden = true; });
+document.getElementById("resetYes").addEventListener("click", async () => {
+  const ids = Object.keys(results);
+  results = {}; lsSet(LS_KEY, results); render();
+  document.getElementById("confirmBox").hidden = true;
+  if (db) for (const id of ids){ try { await db.doc("results/" + id).delete(); } catch {} }
+  document.getElementById("copyState").textContent = "All marks cleared.";
+});
+
+// ---------- filters ----------
+document.querySelectorAll(".chip[data-f]").forEach(b => b.addEventListener("click", () => {
+  filter = b.dataset.f;
+  document.querySelectorAll(".chip[data-f]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  render();
+}));
+document.getElementById("expandAll").addEventListener("click", e => {
+  const on = e.currentTarget.getAttribute("aria-pressed") !== "true";
+  e.currentTarget.setAttribute("aria-pressed", on);
+  e.currentTarget.textContent = on ? "Collapse all" : "Expand all";
+  J.forEach(j => on ? openSet.add(j.id) : openSet.delete(j.id));
+  render();
+});
+document.getElementById("runLabel").addEventListener("input", saveMeta);
+document.getElementById("tester").addEventListener("input", saveMeta);
+
+applyMeta();
+render();
+connect();
+</script>
