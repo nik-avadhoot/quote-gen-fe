@@ -73,6 +73,9 @@ without explicit Product Owner scope.
   built, with about 65 self-test steps, screen switches and code-predicted UX hurdles, for the
   Product Owner's self-testing. Saved copy of the published test page; a review aid, not an
   authorisation.
+- [`customer-pricing-history-phase-0-implementation-plan-2026-09-23.md`](customer-pricing-history-phase-0-implementation-plan-2026-09-23.md)
+  — Product Owner-approved, Beta-critical Customer Pricing History implementation handoff to Sr Dev
+  Claude Opus 5, with Codex continuing as reviewer.
 
 ## Current open work
 
