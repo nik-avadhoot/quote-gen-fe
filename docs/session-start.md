@@ -1,8 +1,9 @@
 # Session start
 
-Start with [`README.md`](README.md) for the authority hierarchy, then read
-[`current-state.md`](current-state.md) and [`open-work.md`](open-work.md). Read a detailed packet
-only when the current change touches its subject.
+Start with [`PROJECT-HANDOFF.md`](PROJECT-HANDOFF.md) for the authority hierarchy, then read
+[`current-state.md`](current-state.md) and
+[`OPEN-DECISIONS-BACKLOG.md`](OPEN-DECISIONS-BACKLOG.md). Read a detailed packet only when the
+current change touches its subject.
 
 ## Repository boundary
 
@@ -10,17 +11,15 @@ only when the current change touches its subject.
 cross-repository conclusion. Existing modified and untracked files are user/project work; preserve
 them unless the current request explicitly owns them.
 
-Do not read or modify `commercial-intelligence-decisions.md` or environment/secret files without
-explicit scope. Do not stage, commit, push, deploy, or change live Supabase merely because local
-verification passes.
+Do not read or modify environment/secret files without explicit scope. Do not stage, commit, push,
+deploy, or change live Supabase merely because local verification passes.
 
-## Current S9 boundary
+## Current delivery boundary
 
-S9 migrations and recorded automated database verification are complete. Production attestation
-secret provisioning, Edge deployment/activation, real authenticated Calculate/Send/workflow proof,
-runtime Maker/Checker/Admin proof, genuine browser and persistent evidence, and Product Owner
-validation are incomplete. S9 is not technically or Product Owner closed. Keep all S9 records,
-migrations, tests, backend routes, and Edge artifacts active and easy to find.
+S1–S5 are implemented and live; S6 pilot/consolidation is pending. Historical S9 material remains
+available as evidence but does not define current delivery status. Keep S9 records, migrations,
+tests, backend routes, and Edge artifacts easy to find. Do not deploy, provision or inspect secrets,
+or alter live Supabase without explicit scope.
 
 ## Working posture
 
@@ -32,8 +31,9 @@ migrations, tests, backend routes, and Edge artifacts active and easy to find.
   gate for every change.
 - Automated tests, fixture-browser checks, authenticated-live browser checks, deployment, technical
   closure, and Product Owner validation are distinct claims.
-- Record unrelated defects briefly in [`open-work.md`](open-work.md) only when they are current;
-  otherwise leave the current increment focused.
+- Record current unresolved decisions in
+  [`OPEN-DECISIONS-BACKLOG.md`](OPEN-DECISIONS-BACKLOG.md); otherwise leave the current increment
+  focused.
 
 ## Durable technical guardrails
 
