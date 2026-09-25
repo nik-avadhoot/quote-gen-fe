@@ -4,6 +4,8 @@ import { classifyResponse } from "../../lib/backendError.js";
 import { ownerStaleLockReclaimRequest } from "../../lib/batchLockModel.js";
 import { DURABLE_ROW_TYPES, durableRowSelection, openDurableRowInCosting }
   from "../../lib/batchRowModel.js";
+import { IMPORTABLE_ARCHIVE_KEY, localRowProposalFields, localRowToDurableRowBody,
+  readImportableArchive, resolveLocalRowIdentity } from "../../lib/batchRowImport.js";
 import { emptyGovernedReadiness, governedBlockerTarget, governedReadinessCounts,
   governedReadinessFromResponse, staleGovernedReadiness } from "../../lib/governedReadiness.js";
 import { applyFixturePricingGroupUpdate, deliveryGroupStatusBody,
@@ -12,6 +14,7 @@ import { applyFixturePricingGroupUpdate, deliveryGroupStatusBody,
   pricingGroupStatusBody, pricingGroupUpdateBody } from "../../lib/pricingGroupModel.js";
 import { runMutation } from "../../lib/runMutation.js";
 import { batchSkuChoices } from "../../lib/batchSkuChoice.js";
+import { getItem, removeItem, setItem } from "../../lib/persist.js";
 import { FOCUS } from "../../lib/quoteJourney.js";
 import { useAppState } from "../../state/AppStateContext.js";
 
@@ -593,6 +596,77 @@ function MembershipCreator({ setItem, rows, disabled, initialRowId, onCancel, on
   </form>;
 }
 
+// The row-level identity resolution is display-only here; importSelectedRows
+// recomputes it at import time from the same pure function so nothing here
+// can drift from what actually gets written.
+function ImportRowCard({ row, index, identity, manualConstructionId, constructionOptions,
+  selected, status, disabled, onToggle, onChooseConstruction }) {
+  const label = row.matCode || row.product || "Untitled row";
+  const dims = [row.L, row.W, row.H].filter(value => Number(value) > 0).join(" × ") || "No dimensions";
+  return <div className={`batch-workspace-import-row is-${identity.kind}`}>
+    <label className="batch-workspace-import-row-select">
+      <input type="checkbox" checked={selected} disabled={disabled || identity.kind === "unresolved"}
+        onChange={() => onToggle(index)} />
+      <div><strong>{label}</strong><small>{dims} · {row.boxType || "no box type"}</small></div>
+    </label>
+    <div className="batch-workspace-import-row-identity">
+      <span>{identity.label}</span>
+      {identity.kind === "unresolved" && <select value={manualConstructionId || ""} disabled={disabled}
+        onChange={event => onChooseConstruction(index, event.target.value)}>
+        <option value="">Pick a Construction to propose a new SKU</option>
+        {(constructionOptions || []).map(option => <option key={option.id} value={option.id}>
+          {option.construction?.construction_code || `Construction #${option.construction_id}`} · v{option.version_no}
+        </option>)}
+      </select>}
+    </div>
+    {status?.state === "importing" && <small>Importing…</small>}
+    {status?.state === "done" && <small className="is-success">Imported</small>}
+    {status?.state === "error" && <small role="alert">{status.message}</small>}
+  </div>;
+}
+
+function LocalRowImportPanel({ banner, reviewOpen, catalogueLoading, groups, selection, manualConstruction,
+  status, busy, onOpen, onClose, onDismiss, onToggleRow, onChooseConstruction, onImport, skus, constructionOptions }) {
+  if (!banner) return null;
+  if (!reviewOpen) return <div className="batch-workspace-import-banner" role="status">
+    <span>{banner.rows.length} row{banner.rows.length === 1 ? "" : "s"} from your local grid
+      {banner.savedAt ? ` (saved ${new Date(banner.savedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })})` : ""} can
+      be brought into this Batch.</span>
+    <div>
+      <button type="button" onClick={onDismiss}>Dismiss</button>
+      <button type="button" className="is-primary" onClick={onOpen}>Review and import</button>
+    </div>
+  </div>;
+  const resolvedIdentities = banner.rows.map((row, index) => manualConstruction[index]
+    ? { kind: "propose", constructionVersionId: manualConstruction[index], label: "New SKU on manually selected Construction" }
+    : resolveLocalRowIdentity(row, { skus, constructionOptions }));
+  const selectedCount = selection ? selection.size : 0;
+  return <div className="batch-workspace-import-review">
+    <div className="batch-workspace-import-review-title">
+      <strong>Import local rows</strong>
+      <small>Each row needs a governed SKU. A matched SKU is used as-is; otherwise a new SKU is proposed
+        from a Construction, or the row waits for you to pick one.</small>
+    </div>
+    {catalogueLoading && <div className="batch-workspace-empty" role="status">Loading governed SKU and Construction choices…</div>}
+    {!groups.some(group => group.status === "active") && <div className="batch-workspace-warning">
+      No active Pricing Group yet — imported rows have nowhere to attach until one exists.
+    </div>}
+    <div className="batch-workspace-import-rows">
+      {banner.rows.map((row, index) => <ImportRowCard key={index} row={row} index={index}
+        identity={resolvedIdentities[index]} manualConstructionId={manualConstruction[index]}
+        constructionOptions={constructionOptions} selected={selection ? selection.has(index) : false}
+        status={status[index]} disabled={busy || catalogueLoading}
+        onToggle={onToggleRow} onChooseConstruction={onChooseConstruction} />)}
+    </div>
+    <div className="batch-workspace-import-review-actions">
+      <button type="button" onClick={onClose} disabled={busy}>Close</button>
+      <button type="button" onClick={onDismiss} disabled={busy}>Discard these local rows</button>
+      <button type="button" className="is-primary" disabled={busy || catalogueLoading || !selectedCount}
+        onClick={onImport}>{busy ? "Importing…" : `Import ${selectedCount} selected row${selectedCount === 1 ? "" : "s"}`}</button>
+    </div>
+  </div>;
+}
+
 export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixtureWorkspace,
   initialDeliveryAction, showToast, onBatchChange, onClose, embedded = false }) {
   const { batchRows: localRows, invalidateBatchRow, loadBatchRowIntoCosting,
@@ -649,6 +723,12 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     : { status: requestedRowEditor ? "loading" : "idle", skus: [], constructionOptions: [] });
   const [busy, setBusy] = useState(false);
   const [sentRevisionId, setSentRevisionId] = useState(null);
+  const [importBanner, setImportBanner] = useState(null);
+  const [importReviewOpen, setImportReviewOpen] = useState(false);
+  const [importSelection, setImportSelection] = useState(null);
+  const [importManualConstruction, setImportManualConstruction] = useState({});
+  const [importStatus, setImportStatus] = useState({});
+  const [importBusy, setImportBusy] = useState(false);
 
   const acceptBatch = (next, message, { readinessChanged = true } = {}) => {
     if (readinessChanged) setReadiness(current => staleGovernedReadiness(current));
@@ -698,6 +778,24 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
   const lock = batch?.edit_lock;
   const reclaimRequest = ownerStaleLockReclaimRequest(batch);
   const readinessRequest = useRef(0);
+
+  // A prior local grid may have been archived by an ordinary + New Batch
+  // (useCostingBatchBridge.js completeNewBatchStart) into cbb_batch_previous
+  // right before this governed Batch was created. Offer it back only while
+  // this Batch has no durable rows of its own yet — once rows exist here,
+  // whatever was typed locally is either already represented or no longer
+  // the obvious next step, and re-offering it risks a duplicate import.
+  useEffect(() => {
+    // Deferred exactly like refreshGovernedReadiness below: reading a
+    // synchronous localStorage snapshot into state is still an external read,
+    // not a derivation of this render's own props/state, so it stays off the
+    // synchronous render path.
+    const timer = window.setTimeout(() => {
+      setImportBanner(fixtureOnly || !batch?.id || durableRows.length
+        ? null : readImportableArchive(getItem));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fixtureOnly, batch?.id, durableRows.length]);
 
   const refreshGovernedReadiness = async ({ announce = false } = {}) => {
     if (!batch?.id) return null;
@@ -798,23 +896,32 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     onClose?.();
   };
 
+  // Returns the resolved { skus, constructionOptions } so a caller that needs
+  // the fresh values right after awaiting (openImportReview, below) does not
+  // have to read them back out of React state before the next render has
+  // happened. Existing callers that only await it for its state-setting
+  // side effect are unaffected — they simply ignore the return value.
   const loadRowCatalogue = async () => {
-    if (fixtureOnly || rowCatalogue.status === "ready" || rowCatalogue.status === "loading") return;
+    if (fixtureOnly || rowCatalogue.status === "ready") {
+      return { skus: rowCatalogue.skus, constructionOptions: rowCatalogue.constructionOptions };
+    }
     setRowCatalogue({ status: "loading", skus: [], constructionOptions: [] });
     try {
       const response = await apiFetch(`/batches/${batch.id}/row-options`);
       const data = await response.json().catch(() => ({}));
       const outcome = classifyResponse({ ok: response.ok, status: response.status, data });
       if (outcome.kind === "ok") {
-        setRowCatalogue({ status: "ready", skus: data.skus || [],
-          constructionOptions: data.construction_options || [] });
-      } else {
-        setRowCatalogue({ status: outcome.kind === "access-denied" ? "denied" : "error",
-          skus: [], constructionOptions: [], message: outcome.message || "Governed SKU options are unavailable." });
+        const next = { skus: data.skus || [], constructionOptions: data.construction_options || [] };
+        setRowCatalogue({ status: "ready", ...next });
+        return next;
       }
+      setRowCatalogue({ status: outcome.kind === "access-denied" ? "denied" : "error",
+        skus: [], constructionOptions: [], message: outcome.message || "Governed SKU options are unavailable." });
+      return { skus: [], constructionOptions: [] };
     } catch {
       setRowCatalogue({ status: "error", skus: [], constructionOptions: [],
         message: "Governed SKU options could not be loaded. No fixture was substituted." });
+      return { skus: [], constructionOptions: [] };
     }
   };
 
@@ -1332,6 +1439,119 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     }
   };
 
+  // Selection defaults to every row that resolves cleanly (matched or
+  // proposable), computed from loadRowCatalogue's own return value rather
+  // than the rowCatalogue state variable — that state has not re-rendered
+  // yet at this point in the async function, so reading it here would still
+  // see the pre-fetch value.
+  const openImportReview = async () => {
+    setImportReviewOpen(true);
+    setImportStatus({});
+    setImportSelection(null);
+    const catalogue = await loadRowCatalogue();
+    if (!importBanner) return;
+    const initial = new Set();
+    importBanner.rows.forEach((row, index) => {
+      if (resolveLocalRowIdentity(row, catalogue).kind !== "unresolved") initial.add(index);
+    });
+    setImportSelection(initial);
+  };
+
+  const closeImportReview = () => {
+    setImportReviewOpen(false);
+    setImportSelection(null);
+    setImportManualConstruction({});
+    setImportStatus({});
+  };
+
+  const toggleImportRow = index => setImportSelection(previous => {
+    const next = new Set(previous || []);
+    if (next.has(index)) next.delete(index); else next.add(index);
+    return next;
+  });
+
+  const chooseImportConstruction = (index, constructionVersionId) => {
+    setImportManualConstruction(previous => ({ ...previous, [index]: constructionVersionId || undefined }));
+    if (constructionVersionId) setImportSelection(previous => new Set([...(previous || []), index]));
+  };
+
+  const dismissImportBanner = () => {
+    removeItem(IMPORTABLE_ARCHIVE_KEY);
+    setImportBanner(null);
+    closeImportReview();
+  };
+
+  const importSelectedRows = async () => {
+    if (!importBanner || !importSelection?.size || !batch?.id) return;
+    const defaultGroupId = groups.find(group => group.status === "active")?.id ?? null;
+    if (!defaultGroupId) {
+      showToast?.("❌ No active Pricing Group is available yet to attach imported rows to.", "error", 8000);
+      return;
+    }
+    setImportBusy(true);
+    const indices = [...importSelection].sort((a, b) => a - b);
+    const failedRows = [];
+    for (const index of indices) {
+      const row = importBanner.rows[index];
+      setImportStatus(previous => ({ ...previous, [index]: { state: "importing" } }));
+      const manualConstructionId = importManualConstruction[index];
+      const identity = manualConstructionId
+        ? { kind: "propose", constructionVersionId: manualConstructionId }
+        : resolveLocalRowIdentity(row, rowCatalogue);
+      let skuId = identity.skuId, skuVersionId = identity.skuVersionId;
+      if (identity.kind === "propose") {
+        const proposed = await proposeSku(localRowProposalFields(row, identity.constructionVersionId));
+        if (!proposed?.versions?.[0]) {
+          setImportStatus(previous => ({ ...previous,
+            [index]: { state: "error", message: "The proposed SKU could not be created." } }));
+          failedRows.push(row);
+          continue;
+        }
+        skuId = proposed.id;
+        skuVersionId = proposed.versions[0].id;
+      } else if (identity.kind !== "matched") {
+        setImportStatus(previous => ({ ...previous,
+          [index]: { state: "error", message: "Needs a Construction or SKU selection first." } }));
+        failedRows.push(row);
+        continue;
+      }
+      const body = localRowToDurableRowBody(row, { skuId, skuVersionId, pricingGroupId: defaultGroupId });
+      const data = await runMutation(`/batches/${batch.id}/rows`, body, { method: "POST", showToast,
+        successMessage: `Imported ${row.matCode || row.product || "row"} into the governed Batch` });
+      if (data?.batch) {
+        acceptBatch(data.batch, "Imported local row added to the governed Batch.");
+        setImportStatus(previous => ({ ...previous, [index]: { state: "done" } }));
+      } else {
+        setImportStatus(previous => ({ ...previous,
+          [index]: { state: "error", message: "The row create was refused." } }));
+        failedRows.push(row);
+      }
+    }
+    // Only rows that were left unselected or that failed stay archived — a
+    // successfully imported row must never be offered again on a later visit.
+    const stillPending = importBanner.rows.filter((row, index) =>
+      !importSelection.has(index) || failedRows.includes(row));
+    if (stillPending.length) {
+      setItem(IMPORTABLE_ARCHIVE_KEY, JSON.stringify({ rows: stillPending, archivedAt: importBanner.savedAt }));
+      setImportBanner({ rows: stillPending, savedAt: importBanner.savedAt });
+      // Re-select whatever still resolves cleanly, against the SAME
+      // already-loaded catalogue — a failed row's own identity (matched or
+      // proposable) did not change, only whether the write itself landed.
+      const nextSelection = new Set();
+      stillPending.forEach((row, index) => {
+        if (resolveLocalRowIdentity(row, rowCatalogue).kind !== "unresolved") nextSelection.add(index);
+      });
+      setImportSelection(nextSelection);
+    } else {
+      removeItem(IMPORTABLE_ARCHIVE_KEY);
+      setImportBanner(null);
+      closeImportReview();
+      setImportSelection(null);
+    }
+    setImportManualConstruction({});
+    setImportBusy(false);
+  };
+
   const changeRowStatus = async (row, status) => {
     setBusy(true);
     let data;
@@ -1603,6 +1823,12 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
           {!batch.caller_holds_lock && <div className="batch-workspace-warning">
             Adding or revising a durable row requires the active governed Batch lock.
           </div>}
+          {batch.caller_holds_lock && <LocalRowImportPanel banner={importBanner} reviewOpen={importReviewOpen}
+            catalogueLoading={rowCatalogue.status === "loading"} groups={groups} selection={importSelection}
+            manualConstruction={importManualConstruction} status={importStatus} busy={importBusy || busy}
+            onOpen={openImportReview} onClose={closeImportReview} onDismiss={dismissImportBanner}
+            onToggleRow={toggleImportRow} onChooseConstruction={chooseImportConstruction}
+            onImport={importSelectedRows} skus={rowCatalogue.skus} constructionOptions={rowCatalogue.constructionOptions} />}
           {(rowCatalogue.status === "denied" || rowCatalogue.status === "error") && <div
             className="batch-workspace-panel-state is-denied" role="status">
             {rowCatalogue.message} Hidden SKU or Construction identities have not been invented.

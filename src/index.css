@@ -1920,6 +1920,102 @@ code {
   background: #fff6e8;
 }
 
+.batch-workspace-import-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #dfa15d;
+  border-radius: 7px;
+  background: #fff3e5;
+  color: #8c4b16;
+  font-size: 9px;
+}
+
+.batch-workspace-import-banner > div {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.batch-workspace-import-review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid #dfa15d;
+  border-radius: 7px;
+  background: #fffaf2;
+}
+
+.batch-workspace-import-review-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.batch-workspace-import-review-title small {
+  color: #718096;
+  font-size: 8.5px;
+}
+
+.batch-workspace-import-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.batch-workspace-import-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #d9cdbd;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 9px;
+}
+
+.batch-workspace-import-row.is-unresolved {
+  border-color: #dfa15d;
+  background: #fff8ef;
+}
+
+.batch-workspace-import-row-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.batch-workspace-import-row-select small {
+  color: #718096;
+  font-size: 8px;
+}
+
+.batch-workspace-import-row-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  text-align: right;
+  color: #4b7867;
+}
+
+.batch-workspace-import-row .is-success {
+  color: #2f7a4d;
+}
+
+.batch-workspace-import-review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .batch-workspace-panel > footer {
   display: flex;
   justify-content: space-between;

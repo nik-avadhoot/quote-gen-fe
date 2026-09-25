@@ -40,6 +40,7 @@
     "test:s3-governed-surface": "node scripts/s3-governed-working-surface-fixtures.mjs",
     "test:s4-quick-calculation": "node scripts/s4-quick-calculation-fixtures.mjs",
     "test:customer-pricing": "node scripts/customer-pricing-fixtures.mjs",
+    "test:batch-row-import": "node scripts/batch-row-import-fixtures.mjs",
     "_comment:test:module-contract": "Bundles the real module graph, so a named import that does not exist on the target module FAILS. ESLint does not resolve named exports (proved: it exits 0 on that defect) and the focused fixtures import each lib module directly, so importing a helper from the WRONG module passed every other gate. It reached the browser instead. Run this whenever imports change.",
     "test:module-contract": "vite build --logLevel error",
     "preview": "vite preview",
