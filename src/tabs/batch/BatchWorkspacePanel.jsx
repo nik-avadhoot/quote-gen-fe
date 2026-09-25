@@ -39,12 +39,18 @@ const PRIOR_QUOTE_SOURCE_LABEL = {
   last_quote_customer_plant: "Latest issued Quote for this exact Customer/Prospect and Plant",
 };
 
+function _localDateString(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function PriorQuoteCard({ priorQuote, fixtureOnly, onOpen }) {
   const { status, priorQuote: record, message } = priorQuote;
   // A display-only flag (SD: "offer-validity lapse as a flag only, never an
-  // automatic Expired write"). The reference instant is read once at mount
-  // through useState's lazy initializer rather than inline during render.
-  const [nowMs] = useState(() => Date.now());
+  // automatic Expired write"). offer_validity_to is a DATE, not a midnight
+  // timestamp - it stays valid through the whole local calendar date and
+  // only lapses on a LATER date, so this compares local date strings (read
+  // once at mount via useState's lazy initializer), never Date.now() millis.
+  const [todayLocal] = useState(() => _localDateString(new Date()));
   if (fixtureOnly || status === "fixture") return <section className="batch-workspace-advanced-section"
     aria-labelledby="batch-workspace-prior-quote-title">
     <h3 id="batch-workspace-prior-quote-title" tabIndex={-1}>Previous approved Quote</h3>
@@ -72,8 +78,12 @@ function PriorQuoteCard({ priorQuote, fixtureOnly, onOpen }) {
   </section>;
 
   const lapsed = record.offer_validity_to
-    && new Date(record.offer_validity_to).getTime() < nowMs
+    && record.offer_validity_to < todayLocal
     && record.standing === "current";
+  // Truthful label: a comparison table can only exist once THIS Batch has a
+  // current frozen revision of its own to compare against. Otherwise "Open
+  // and compare" would promise something that cannot render.
+  const canCompare = record.current_revision_id != null;
   return <section className="batch-workspace-advanced-section" aria-labelledby="batch-workspace-prior-quote-title">
     <h3 id="batch-workspace-prior-quote-title" tabIndex={-1}>Previous approved Quote</h3>
     <div className="batch-workspace-identity-grid">
@@ -90,7 +100,9 @@ function PriorQuoteCard({ priorQuote, fixtureOnly, onOpen }) {
       Offer validity has lapsed on this prior Quote. This is a flag only — its standing was never
       changed automatically.
     </div>}
-    <button type="button" onClick={onOpen}>Open and compare</button>
+    <button type="button" onClick={onOpen}>{canCompare ? "Open and compare" : "Open prior Quote"}</button>
+    {!canCompare && <small>This Batch has no current frozen revision yet, so there is nothing to
+      compare against — this only opens the prior Quote's own evidence.</small>}
   </section>;
 }
 
@@ -761,12 +773,26 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     return () => { cancelled = true; };
   }, [batch?.id, fixtureOnly]);
 
+  // Truthful about what can actually be shown: a comparison needs a current
+  // frozen revision on THIS Batch to compare against the prior Quote. When
+  // one exists (server-derived current_revision_id, never guessed), open
+  // that current revision and carry the exact prior identity in as a
+  // verified ?against=; otherwise just open the prior Quote itself.
   const openPriorQuote = () => {
-    if (fixtureOnly || priorQuote.priorQuote?.revision_id == null) return;
-    setQuoteWorkspaceRequest({
-      revisionId: priorQuote.priorQuote.revision_id,
-      requestId: `prior-quote-${batch.id}-${priorQuote.priorQuote.revision_id}-${Date.now()}`,
-    });
+    const record = priorQuote.priorQuote;
+    if (fixtureOnly || record?.revision_id == null) return;
+    if (record.current_revision_id != null) {
+      setQuoteWorkspaceRequest({
+        revisionId: record.current_revision_id,
+        against: record.revision_id,
+        requestId: `prior-quote-compare-${batch.id}-${record.revision_id}-${Date.now()}`,
+      });
+    } else {
+      setQuoteWorkspaceRequest({
+        revisionId: record.revision_id,
+        requestId: `prior-quote-${batch.id}-${record.revision_id}-${Date.now()}`,
+      });
+    }
     setQuoteView("history");
     setTab("items");
     onClose?.();

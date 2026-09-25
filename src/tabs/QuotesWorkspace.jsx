@@ -132,6 +132,7 @@ export default function QuotesWorkspace({ fixtureOnly = false, initialView = "wo
       toolbarLead={viewSwitch}
       initialRevisionId={fixtureOnly ? null : quoteWorkspaceRequest?.revisionId}
       initialBatchId={fixtureOnly ? null : quoteWorkspaceRequest?.batchId}
+      initialAgainst={fixtureOnly ? null : quoteWorkspaceRequest?.against}
       requestId={fixtureOnly ? null : quoteWorkspaceRequest?.requestId}
       onContextChange={fixtureOnly ? null : setQuoteHeaderContext}
       onOpenSourceBatch={fixtureOnly ? null : openSourceBatch} sourceBatchState={sourceBatchState}

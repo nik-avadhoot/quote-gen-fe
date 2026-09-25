@@ -93,9 +93,14 @@ function Notice({ tone = "warn", children }) {
 
 export default function QuoteCatalogueScreen({
   mode = "history", fixtureOnly = false, initialRevisionId = null, initialBatchId = null,
-  requestId = null, onExitFixture, onOpenSourceBatch, sourceBatchState, showFixtureBanner = true,
-  toolbarLead = null, onContextChange = null,
+  initialAgainst = null, requestId = null, onExitFixture, onOpenSourceBatch, sourceBatchState,
+  showFixtureBanner = true, toolbarLead = null, onContextChange = null,
 }) {
+  // S5 Slice A -> B: a verified prior-Quote identity carried in from the
+  // governed Batch workspace's "Open and compare". Scoped to the exact
+  // revision this navigation opened - QuoteEvidence re-derives per revision.
+  const compareAgainst = initialAgainst != null && initialRevisionId != null
+    ? { revisionId: initialRevisionId, priorRevisionId: initialAgainst } : null;
   const isInbox = mode === "inbox";
   const noun = isInbox ? "Approval Inbox" : "Quote History";
   const fixture = U5_QUOTE_CATALOGUE_ILLUSTRATIONS[mode];
@@ -480,7 +485,8 @@ export default function QuoteCatalogueScreen({
               Opened by exact revision identity. This revision is outside the currently displayed or filtered catalogue rows.
             </Notice>}
             <QuoteEvidence quote={detail.quote} selectedId={selectedId} onSelect={setSelectedId}
-              onOpenSourceBatch={onOpenSourceBatch} sourceBatchState={sourceBatchState} />
+              onOpenSourceBatch={onOpenSourceBatch} sourceBatchState={sourceBatchState}
+              fixtureOnly={fixtureOnly} compareAgainst={compareAgainst} />
           </>}
         </div>
       </div>}

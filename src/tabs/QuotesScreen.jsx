@@ -138,40 +138,91 @@ function _factValue(value) {
   return value === "unavailable" || value === null || value === undefined ? "Unavailable" : String(value);
 }
 
+function _identityLabel(row) {
+  if (row.sku_id != null) return `SKU #${row.sku_id}${row.sku_version_id != null ? ` · v${row.sku_version_id}` : ""}`;
+  return row.batch_row_lineage_id != null ? `Lineage #${row.batch_row_lineage_id}` : "Unidentified row";
+}
+
 function RevisionCompareRow({ row }) {
   return <tr>
-    <td>{row.sku_id != null ? `SKU #${row.sku_id}` : `Lineage #${row.batch_row_lineage_id}`}</td>
+    <td>{_identityLabel(row)}
+      {row.descriptive_identity === "descriptive_identity_unavailable_only_frozen_id"
+        && <small style={{ display: "block", opacity: 0.7 }}>Descriptive name unavailable — internal id only</small>}
+      {row.match_basis === "ambiguous_sku_duplicate" && <small style={{ display: "block", color: C.amberD }}>
+        Duplicate SKU on one side — not auto-matched</small>}
+    </td>
     <td><LifecycleBadge status={row.status} /></td>
     <td>{_factValue(row.previous_rate)}</td>
     <td>{_factValue(row.current_rate)}</td>
     <td>{row.rate_movement === "unavailable" ? "Unavailable" : row.rate_movement}</td>
-    <td>{_factValue(row.previous_quantity)}</td>
-    <td>{_factValue(row.current_quantity)}</td>
-    <td>{_factValue(row.previous_line_total)}</td>
-    <td>{_factValue(row.current_line_total)}</td>
+    <td>{_factValue(row.previous_monthly_volume)}</td>
+    <td>{_factValue(row.current_monthly_volume)}</td>
+    <td>{_factValue(row.previous_cost_before_margin_per_pc)}</td>
+    <td>{_factValue(row.current_cost_before_margin_per_pc)}</td>
     <td>{_factValue(row.previous_margin_pct)}</td>
     <td>{_factValue(row.current_margin_pct)}</td>
   </tr>;
 }
 
+// A deterministic, fully-shaped fixture result - rendered through the exact
+// same table/disclosure JSX as a real response, so the isolated browser
+// fixture proves the render code works (not just that a network call would
+// have been made). One matched row (rate + monthly-volume movement, a
+// missing frozen cost fact left "Unavailable" rather than zero), one added
+// row, one ambiguous-duplicate-SKU row, and a mixed-engine flag.
+const U5_COMPARE_FIXTURE = {
+  current_revision_id: 9302, prior_revision_id: 9201,
+  prior_revision_no: 1, prior_standing: "superseded", prior_workflow_status: "issued",
+  same_chain: false, mixed_engine: true, ambiguous_sku_ids: [7742],
+  line_total_note: "This schema records no genuine frozen customer order quantity or quote line "
+    + "total. Quoted rate leads the comparison; monthly volume is a calculation input, not an order quantity.",
+  added_count: 1, removed_count: 0,
+  rows: [
+    { batch_row_lineage_id: 5501, status: "matched", match_basis: "sku_identity",
+      sku_id: 6601, sku_version_id: 2, descriptive_identity: "descriptive_identity_unavailable_only_frozen_id",
+      previous_rate: 42.2, current_rate: 43.1, rate_movement: 0.9000000000000057,
+      previous_monthly_volume: 12000, current_monthly_volume: 12000,
+      previous_cost_before_margin_per_pc: 38.4, current_cost_before_margin_per_pc: "unavailable",
+      previous_margin_pct: 8, current_margin_pct: 8.5 },
+    { batch_row_lineage_id: null, status: "added", match_basis: "sku_identity",
+      sku_id: 6620, sku_version_id: 1, descriptive_identity: "descriptive_identity_unavailable_only_frozen_id",
+      previous_rate: "unavailable", current_rate: 51.0, rate_movement: "unavailable",
+      previous_monthly_volume: "unavailable", current_monthly_volume: 4000,
+      previous_cost_before_margin_per_pc: "unavailable", current_cost_before_margin_per_pc: 44.8,
+      previous_margin_pct: "unavailable", current_margin_pct: 12 },
+    { batch_row_lineage_id: 5599, status: "removed", match_basis: "ambiguous_sku_duplicate",
+      sku_id: 7742, sku_version_id: 1, descriptive_identity: "descriptive_identity_unavailable_only_frozen_id",
+      previous_rate: 39.5, current_rate: "unavailable", rate_movement: "unavailable",
+      previous_monthly_volume: 8000, current_monthly_volume: "unavailable",
+      previous_cost_before_margin_per_pc: 35.0, current_cost_before_margin_per_pc: "unavailable",
+      previous_margin_pct: 8, current_margin_pct: "unavailable" },
+  ],
+};
+
 // S5 Slice B: price first (D-5), then disclosure. Never re-derives values
 // from current Batch/SKU/master data - every cell is frozen evidence or the
-// literal "Unavailable".
-function RevisionCompare({ revisionId, sourceRevisionId, fixtureOnly }) {
+// literal "Unavailable". `against` is an explicit, server-verified prior
+// revision identity (the Slice A cross-Batch "Last Quote" journey); when
+// absent, the natural intra-chain source_revision_id is used instead.
+function RevisionCompare({ revisionId, sourceRevisionId, against, fixtureOnly }) {
   const [state, setState] = useState({ status: "idle", comparison: null });
   const requestedRef = useRef(null);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
+  const target = against ?? sourceRevisionId;
 
   useEffect(() => {
-    if (fixtureOnly || revisionId == null || sourceRevisionId == null) return undefined;
-    const key = `${revisionId}:${sourceRevisionId}`;
+    if (fixtureOnly || revisionId == null || target == null) return undefined;
+    const key = `${revisionId}:${target}:${against ? "against" : "source"}`;
     if (requestedRef.current === key) return undefined;
     requestedRef.current = key;
     let cancelled = false;
     setState({ status: "loading", comparison: null });
     (async () => {
       try {
-        const response = await apiFetch(`/quotes/revisions/${encodeURIComponent(revisionId)}/compare`);
+        const path = against != null
+          ? `/quotes/revisions/${encodeURIComponent(revisionId)}/compare?against=${encodeURIComponent(against)}`
+          : `/quotes/revisions/${encodeURIComponent(revisionId)}/compare`;
+        const response = await apiFetch(path);
         const data = await response.json().catch(() => ({}));
         if (cancelled) return;
         if (!response.ok) {
@@ -186,28 +237,38 @@ function RevisionCompare({ revisionId, sourceRevisionId, fixtureOnly }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [revisionId, sourceRevisionId, fixtureOnly]);
+  }, [revisionId, target, against, fixtureOnly]);
 
-  if (fixtureOnly) return <div className="quote-evidence-muted">
-    Fixture-only workspace illustration; the revision comparison is not called.</div>;
-  if (revisionId == null || sourceRevisionId == null) return <div className="quote-evidence-muted">
+  if (!fixtureOnly && (revisionId == null || target == null)) return <div className="quote-evidence-muted">
     No source revision recorded for this Quote — nothing to compare against.</div>;
-  if (state.status === "idle" || state.status === "loading") return <div className="quote-evidence-muted">
+  if (!fixtureOnly && (state.status === "idle" || state.status === "loading")) return <div className="quote-evidence-muted">
     Loading comparison…</div>;
-  if (state.status === "error") return <div className="quote-error-state">
+  if (!fixtureOnly && state.status === "error") return <div className="quote-error-state">
     <strong>Comparison unavailable</strong><span>{state.message}</span></div>;
-  const comparison = state.comparison;
+  const comparison = fixtureOnly ? U5_COMPARE_FIXTURE : state.comparison;
   if (!comparison) return <div className="quote-evidence-muted">No comparison evidence returned.</div>;
   return <div>
+    {fixtureOnly && <p className="quote-evidence-muted">
+      Fixture-only workspace illustration; no network call is made — deterministic sample evidence only.</p>}
+    {comparison.line_total_note && <p className="quote-evidence-muted">{comparison.line_total_note}</p>}
+    {!comparison.same_chain && <div className="batch-workspace-panel-state is-partial" role="status">
+      Different Batch/Quote chain — rows are matched by frozen SKU identity, one-to-one only.
+      {comparison.ambiguous_sku_ids?.length > 0
+        ? ` ${comparison.ambiguous_sku_ids.length} SKU(s) had duplicate rows and were left unmatched (shown as added/removed).`
+        : ""}
+    </div>}
     {comparison.mixed_engine && <div className="batch-workspace-panel-state is-partial" role="status">
       Rows in this comparison were calculated on different engine versions — read the authority
       disclosure before treating a rate movement as a like-for-like change.
     </div>}
     <table className="quote-compare-table"><thead><tr>
       <th>Item</th><th>Status</th><th>Prev rate</th><th>Rate</th><th>Δ rate</th>
-      <th>Prev qty</th><th>Qty</th><th>Prev total</th><th>Total</th><th>Prev margin %</th><th>Margin %</th>
+      <th>Prev monthly volume</th><th>Monthly volume</th>
+      <th>Prev cost before margin/pc</th><th>Cost before margin/pc</th>
+      <th>Prev margin %</th><th>Margin %</th>
     </tr></thead><tbody>
-      {comparison.rows.map(row => <RevisionCompareRow key={row.batch_row_lineage_id ?? `${row.status}-${row.sku_id}`} row={row} />)}
+      {comparison.rows.map((row, index) => <RevisionCompareRow
+        key={row.batch_row_lineage_id ?? `${row.status}-${row.sku_id}-${index}`} row={row} />)}
     </tbody></table>
     {(comparison.added_count > 0 || comparison.removed_count > 0) && <p className="quote-evidence-muted">
       {comparison.added_count} row(s) added, {comparison.removed_count} row(s) removed since the prior revision.</p>}
@@ -228,9 +289,14 @@ function RevisionCompare({ revisionId, sourceRevisionId, fixtureOnly }) {
   </div>;
 }
 
-export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, sourceBatchState, fixtureOnly = false }) {
+export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, sourceBatchState,
+  fixtureOnly = false, compareAgainst = null }) {
   const revisions = useMemo(() => orderedQuoteRevisions(quote.revisions), [quote.revisions]);
   const revision = revisions.find(row => String(row.id) === String(selectedId)) || revisions[0];
+  // compareAgainst is scoped to the exact revision the navigation targeted -
+  // switching to a different revision in the rail must not carry it along.
+  const against = revision && compareAgainst && String(compareAgainst.revisionId) === String(revision.id)
+    ? compareAgainst.priorRevisionId : null;
   const batch = quote.batch;
   const sourceBatchStateApplies = batch?.id != null
     && String(sourceBatchState?.batchId) === String(batch.id);
@@ -314,9 +380,11 @@ export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, 
           : <section className="quote-evidence-section"><h3>Recipient identity unavailable</h3>
             <p>This legacy revision has no exact Batch-selected Customer identity. Any earlier addressee text is non-authoritative.</p>
           </section>}
-        <section className="quote-evidence-section"><h3>Compare with source revision</h3>
+        <section className="quote-evidence-section">
+          <h3>{against != null && String(against) !== String(revision.source_revision_id)
+            ? "Compare with prior Quote" : "Compare with source revision"}</h3>
           <RevisionCompare revisionId={revision.id} sourceRevisionId={revision.source_revision_id}
-            fixtureOnly={fixtureOnly} />
+            against={against} fixtureOnly={fixtureOnly} />
         </section>
         {revision.return_note && <div className="quote-return-note"><strong>Recorded return note</strong>{revision.return_note}</div>}
         {revision.withdraw_reason && <div className="quote-return-note"><strong>Recorded withdrawal reason</strong>{revision.withdraw_reason}</div>}
