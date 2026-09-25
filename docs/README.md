@@ -69,6 +69,10 @@ without explicit Product Owner scope.
 - [`quotation-simplification-h0-s1-evidence-2026-09-22.md`](quotation-simplification-h0-s1-evidence-2026-09-22.md)
   — Product Owner D-1..D-9 selections for the simplification programme, H0 handoff evidence, and
   the locally verified Batch-first S1 shell.
+- [`quote-journey-test-map.html`](quote-journey-test-map.html) — flowchart of the quote journey as
+  built, with about 65 self-test steps, screen switches and code-predicted UX hurdles, for the
+  Product Owner's self-testing. Saved copy of the published test page; a review aid, not an
+  authorisation.
 
 ## Current open work
 
