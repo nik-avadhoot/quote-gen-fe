@@ -31,43 +31,72 @@ import {
   findUsableStandardConstructionMatch, isUsableConstruction, sameConstruction,
 } from "../lib/constructionIdentity.js";
 import { getItem, setItem } from "../lib/persist.js";
+import {
+  appliedLocalEffects, appliedMessage, durableReviewInputs, governedRowOrigin, planGovernedRowReturn,
+  runGovernedRowReturn,
+} from "../lib/governedRowReturn.js";
+
+// The review specification for one Batch row, derived ONLY from `profile`.
+// Pure: it neither reads nor writes React state, so a refusal leaves every
+// slice untouched and the caller decides what (if anything) to commit.
+export function prepareBatchRowReview({row,profile,constructionCatalogue,sectors,autoCalcPPDims}){
+  // Gate: block Deep Dive if this row has an unconfirmed SET Code
+  if(row.setCodeAssumed)return{ok:false,reason:"set-code",
+    message:`⚠️ Confirm SET Code [${row.setCode||"?"}] on this row before deep-dive`};
+  const constEntry=(constructionCatalogue||[]).find(c=>c.code===row.constructionCode);
+  if(!constEntry)return{ok:false,reason:"construction",
+    message:"⚠️ This row's Construction is not available in Costing yet. Select its Construction in the grid before opening the deep-dive."};
+  const dimRow=autoCalcPPDims(row);
+  const isPP=isPPType(dimRow.itemType); // R-2
+  const sp=buildSpecFromRow(dimRow,constEntry,profile);
+  if(!sp)return{ok:false,reason:"incomplete",
+    message:"⚠️ This row is not ready for Costing deep-dive. Complete its dimensions and Construction in the grid first."};
+  const commercialDefaults=resolveBatchCommercialDefaults(profile,
+    (sectors||[]).find(sector=>sector.code===profile.sector));
+  // Apply row-level overrides — same logic as calcBatchRow so deepdive reflects exact costing
+  const rowWaste=row.wasteConv_waste;
+  const rowConv=row.wasteConv_conv;
+  const effectiveWaste=rowWaste!==""&&rowWaste!=null?+rowWaste
+    :(isPP?commercialDefaults.wastePP:commercialDefaults.waste);
+  const effectiveConv=rowConv!==""&&rowConv!=null?+rowConv
+    :(isPP?commercialDefaults.convRatePP:commercialDefaults.convRate);
+  if(isPP){sp.wastePP=effectiveWaste;sp.convRatePP=effectiveConv;}
+  else{sp.waste=effectiveWaste;sp.convRate=effectiveConv;}
+  sp.margin=(row.marginOverride!==""&&row.marginOverride!=null)?+row.marginOverride
+    :(isPP?commercialDefaults.marginPP:commercialDefaults.margin);
+  // WAVE 3: the two row-override reads were here. Freight and Interest are
+  // BATCH-level only now. Freight keeps what buildSpecFromRow seeded from the
+  // profile (freightOverride:prof.freightOverride||""). Interest does NOT:
+  // buildSpecFromRow's `prof.interest??0.5` skips the Payment-Terms derivation,
+  // so a 60-day Batch reviewed at 0.5% while Calculate All costed it at 1%.
+  // The review copy now carries the same figure calcBatchRow uses.
+  sp.interest=resolveBatchInterest(profile).value;
+  applyAddOns(sp,row); // R-1: single injection point
+  // S3: a governed-origin review starts from the durable row's OWN returnable
+  // inputs (add-ons, fluting, volume, MOQ), blank and zero kept apart, so the
+  // baseline a governed return compares against is what the row really holds.
+  if(row.durableRowId!=null)Object.assign(sp,durableReviewInputs(row,sp));
+  return{ok:true,spec:sp};
+}
 
 export function useCostingBatchBridge(st){
-  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionCatalogue, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, sectors, setAutoFill, setBatchProfile, setDurableBatch, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setNewBatchDialogOpen, setSetAutoFill, setSpec, setTab, showToast, spec, specRaw } = st;
+  const { activeBatchRowId, autoCalcPPDims, batchDefaults, batchProfile, batchRows, constructionCatalogue, constructionLib, draftDirty, exitReview, invalidateBatchRow, markDraftSent, markReviewPushed, openReview, profileDraft, resetDraft, resolveSpecWasteConv, reviewBaseline, reviewDirty, sectors, setAutoFill, setBatchProfile, setDurableBatch, setItems, setExpandedRows, setBatchResults, setBatchRows, setConstructionLib, setNewBatchDialogOpen, setSetAutoFill, setSpec, setTab, showToast, spec, specRaw, setBatchWorkspaceRequest } = st;
   const batchCommercialDefaults=resolveBatchCommercialDefaults(batchProfile,
     sectors.find(sector=>sector.code===batchProfile.sector));
 
-  const loadBatchRowIntoCosting=(row)=>{
-    // Gate: block Deep Dive if this row has an unconfirmed SET Code
-    if(row.setCodeAssumed){
-      showToast(`⚠️ Confirm SET Code [${row.setCode||"?"}] on this row before deep-dive`,'error',4000);
-      return;
+  // S2: `targetProfile` is the Profile the review is FOR. Opening a governed
+  // Batch row passes freshBatchProfileValues(batch) - the batch-selected
+  // Customer and its commercial context - because the React `batchProfile` is
+  // still the previous render's (possibly another customer's) until the caller
+  // commits. Local Batch Builder rows keep the live profile.
+  const loadBatchRowIntoCosting=(row,targetProfile=batchProfile)=>{
+    const prepared=prepareBatchRowReview({row,profile:targetProfile,
+      constructionCatalogue,sectors,autoCalcPPDims});
+    if(!prepared.ok){
+      showToast(prepared.message,"error",prepared.reason==="set-code"?4000:6500);
+      return false;
     }
-    const constEntry=constructionCatalogue.find(c=>c.code===row.constructionCode);
-    if(!constEntry)return;
-    const dimRow=autoCalcPPDims(row);
-    const isPP=isPPType(dimRow.itemType); // R-2
-    const sp=buildSpecFromRow(dimRow,constEntry,batchProfile);
-    if(!sp)return;
-    // Apply row-level overrides — same logic as calcBatchRow so deepdive reflects exact costing
-    const rowWaste=row.wasteConv_waste;
-    const rowConv=row.wasteConv_conv;
-    const effectiveWaste=rowWaste!==""&&rowWaste!=null?+rowWaste
-      :(isPP?batchCommercialDefaults.wastePP:batchCommercialDefaults.waste);
-    const effectiveConv=rowConv!==""&&rowConv!=null?+rowConv
-      :(isPP?batchCommercialDefaults.convRatePP:batchCommercialDefaults.convRate);
-    if(isPP){sp.wastePP=effectiveWaste;sp.convRatePP=effectiveConv;}
-    else{sp.waste=effectiveWaste;sp.convRate=effectiveConv;}
-    sp.margin=(row.marginOverride!==""&&row.marginOverride!=null)?+row.marginOverride
-      :(isPP?batchCommercialDefaults.marginPP:batchCommercialDefaults.margin);
-    // WAVE 3: the two row-override reads were here. Freight and Interest are
-    // BATCH-level only now. Freight keeps what buildSpecFromRow seeded from the
-    // profile (freightOverride:prof.freightOverride||""). Interest does NOT:
-    // buildSpecFromRow's `prof.interest??0.5` skips the Payment-Terms derivation,
-    // so a 60-day Batch reviewed at 0.5% while Calculate All costed it at 1%.
-    // The review copy now carries the same figure calcBatchRow uses.
-    sp.interest=resolveBatchInterest(batchProfile).value;
-    applyAddOns(sp,row); // R-1: single injection point
+    const sp=prepared.spec;
     // C4 · E4: replacing a review copy that has unpushed changes is the one
     // Deep Dive that can lose work. Opening a review from START cannot — the
     // draft is not read, written or discarded — so there is deliberately NO
@@ -78,7 +107,12 @@ export function useCostingBatchBridge(st){
         `Discard unpushed changes to Batch Row ${_cur+1}?\n\n`+
         "Your Costing draft is untouched either way.\n\n"+
         "OK = discard and open this row  |  Cancel = stay in the current review"
-      ))return;
+      ))return false;
+    }
+    if(activeBatchRowId!==row.id){
+      const prior=batchRows.find(item=>item.id===activeBatchRowId);
+      if(prior?.durableRowId!=null)
+        setBatchRows(current=>current.filter(item=>item.id!==prior.id));
     }
     // C4: builds the SESSION-ONLY review copy. The persisted START draft is not
     // touched. openReview captures START's workspace flags BEFORE the two
@@ -90,6 +124,7 @@ export function useCostingBatchBridge(st){
     // a review copy is open, so there is no flag to set and none to restore.
     // C4 stopped clearing specCommitted here; C6 deleted the flag entirely.
     setTab("costing");
+    return true;
   };
 
   // Stage-1 fix for "Costing edits don't reach Batch Entry": an explicit, one-click
@@ -99,6 +134,58 @@ export function useCostingBatchBridge(st){
   // this SKU alone. Shared Construction fields (box type/ply/flutes/paper layers)
   // are only pushed if the user explicitly confirms, because that Construction
   // may be reused by other SKUs and silently changing it would re-cost them too.
+  // ── S3 · GOVERNED RETURN ────────────────────────────────────────────────
+  // The only return from a review that opened from a DURABLE Batch row. It
+  // never touches the local rows' prices and never writes a local official
+  // figure: it PATCHes the governed row through the existing route with the
+  // row version captured at open, and only after that succeeds (and its
+  // read-back shows the version advanced) does it drop the temporary preview,
+  // end the review and reopen the Batch workspace on the same row. Every
+  // refusal leaves the review, the preview and navigation exactly as they were.
+  // The Profile is not written: Customer A stays the Batch's, the SKU owner B
+  // stays row evidence, and no browser-local Customer can reach the request.
+  const applyCostingToGovernedRow=async()=>{
+    const row=batchRows.find(r=>r.id===activeBatchRowId);
+    const origin=governedRowOrigin(row);
+    const isPP=isPPType(row?.itemType);
+    const plan=planGovernedRowReturn({spec,baseline:reviewBaseline,origin,isPP,
+      profile:{
+        margin:isPP?batchCommercialDefaults.marginPP:batchCommercialDefaults.margin,
+        waste:isPP?batchCommercialDefaults.wastePP:batchCommercialDefaults.waste,
+        conv:isPP?batchCommercialDefaults.convRatePP:batchCommercialDefaults.convRate,
+      },
+      resolved:resolveSpecWasteConv(isPP)});
+    if(plan.status!=="ready"){
+      showToast(`⚠️ ${plan.message}`,plan.status==="no_change"?"info":"error",9000);
+      return {outcome:plan.status};
+    }
+    // Loaded here, not at module scope: apiClient reads import.meta.env on load,
+    // and this module is also imported by node-run fixtures.
+    const { apiFetch }=await import("../lib/apiClient.js");
+    const result=await runGovernedRowReturn({plan,origin,
+      confirm:()=>window.confirm(
+        "Apply to Batch row?\n\n"+
+        `This updates the governed Batch row (${plan.submitted.length} input${plan.submitted.length===1?"":"s"}) `+
+        "and makes its previous calculation stale. Recalculate before Send.\n\n"+
+        "OK = apply  |  Cancel = keep reviewing"),
+      request:(path,body)=>apiFetch(path,{method:"PATCH",
+        headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),
+      readFreshness:o=>apiFetch(`/batches/${o.batchId}/rows/${o.rowId}/effective-inputs`)
+        .then(response=>response.ok?response.json():{freshness:"unknown"}),
+      commit:()=>{
+        const effects=appliedLocalEffects({rows:batchRows,previewId:row.id,origin,
+          requestId:`costing-apply-${origin.batchId}-${origin.rowId}-${Date.now()}`});
+        exitReview();
+        invalidateBatchRow(row.id);
+        setBatchRows(current=>current.filter(item=>item.id!==row.id));
+        setBatchWorkspaceRequest?.(effects.workspaceRequest);
+        setTab(effects.tab);
+      }});
+    showToast(result.outcome==="applied"?`✅ ${appliedMessage(result.freshness)}`:`⚠️ ${result.message}`,
+      result.outcome==="applied"?"success":result.outcome==="cancelled"?"info":"error",9000);
+    return result;
+  };
+
   // B3: specFromProfile — seeds batch-wide fields from batchProfile; blanks row-level fields.
   // Used by "✕ Unlink" (end of REVIEW) and the idle panel "Start new SKU" Reset.
   // The reverse direction (Costing → Profile) already exists as the "↓ Profile" button.
@@ -863,7 +950,14 @@ export function useCostingBatchBridge(st){
   // `+ New Batch` now opens the governed creation surface. Nothing is cleared
   // until public.create_batch has succeeded and its complete workspace has
   // been read back. This function performs that post-success transition only.
-  const completeNewBatchStart=(governedBatch=null)=>{
+  // `keepLocalInputs` is the PROMOTION path: Quick-calculation work being
+  // carried into a Customer quote. It keeps the local rows as INPUTS and the
+  // customer/route context the governed Batch does not itself carry, and it
+  // still clears every local RESULT. That split is the whole point: inputs may
+  // be reused, a browser-local price may not become governed evidence by being
+  // looked at inside a governed Batch (CDM-02, CDM-22). Default false, so the
+  // ordinary + New Batch path is byte-for-byte what it was.
+  const completeNewBatchStart=(governedBatch=null,{keepLocalInputs=false}={})=>{
             // Fix 5: also clear Quote Items on New Batch so prior customer's data cannot leak
             // ── D-2: name what CHANGES, not four of ten things ───────────────
             // The old confirm named the profile, rows, results and Quote Items —
@@ -939,13 +1033,20 @@ export function useCostingBatchBridge(st){
                   setItem('cbb_batch_previous',JSON.stringify({..._prev,archivedAt:Date.now()}));
               }
             }catch{ /* unparseable autosave — leave any existing archive intact */ }
-            const fresh=freshBatchProfileValues(governedBatch);
+            const _freshProfile=freshBatchProfileValues(governedBatch);
+            // Even on promotion the saved governed handoff owns Customer,
+            // destination and payment terms. Local rows remain input-only.
+            const fresh=keepLocalInputs
+              ?{..._freshProfile,priceContext:batchProfile.priceContext}
+              :_freshProfile;
             setBatchProfile(fresh);
             // C5 · B2: seed the draft from the `fresh` object we just built, NOT
             // from batchProfile - that state does not update until the next
             // render, so reading it here would seed from the batch being cleared.
             if(!_isNewBatchDraft)resetDraft(specContextOnly(fresh),null);
-            setBatchRows([]);
+            if(!keepLocalInputs)setBatchRows([]);
+            // ALWAYS cleared, including on a promotion. This is what makes
+            // "copy the inputs, require governed recalculation" true.
             setBatchResults({});
             setExpandedRows(new Set());
             exitReview(); // C4: leaves REVIEW and restores START's workspace flags
@@ -974,11 +1075,13 @@ export function useCostingBatchBridge(st){
             setDurableBatch(governedBatch);
             setNewBatchDialogOpen(false);
             showToast(governedBatch
-              ?`✅ Governed Batch ${governedBatch.batch_reference} started — Costing spec kept`
+              ?(keepLocalInputs
+                ?`✅ Governed Batch ${governedBatch.batch_reference} started — rows kept as inputs, Costing spec kept`
+                :`✅ Governed Batch ${governedBatch.batch_reference} started — Costing spec kept`)
               :"✅ Local Batch draft cleared and durable Batch unbound — Costing spec kept",'success');
   };
 
   const startNewBatch=()=>setNewBatchDialogOpen(true);
 
-  return { completeNewBatchStart, copyCostingToProfile, discardNewDraft, loadBatchRowIntoCosting, newDraftKeepClient, newDraftNewClient, pushCostingToBatchRow, sendCostingToBatch, specContextOnly, specForNextSku, specFromProfile, startNewBatch, startNewSku };
+  return { applyCostingToGovernedRow, completeNewBatchStart, copyCostingToProfile, discardNewDraft, loadBatchRowIntoCosting, newDraftKeepClient, newDraftNewClient, pushCostingToBatchRow, sendCostingToBatch, specContextOnly, specForNextSku, specFromProfile, startNewBatch, startNewSku };
 }

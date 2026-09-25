@@ -1,5 +1,5 @@
 export const QUOTE_ACTION_NAMES = [
-  "calculate", "send", "submit", "approve", "return", "withdraw", "issue",
+  "calculate", "send", "submit", "approve", "return", "withdraw", "share",
   "create_revision", "amend", "reprice",
 ];
 
@@ -70,7 +70,9 @@ export const U5_QUOTE_ILLUSTRATION = {
       id: "fixture-revision-2", revision_no: 2, source_revision_id: "fixture-revision-1",
       workflow_status: "issued", standing: "current", quote_date: "2026-09-11",
       offer_validity_to: "2026-10-11", addressee_name: "Fixture Buying Team",
-      addressee_details: { line_1: "Fixture registered office", city: "Nagpur" },
+      addressee_details: { identity_authority: "batches.customer_party_id", identity_version: 1,
+        party_id: "fixture-party-1", customer_code: "FIX-CUST-1", lifecycle_state: "customer",
+        status_at_send: "active" },
       created_at: "2026-09-11T09:15:00Z",
       created_by_actor: { display_name: "Fixture Maker" },
       approved_at: "2026-09-11T11:30:00Z", approved_by_actor: { display_name: "Fixture Checker" },

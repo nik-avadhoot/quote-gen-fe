@@ -44,8 +44,9 @@ export function PendingActions({ actions, reason = "Backend activation pending",
 
 const ACTION_LABEL = {
   calculate: "Calculate", send: "Send", submit: "Submit", approve: "Approve",
-  return: "Return", withdraw: "Withdraw", issue: "Issue",
+  return: "Return", withdraw: "Withdraw", share: "Share with customer",
   create_revision: "Create revision", amend: "Amend", reprice: "Reprice",
+  record_outcome: "Record response",
 };
 
 // Backend-reported workflow availability. A missing/malformed entry fails
@@ -73,6 +74,31 @@ export function GovernedActions({ actions, onAction, busy = false, label = "Gove
       </button>;
     })}
   </span>;
+}
+
+// ── Whether a customer may be given THIS revision ──────────────────────────
+// Two separate facts, because CDM-24 keeps them separate: approval makes a
+// revision shareable, Issue records that it actually was shared, and a download
+// proves neither. The verdict comes from `revisionShareability` so the wording
+// cannot drift between the governed view and Quote History.
+//
+// Scoped to the revision it is rendered beside. It must never be fed the lane
+// of whatever Batch Builder work happens to be open — that work has nothing to
+// do with the authority of a frozen revision.
+export function ShareabilityNote({ shareable, shared, reason }) {
+  const tone = shareable ? { color: C.green, background: C.greenL, border: `${C.green}55` }
+    : { color: C.slateM, background: C.paper, border: C.border };
+  return (
+    <span title={reason} style={{
+      display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 999,
+      border: `1px solid ${tone.border}`, background: tone.background, color: tone.color,
+      fontFamily: sans, fontSize: T.label, fontWeight: 700, whiteSpace: "nowrap",
+    }}>
+      <span style={{ fontSize: T.micro, fontWeight: 800, letterSpacing: "0.05em",
+        textTransform: "uppercase", opacity: .8 }}>Customer</span>
+      {shareable ? (shared ? "Shared · may be re-sent" : "May be shared") : "Not shareable"}
+    </span>
+  );
 }
 
 // ── The thin footer that carries provenance and legend once ────────────────

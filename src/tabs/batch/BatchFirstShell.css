@@ -1,0 +1,57 @@
+.batch-first-shell {
+  align-items: center;
+  background: #fff;
+  border-bottom: 1px solid #ddd4c7;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  min-height: 46px;
+  padding: 6px 10px;
+}
+
+.batch-first-shell__label {
+  color: #4a647d;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  margin-right: auto;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.batch-first-shell button {
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  min-height: 32px;
+  padding: 5px 13px;
+  white-space: nowrap;
+}
+
+.batch-first-shell__primary {
+  background: #d97b2e;
+  border: 1px solid #b5641f;
+  box-shadow: 0 2px 5px rgb(181 100 31 / 18%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.batch-first-shell__secondary {
+  background: #faf7f2;
+  border: 1px solid #ddd4c7;
+  color: #1c2b3a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.batch-first-shell button:hover { border-color: #d97b2e; }
+.batch-first-shell__primary:hover { background: #c45a1a; }
+.batch-first-shell button:focus-visible { outline: 2px solid #d97b2e; outline-offset: 1px; }
+
+@media (max-width: 720px) {
+  .batch-first-shell {
+    flex-wrap: wrap;
+  }
+  .batch-first-shell__label { flex-basis: 100%; }
+}

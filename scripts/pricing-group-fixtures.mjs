@@ -212,7 +212,10 @@ check(pricingCard.includes("BatchPricingBasisWorkspace compact")
   && entryTab.includes("const pricingCard=<BatchPricingCard")
   && entryTab.includes("<BatchProfileBar pricingCard={pricingCard}/>")
   && profileBar.includes('className="batch-profile-pricing-card"')
-  && profileBar.includes("cloneElement(pricingCard,{expanded:openCards.pricing")
+  // S3: still the Profile bar's own disclosure state, opened also while a
+  // Costing return targets this Batch's workspace (see governed-row-return S3-GR-31).
+  && profileBar.includes("cloneElement(pricingCard,{expanded:pricingExpanded")
+  && profileBar.includes("const pricingExpanded=openCards.pricing||workspaceRequested;")
   && /width:\s*auto;/.test(pricingCardRule)
   && /min-width:\s*\d+px;/.test(pricingCardRule)
   && /max-width:\s*\d+px;/.test(pricingCardRule)

@@ -200,7 +200,7 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({items,rates,freight,
         marginPP:meta.marginPP??8,           // PP margin — separate from Box margin in items[0].spec.margin
-        filename:fnameExp,quoteRef:meta.quoteRef||'',makerName:meta.makerName||'',
+        filename:fnameExp,makerName:meta.makerName||'',quickCalculation:meta.quickCalculation===true,
         quoteDate:meta.quoteDate||'',effectiveFrom:meta.effectiveFrom||'',effectiveTo:meta.effectiveTo||'',
         beta:meta.beta===true}),
       signal:(()=>{const c=new AbortController();setTimeout(()=>c.abort(),30000);return c.signal;})()
@@ -317,7 +317,7 @@ export const exportFromTemplate=async(items,rates,freight,templateB64Arg,meta={}
   sc(ws_cbb,'B4',meta.quoteDate?new Date(meta.quoteDate):new Date());
   // A1 fix: removed dead/crashing line that used bare `effectiveFrom`/`quoteRef` variables not in scope.
   // The correct write below uses meta.quoteRef (always present via the meta object).
-  sc(ws_cbb,'D4',(meta.beta?'BETA | ':'')+(meta.quoteRef?meta.quoteRef+' | ':'')+items.map(i=>i.spec.material_code).filter(Boolean).join(', '));
+  sc(ws_cbb,'D4',(meta.beta?'BETA | ':'')+'QUICK CALCULATION — NOT A QUOTE | '+items.map(i=>i.spec.material_code).filter(Boolean).join(', '));
 
   // Rate parameters — column addresses verified against v7 CBB+PP row 3/4/6
   const _nv=(v,d)=>(v!==null&&v!==undefined&&v!==''?+v:d);

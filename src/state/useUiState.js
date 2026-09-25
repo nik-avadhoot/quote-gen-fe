@@ -19,8 +19,11 @@ export function useUiState(){
   const[showChangePassword,setShowChangePassword]=useState(false);
   const[showProfile,setShowProfile]=useState(false);
   const[sidebarCollapsed,setSidebarCollapsed]=useState(()=>getItem('qgos_sidebar_collapsed')==='1');
+  const[batchFocusMode,setBatchFocusMode]=useState(false);
   useEffect(()=>{try{setItem('qgos_sidebar_collapsed',sidebarCollapsed?'1':'0');}catch{/* persistence is optional */}},[sidebarCollapsed]);
-  const[tab,setTab]=useState("costing");
+  // S1: quotation work begins in the multi-item Batch workspace. Costing stays
+  // available as a private quick calculation and as the row deep-dive.
+  const[tab,setTab]=useState("batch");
   // Quotes is one primary destination with several purpose-specific views.
   // Keep the selected view in the shared UI slice so navigation actions can
   // land on the view they actually produced data for.
@@ -29,6 +32,10 @@ export function useUiState(){
   // Batch -> Quotes navigation boundary. This is transient UI intent, never
   // Quote authority; the backend resolves it again through caller-token RLS.
   const[quoteWorkspaceRequest,setQuoteWorkspaceRequest]=useState(null);
+  // Shared-shell display context only. Governed/history views publish the exact
+  // revision they have actually opened; Working publishes an explicit absence
+  // of revision authority. No workflow decision reads this state.
+  const[quoteHeaderContext,setQuoteHeaderContext]=useState(null);
   // Construction Library view state. Deliberately SHARED, not local to the tab —
   // see the header note in tabs/ConstructionLibTab.jsx. Filter and search are
   // "I've narrowed my view" state and must survive a tab switch; the library is
@@ -64,5 +71,10 @@ export function useUiState(){
   // so there is nothing to cancel.
   const dismissToast=id=>setToasts(p=>p.filter(t=>t.id!==id));
 
-  return { clTabFilter, clTabQuery, dismissToast, profile, quoteView, quoteWorkspaceRequest, role, setShowChangePassword, setClTabFilter, setClTabQuery, setQuoteView, setQuoteWorkspaceRequest, setShowProfile, setSidebarCollapsed, setTab, setToasts, showChangePassword, showProfile, showToast, sidebarCollapsed, signOut, tab, toasts };
+  return { batchFocusMode, clTabFilter, clTabQuery, dismissToast, profile, quoteHeaderContext,
+    quoteView, quoteWorkspaceRequest, role, setBatchFocusMode, setShowChangePassword,
+    setClTabFilter, setClTabQuery, setQuoteHeaderContext, setQuoteView,
+    setQuoteWorkspaceRequest, setShowProfile, setSidebarCollapsed, setTab,
+    setToasts, showChangePassword, showProfile, showToast, sidebarCollapsed,
+    signOut, tab, toasts };
 }

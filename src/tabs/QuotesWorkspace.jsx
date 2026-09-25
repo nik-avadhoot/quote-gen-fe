@@ -14,7 +14,7 @@
 // immutable governed evidence are told apart by a stable visual signal, not
 // only by banner text (UX policy §3).
 // ═══════════════════════════════════════════════════════════════════════════
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
 import { useAppState } from "../state/AppStateContext.js";
@@ -34,12 +34,26 @@ const QUOTE_VIEWS = [
 export default function QuotesWorkspace({ fixtureOnly = false, initialView = "working-items", onExitFixture }) {
   const {
     durableBatch, quoteView, quoteWorkspaceRequest, setBatchWorkspaceRequest, setDurableBatch,
-    setQuoteView, setTab, showToast,
+    setQuoteHeaderContext, setQuoteView, setTab, showToast,
   } = useAppState();
   const [fixtureView, setFixtureView] = useState(initialView);
   const [sourceBatchState, setSourceBatchState] = useState({ status: "idle", batchId: null, message: "" });
   const view = fixtureOnly ? fixtureView : quoteView;
   const selectView = fixtureOnly ? setFixtureView : setQuoteView;
+
+  useEffect(() => {
+    if (fixtureOnly) return undefined;
+    if (view === "working-items") {
+      setQuoteHeaderContext({ kind: "working", view: "Working Quote Items",
+        batchId: durableBatch?.id ?? null,
+        batchReference: durableBatch?.batch_reference || null,
+        revisionId: null, revisionNumber: null });
+    } else {
+      setQuoteHeaderContext(null);
+    }
+    return () => setQuoteHeaderContext(null);
+  }, [durableBatch?.batch_reference, durableBatch?.id, fixtureOnly,
+    setQuoteHeaderContext, view]);
 
   const openSourceBatch = async batch => {
     if (fixtureOnly || batch?.id == null) return;
@@ -111,13 +125,16 @@ export default function QuotesWorkspace({ fixtureOnly = false, initialView = "wo
     {banner}
     {view === "governed" && <QuotesScreen fixtureOnly={fixtureOnly} showFixtureBanner={false}
       toolbarLead={viewSwitch}
+      onContextChange={fixtureOnly ? null : setQuoteHeaderContext}
       onOpenSourceBatch={fixtureOnly ? null : openSourceBatch} sourceBatchState={sourceBatchState} />}
     {view === "working-items" && <QuoteItemsTab toolbarLead={viewSwitch} />}
     {view === "history" && <QuoteCatalogueScreen mode="history" fixtureOnly={fixtureOnly}
       toolbarLead={viewSwitch}
       initialRevisionId={fixtureOnly ? null : quoteWorkspaceRequest?.revisionId}
       initialBatchId={fixtureOnly ? null : quoteWorkspaceRequest?.batchId}
+      initialAgainst={fixtureOnly ? null : quoteWorkspaceRequest?.against}
       requestId={fixtureOnly ? null : quoteWorkspaceRequest?.requestId}
+      onContextChange={fixtureOnly ? null : setQuoteHeaderContext}
       onOpenSourceBatch={fixtureOnly ? null : openSourceBatch} sourceBatchState={sourceBatchState}
       showFixtureBanner={false} />}
   </div>;

@@ -42,11 +42,12 @@ check(Object.values(catalogue.actions).every(action => !action.enabled
 const reportedBatchActions = batchActionsFromBackend({ calculate: { enabled: true } });
 check(reportedBatchActions.calculate.enabled && !reportedBatchActions.send.enabled,
 "U4-CAT-FE-5a only an exact backend-enabled Batch action becomes available");
-check(screen.includes('apiFetch("/batches/catalogue")')
+check(screen.includes('apiFetch(`/batches/catalogue?scope=${scope}`)')
   && !screen.includes(".rpc(") && !screen.includes("service_role") && !screen.includes("supabase"),
 "U4-CAT-FE-6 authenticated catalogue uses one backend read and no direct privileged path");
 check(screen.includes("/pricing-basis") && screen.includes("/workspace")
-  && screen.includes('setDurableBatch({ ...workspaceData.batch') && screen.includes('setTab("batch")'),
+  && screen.includes('setBatchProfile(freshBatchProfileValues(reopened))')
+  && screen.includes('setDurableBatch(reopened)') && screen.includes('setTab("batch")'),
 "U4-CAT-FE-7 selected Batch reopens through existing caller-scoped APIs and binds Batch Builder");
 check(screen.includes("durableBatch.caller_holds_lock")
   && screen.includes("Close ${durableBatch.batch_reference} in Batch Builder first"),
@@ -56,20 +57,21 @@ check(screen.includes("AccessDeniedState") && screen.includes("EmptyState")
 "U4-CAT-FE-9 loading, empty, denied, partial and error paths remain truthful and distinct");
 check(screen.includes('aria-label="Search displayed Batches"') && screen.includes('aria-label="Batch state"')
   && screen.includes('aria-label="Producing Plant"') && screen.includes('aria-label="Batch owner"')
-  && screen.includes("It cannot reach Batches outside the window the server returned"),
-"U4-CAT-FE-10 displayed-window search, state, Plant and Owner filters exist, and the search states what it cannot reach");
-check(screen.includes("caller-visible Batches only")
-  && screen.includes("Search and filters cannot reach older Batches")
-  && screen.includes("in the returned window"),
-"U4-CAT-FE-11 a bounded result never implies server-wide search completeness");
+  && screen.includes("Load older Batches to extend the search"),
+"U4-CAT-FE-10 loaded-work search, state, Plant and Owner filters remain available");
+check(screen.includes('value="open">Active · unfinished')
+  && screen.includes('value="closed">Completed / abandoned')
+  && screen.includes('before_id=${encodeURIComponent(cursor)}')
+  && screen.includes("Load older Batches"),
+"U4-CAT-FE-11 active and terminal work are separate with an older-work path");
 check(screen.includes("#${row.id} · content v${row.content_version}")
   && screen.includes("#${row.family_id}") && screen.includes("#${row.plant_id}")
   && screen.includes("#${row.sector_id}") && screen.includes("#${row.pricing_basis_release_id}")
   && screen.includes("#${row.owner_user_id}") && /function rowDetail/.test(screen),
 "U4-CAT-FE-12 exact internal identities stay visible - moved into the row disclosure, never dropped");
 check(shell.includes('tab==="mybatches"') && shell.includes("<MyBatchesScreen/>")
-  && sidebar.includes('item("mybatches","MB","My Batches"'),
-"U4-CAT-FE-13 My Batches is routed in the authenticated Work navigation");
+  && sidebar.includes('item("mybatches","AB","Active Batches"'),
+"U4-CAT-FE-13 Active Batches is routed in the authenticated Work navigation");
 check(app.includes('fixtureIllustration === "u4-batches"')
   && app.includes("<MyBatchesScreen fixtureOnly") && app.includes("import.meta.env.DEV"),
 "U4-CAT-FE-14 fixture browser entry is development-only and explicitly labelled");

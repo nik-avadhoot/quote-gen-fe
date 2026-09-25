@@ -50,7 +50,7 @@ import { isFeatureEnabled } from "../lib/featureFlags.js";
 import { findDivergence } from "../lib/overrideDivergence.js";
 import { useAppState } from "../state/AppStateContext.js";
 import { ProvenanceTag } from "../ui/dataDisplay.jsx";
-import { PanelFocusToggle, ScreenFooter, ToolbarLabel } from "../ui/screenChrome.jsx";
+import { PanelFocusToggle, ScreenFooter } from "../ui/screenChrome.jsx";
 import {
   control, denseCell, denseHead, denseTable, frozenCell, menuPanel, menuSummary, toolbar, usePanelFocus,
 } from "../ui/screenStandards.js";
@@ -117,7 +117,7 @@ function ItemRow({ item, background, onOpen, onRemove }) {
 export default function QuoteItemsTab({ toolbarLead = null }){
   const {
     showToast, items, setItems, savedQuotes, setSavedQuotes,
-    quoteRef, setQuoteRef, quoteDate, setQuoteDate,
+    quoteDate, setQuoteDate,
     effectiveFrom, setEffectiveFrom, effectiveTo, setEffectiveTo,
     makerName, templateLoaded, templateB64, templateRef, handleTemplateLoad,
     rates, freight, batchProfile, removeItem, setTab,
@@ -125,8 +125,8 @@ export default function QuoteItemsTab({ toolbarLead = null }){
   const { focusPanel, toggleFocus, exitFocusOnEscape } = usePanelFocus();
   const betaExport=isFeatureEnabled("limited_beta");
 
-  const canExport=quoteRef.trim()&&makerName.trim();
-  const exportTip=!quoteRef.trim()?"Quote Ref is required before export":!makerName.trim()?"Your account has no display name set — contact an Admin":"";
+  const canExport=!!makerName.trim();
+  const exportTip=!makerName.trim()?"Your account has no display name set — contact an Admin":"";
   // Fix ③: offerCount corrected — server.py writes ALL items (Box + Plate + Part) sequentially
   // into CBB rows 7…7+len−1, regardless of type. The prior Box-only filter was wrong:
   // 20 Box + 20 Plate = 40 total rows, cbbCount=40 ≤ 44 ✓, but OFFER only mirrors rows 7–36 (30 rows).
@@ -199,8 +199,8 @@ export default function QuoteItemsTab({ toolbarLead = null }){
     return true;
   };
 
-  const exportExcel=()=>{if(checkSETCompleteness()){warnDivergence();exportFromTemplate(items,rates,freight,templateB64,{quoteRef,makerName,quoteDate,effectiveFrom,effectiveTo,marginPP:batchProfile.marginPP??8,beta:betaExport},msg=>showToast(msg,'error',8000));}};
-  const exportPdf=()=>{if(checkSETCompleteness())exportAllPDF(items,{quoteRef,makerName,paymentDisc:batchProfile.paymentDisc||"30",effectiveTo,beta:betaExport});};
+  const exportExcel=()=>{if(checkSETCompleteness()){warnDivergence();exportFromTemplate(items,rates,freight,templateB64,{makerName,quoteDate,effectiveFrom,effectiveTo,marginPP:batchProfile.marginPP??8,beta:betaExport,quickCalculation:true},msg=>showToast(msg,'error',8000));}};
+  const exportPdf=()=>{if(checkSETCompleteness())exportAllPDF(items,{makerName,paymentDisc:batchProfile.paymentDisc||"30",effectiveTo,beta:betaExport,quickCalculation:true});};
 
   const setMap={};const standalone=[];
   items.forEach(item=>{
@@ -216,11 +216,8 @@ export default function QuoteItemsTab({ toolbarLead = null }){
       fontFamily: sans, background: C.cream }}>
       <div role="toolbar" aria-label="Working Quote Items controls" style={toolbar}>
         {toolbarLead}
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <ToolbarLabel>Quote Ref</ToolbarLabel>
-          <input value={quoteRef} onChange={e=>setQuoteRef(e.target.value)} aria-label="Quote Ref"
-            style={{ ...control, width: 124, fontFamily: mono, fontWeight: 700 }}/>
-        </label>
+        <span style={{ fontSize: T.label, fontWeight: 800, letterSpacing: ".05em", color: C.amberD,
+          whiteSpace: "nowrap" }}>QUICK CALCULATION — NOT A QUOTE</span>
         <details style={{ position: "relative" }}>
           <summary style={menuSummary(datesSet)}
             title="Quoted date, price validity, Maker and the master export template">
@@ -334,7 +331,7 @@ export default function QuoteItemsTab({ toolbarLead = null }){
       <ScreenFooter right="Read-only · revise in Batch Entry → Calculate All → Send All again">
         <ProvenanceTag kind="local" />
         <span title="Kept in this browser only — not a governed record. Send a Batch to create a governed revision.">
-          Working items · this browser only · not a governed Quote revision</span>
+          QUICK CALCULATION — NOT A QUOTE · this browser only</span>
         <span aria-hidden="true">·</span>
         <span>Calc BS <span style={{ color: C.green }}>within 5%</span> / <span style={{ color: C.orange }}>over 5%</span> of Std BS</span>
       </ScreenFooter>

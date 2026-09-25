@@ -13,6 +13,7 @@
 // reads, and the waste/conv override inputs Case 4 depends on. Extraction here
 // is STRUCTURAL ONLY — no behaviour changed.
 // ═══════════════════════════════════════════════════════════════════════════
+import { useState } from "react";
 import { BOX_TYPES, PRINTING_TECHNOLOGIES } from "../../data/defaults.js";
 import { isPPType, sameSetCode } from "../../engine/rowType.js";
 import { Btn, Inp, SH, Sel } from "../../ui/primitives.jsx";
@@ -37,8 +38,16 @@ export default function SpecForm({onChooseConstruction}){
     gradeCodes, partitionsMaster, freight,
     constructionCatalogue, batchDefaults, batchRows, items,
     r, _sendReady, _wasteDefBox, _wasteDefPP, _convDefBox, _convDefPP,
-    pushCostingToBatchRow,
+    pushCostingToBatchRow, applyCostingToGovernedRow,
   } = useAppState();
+  // S3: one governed apply in flight at a time; a second click cannot race it.
+  const [applyingGoverned,setApplyingGoverned]=useState(false);
+  const applyGoverned=async()=>{
+    if(applyingGoverned)return;
+    setApplyingGoverned(true);
+    try{ await applyCostingToGovernedRow(); }
+    finally{ setApplyingGoverned(false); }
+  };
 
   // C7a · ROW-INHERITED FREIGHT / INTEREST. Computed once here because BOTH the
   // Commercial Parameters preview and the sentence under it need it, and the
@@ -704,6 +713,9 @@ export default function SpecForm({onChooseConstruction}){
             // BH-1: detect if construction fields in Costing differ from the library entry
             // for the active batch row. If so, warn the Maker before they navigate away.
             const _activeRow=batchRows.find(r=>r.id===activeBatchRowId);
+            // S3: a review opened from a DURABLE governed row returns only through
+            // the governed apply; the local Push would change a browser copy only.
+            const _governed=_activeRow?.durableRowId!=null;
             const _libEntry=_activeRow?constructionCatalogue.find(c=>c.code===_activeRow.constructionCode):null;
             const _constrChanged=_libEntry&&(
               +spec.ply!==+_libEntry.ply||
@@ -720,16 +732,34 @@ export default function SpecForm({onChooseConstruction}){
                 {_activeRow?.matCode?<> [{_activeRow.matCode}]</>:null}
                 {_activeRow?.product?<span style={{fontWeight:400}}> — {_activeRow.product}</span>:null}
                 <span style={{fontWeight:400,marginLeft:4,fontSize:10}}>
-                  · Changes apply only on Push
+                  {_governed
+                    ? "· Governed Batch row · Apply updates it and makes its calculation stale"
+                    : "· Changes apply only on Push"}
                 </span>
               </div>
               {_constrChanged&&<div style={{
                   background:"#FFF8ED",border:`1px solid ${C.amber}`,borderRadius:5,
                   padding:"6px 10px",marginBottom:4,fontSize:11,color:C.amberD,lineHeight:1.5}}>
-                ⚠️ Construction changes not yet saved to Batch row <b>[{_activeRow?.matCode||"?"}]</b>.
-                Push to apply, or Unlink to discard.
+                {_governed
+                  ? <>⚠️ Construction changes cannot be applied to governed Batch row <b>[{_activeRow?.matCode||"?"}]</b>:
+                      they need a new governed SKU Version. Undo them, or Close review to discard.</>
+                  : <>⚠️ Construction changes not yet saved to Batch row <b>[{_activeRow?.matCode||"?"}]</b>.
+                      Push to apply, or Unlink to discard.</>}
               </div>}
-              <div style={{display:"flex",gap:8,marginTop:4}}>
+              {_governed?<div style={{marginTop:4}}>
+                <button type="button" onClick={applyGoverned} disabled={applyingGoverned}
+                  title="Updates the originating governed Batch row with the volume, MOQ, margin, waste, conversion, add-on and fluting inputs you changed here, using the row version you opened. Its previous governed calculation becomes stale; nothing is priced locally."
+                  style={{width:"100%",padding:"9px",borderRadius:6,border:"none",fontFamily:sans,
+                    fontSize:13,fontWeight:700,cursor:applyingGoverned?"wait":"pointer",
+                    background:applyingGoverned?C.slateL:C.green,color:"white",letterSpacing:"0.02em"}}>
+                  {applyingGoverned?"Applying…":`↑ Apply to Batch row${_activeRow?.matCode?` [${_activeRow.matCode}]`:""}`}
+                </button>
+                <div style={{fontSize:10,color:C.slateL,lineHeight:1.45,marginTop:4}}>
+                  Updates the governed row and marks its previous calculation stale. Specification
+                  and Batch terms are not changed from here; recalculate on the Batch before Send.
+                </div>
+              </div>
+              :<div style={{display:"flex",gap:8,marginTop:4}}>
                 <button onClick={pushCostingToBatchRow}
                   style={{flex:1,padding:"9px",borderRadius:6,border:"none",fontFamily:sans,
                     fontSize:13,fontWeight:700,cursor:"pointer",
@@ -737,7 +767,7 @@ export default function SpecForm({onChooseConstruction}){
                   ↑ Push to Row {batchRows.indexOf(_activeRow)+1}{_activeRow?.matCode?` [${_activeRow.matCode}]`:""}
                 </button>
 
-              </div>
+              </div>}
             </>);
           })()
         : (()=>{

@@ -26,6 +26,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { apiFetch } from "../lib/apiClient.js";
 import { classifyResponse } from "../lib/backendError.js";
 import { SPLIT_DEFAULT, panelLayout } from "../lib/panelSplit.js";
+import { revisionShareability } from "../lib/quoteJourney.js";
 import {
   orderedQuoteRevisions, quoteActor, quoteRevisionLabel, U5_QUOTE_CATALOGUE_ILLUSTRATIONS,
   U5_QUOTE_ILLUSTRATION, U5_SUBMITTED_QUOTE_ILLUSTRATION,
@@ -33,7 +34,8 @@ import {
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag } from "../ui/dataDisplay.jsx";
 import {
-  GovernedActions, PanelDivider, PanelFocusToggle, RowDisclosure, ScreenFooter, ToolbarLabel,
+  GovernedActions, PanelDivider, PanelFocusToggle, RowDisclosure, ScreenFooter, ShareabilityNote,
+  ToolbarLabel,
 } from "../ui/screenChrome.jsx";
 import {
   control, denseCell, denseHead, denseTable, frozenCell, menuPanel, menuSummary, segment, toolbar,
@@ -91,9 +93,14 @@ function Notice({ tone = "warn", children }) {
 
 export default function QuoteCatalogueScreen({
   mode = "history", fixtureOnly = false, initialRevisionId = null, initialBatchId = null,
-  requestId = null, onExitFixture, onOpenSourceBatch, sourceBatchState, showFixtureBanner = true,
-  toolbarLead = null,
+  initialAgainst = null, requestId = null, onExitFixture, onOpenSourceBatch, sourceBatchState,
+  showFixtureBanner = true, toolbarLead = null, onContextChange = null,
 }) {
+  // S5 Slice A -> B: a verified prior-Quote identity carried in from the
+  // governed Batch workspace's "Open and compare". Scoped to the exact
+  // revision this navigation opened - QuoteEvidence re-derives per revision.
+  const compareAgainst = initialAgainst != null && initialRevisionId != null
+    ? { revisionId: initialRevisionId, priorRevisionId: initialAgainst } : null;
   const isInbox = mode === "inbox";
   const noun = isInbox ? "Approval Inbox" : "Quote History";
   const fixture = U5_QUOTE_CATALOGUE_ILLUSTRATIONS[mode];
@@ -219,6 +226,21 @@ export default function QuoteCatalogueScreen({
   const selectedRevision = orderedQuoteRevisions(detail.quote?.revisions || [])
     .find(row => String(row.id) === String(selectedId))
     || orderedQuoteRevisions(detail.quote?.revisions || [])[0];
+  useEffect(() => {
+    if (!onContextChange) return undefined;
+    if (detail.status === "ready" && detail.quote && selectedRevision) {
+      onContextChange({ kind: mode, view: noun,
+        quoteReference: detail.quote.quote_reference || null,
+        batchReference: detail.quote.batch?.batch_reference || null,
+        revisionId: selectedRevision.id,
+        revisionNumber: selectedRevision.revision_number ?? null,
+        workflowStatus: selectedRevision.workflow_status || null,
+        customer: detail.quote.batch?.customer_family?.name || null });
+    } else {
+      onContextChange(null);
+    }
+    return () => onContextChange(null);
+  }, [detail.quote, detail.status, mode, noun, onContextChange, selectedRevision]);
   const selectedActions = selectedRevision?.actions || detail.quote?.actions;
   const selectedLabel = openedBy?.kind === "batch" ? `Batch #${openedBy.id}`
     : selectedRow ? (selectedRow.quote_reference || quoteRevisionLabel(selectedRow))
@@ -242,14 +264,11 @@ export default function QuoteCatalogueScreen({
       if (reason == null) return;
       body.reason = reason;
     } else if (action === "issue") {
-      const addressee = window.prompt("Issue addressee name", selectedRevision.addressee_name || "");
-      if (addressee == null) return;
       const quoteDate = window.prompt("Quote date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10));
       if (quoteDate == null) return;
       const validity = window.prompt("Offer valid to (YYYY-MM-DD, blank if not set)", selectedRevision.offer_validity_to || "");
       if (validity == null) return;
-      Object.assign(body, { addressee_name: addressee, addressee_details: null,
-        quote_date: quoteDate || null, offer_validity_to: validity || null });
+      Object.assign(body, { quote_date: quoteDate || null, offer_validity_to: validity || null });
     } else if (["approve", "create_revision"].includes(action)
       && !window.confirm(`${action === "approve" ? "Approve" : "Create the next revision from"} this immutable revision?`)) return;
 
@@ -427,6 +446,10 @@ export default function QuoteCatalogueScreen({
           <span style={{ fontFamily: mono, fontSize: T.body, fontWeight: 700,
             color: selectedLabel ? C.slate : C.slateL, overflow: "hidden", textOverflow: "ellipsis",
             whiteSpace: "nowrap", minWidth: 0 }}>{selectedLabel || "No revision selected"}</span>
+          {/* The SELECTED historical revision's own authority. History shows
+              many revisions of many quotes; the one on screen is the only thing
+              this may describe, and no current Batch Builder lane belongs here. */}
+          {selectedRevision && <ShareabilityNote {...revisionShareability(selectedRevision)} />}
           <GovernedActions actions={selectedActions} onAction={runWorkflow}
             busy={workflow.status === "busy"} label="Backend-reported Quote workflow actions" />
           <span style={{ flex: "1 1 auto" }} />
@@ -462,7 +485,8 @@ export default function QuoteCatalogueScreen({
               Opened by exact revision identity. This revision is outside the currently displayed or filtered catalogue rows.
             </Notice>}
             <QuoteEvidence quote={detail.quote} selectedId={selectedId} onSelect={setSelectedId}
-              onOpenSourceBatch={onOpenSourceBatch} sourceBatchState={sourceBatchState} />
+              onOpenSourceBatch={onOpenSourceBatch} sourceBatchState={sourceBatchState}
+              fixtureOnly={fixtureOnly} compareAgainst={compareAgainst} />
           </>}
         </div>
       </div>}

@@ -53,11 +53,13 @@ const Subtab=({label,active,onClick,title})=>(
 
 export default function CostingTab(){
   const {
-    activeBatchRowId, batchRows, discardNewDraft, exitReview,
-    constructionCatalogue, newDraftKeepClient, newDraftNewClient, profileDraft, reviewDirty,
-    sendCostingToBatch, setSpec, setTab, showToast, spec, startNewSku, _sendReady,
+    activeBatchRowId, batchRows, discardNewDraft,
+    constructionCatalogue, durableBatch, newDraftKeepClient, newDraftNewClient, profileDraft,
+    requestExitReview, sendCostingToBatch, setSpec, setTab, showToast, spec, startNewSku, _sendReady,
   } = useAppState();
   const inReview=!!activeBatchRowId;
+  const reviewRow=batchRows.find(row=>row.id===activeBatchRowId);
+  const durableReview=reviewRow?.durableRowId!=null;
   // C5: new-batch is DERIVED from the draft profile's existence, not a flag.
   const newBatch=profileDraft!==null;
   const [draftMenu,setDraftMenu]=useState(false);
@@ -85,28 +87,28 @@ export default function CostingTab(){
   };
   const openFullLibrary=()=>{closeConstructionPicker();setTab('constrlib');};
 
-  // C4 - X1. The ONE exit path, shared by the Unlink button and the START
-  // subtab. Confirms only when the review copy has unpushed changes; the
-  // persisted START draft is never consulted, because exiting cannot harm it.
-  // exitReview() also restores the workspace flags Deep Dive overwrote.
-  const requestExitReview=()=>{
-    if(reviewDirty){
-      const _n=batchRows.findIndex(r=>r.id===activeBatchRowId)+1;
-      if(!window.confirm(
-        `Discard unpushed changes to Batch Row ${_n}?\n\n`+
-        "Your Costing draft is untouched and will reappear as you left it.\n\n"+
-        "OK = discard review changes  |  Cancel = stay in REVIEW"
-      ))return;
-    }
-    exitReview();
-  };
   return(
     <div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.cream,flexShrink:0}}>
-        <Subtab label="START" active={!inReview}
+        <Subtab label="QUICK CALCULATION" active={!inReview}
           onClick={inReview?requestExitReview:undefined}
           title={inReview?"Leave this review and return to your Costing draft":undefined}/>
-        {inReview&&<Subtab label="REVIEW" active/>}
+        {inReview&&<Subtab label="COSTING DEEP-DIVE" active/>}
+        {/* CDM-02 says this screen is a private browser-local scratchpad, and
+            CC-24 records that nothing on it ever says so. One permanent line
+            does, in the strip that already exists, rather than a banner. */}
+        <span title={inReview
+          ? durableReview
+            ? "A session-only review of the exact durable Batch row. Apply to Batch row updates that governed row with the row-owned inputs you changed and marks its calculation stale; specification and Batch terms are not changed from Costing."
+            : "A review copy of an existing Batch row. It lives for this session only — reload and unpushed changes are gone."
+          : "Your own working draft, kept in this browser. Nothing here is a Quote until it is added to a batch, and no customer can be shown it."}
+          style={{alignSelf:"center",marginLeft:8,padding:"2px 7px",borderRadius:999,
+            fontSize:T.micro,fontWeight:800,letterSpacing:"0.05em",textTransform:"uppercase",
+            whiteSpace:"nowrap",color:C.amberD,background:C.amberL,
+            border:`1px dashed ${C.amber}`}}>
+          {inReview
+            ? durableReview ? "Governed row review · Apply to Batch row" : "Session copy · not saved until Push"
+            : "Private draft · this browser only"}</span>
         <div title={[spec.client,spec.material_code,spec.product].filter(Boolean).join(" · ")||"New SKU"}
           style={{alignSelf:"center",minWidth:0,maxWidth:"min(460px,38vw)",marginLeft:8,
             padding:"4px 10px",borderRadius:4,background:"#29465b",color:C.white,
@@ -115,8 +117,10 @@ export default function CostingTab(){
           {[spec.client,spec.material_code,spec.product].filter(Boolean).join(" · ")||"New SKU"}
         </div>
         <div style={{marginLeft:"auto",padding:"3px 8px",display:"flex",gap:6,alignItems:"center"}}>
-          {/* Unlink — shown only in REVIEW mode (activeBatchRowId set). Moved from left panel bottom. */}
-          {activeBatchRowId&&<Btn ch="✕ Unlink" v="ghost" sm onClick={requestExitReview}/>}
+          {/* The review exit — shown only in REVIEW mode (activeBatchRowId set). Moved from
+              left panel bottom. Was labelled "Unlink"; renamed to the user's intent (CC-25),
+              same requestExitReview handler and the same single confirm rule. */}
+          {activeBatchRowId&&<Btn ch="✕ Close review" v="ghost" sm onClick={requestExitReview}/>}
           {/* C12: Context badge — visible when BatchEntry has rows, distinguishes same-batch vs new-batch */}
           {batchRows.length>0&&(
             <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:3,
@@ -124,7 +128,9 @@ export default function CostingTab(){
               color:newBatch?"#2E6094":C.amberD,
               border:`1px solid ${newBatch?"#6A9FD4":C.amber}44`,
               whiteSpace:"nowrap"}}>
-              {newBatch
+              {durableReview
+                ?`Governed Batch · ${(durableBatch?.batch_rows||[]).filter(row=>row.status==="active").length} product${(durableBatch?.batch_rows||[]).filter(row=>row.status==="active").length===1?"":"s"}`
+                :newBatch
                 ?`✦ Scratchpad · ${batchRows.length} row${batchRows.length!==1?"s":""} parked in Batch Entry`
                 :`🔗 Batch active · ${batchRows.length} row${batchRows.length!==1?"s":""}`}
             </span>)}
@@ -135,9 +141,9 @@ export default function CostingTab(){
             return(
             <button onClick={activeBatchRowId?undefined:sendCostingToBatch}
               disabled={_disabled}
-              title={activeBatchRowId?"Unavailable while reviewing an existing Batch row. Unlink the review first."
+              title={activeBatchRowId?"Unavailable while reviewing an existing Batch row. Close the review first."
                 :_newBatchBlocked?"Scratchpad context — go to Batch Entry → + New Batch to clear the old batch first"
-                :_sendReady?"Send this spec to Batch Entry as a new row"
+                :_sendReady?"Add this SKU to the Batch Builder grid as a new row. It stays in this browser until a governed Batch is created."
                 :"Complete dimensions and paper layers first — see panel"}
               style={{padding:"6px 14px",borderRadius:6,border:"none",fontFamily:sans,
                 fontSize:12,fontWeight:700,
@@ -145,12 +151,12 @@ export default function CostingTab(){
                 background:_disabled?"#C0C0C0":C.amber,
                 color:"white",letterSpacing:"0.01em",
                 opacity:_disabled?0.55:1,transition:"all 0.15s"}}>
-              → Send to Batch Entry
+              → Add to batch
             </button>);
           })()}
           <Btn ch="Start new SKU" v="ghost" sm
             disabled={!!activeBatchRowId}
-            title={activeBatchRowId?"Unavailable while reviewing an existing Batch row. Unlink the review first to start a new SKU."
+            title={activeBatchRowId?"Unavailable while reviewing an existing Batch row. Close the review first to start a new SKU."
               :"Another SKU in this batch — construction and board specs carry forward"}
             onClick={activeBatchRowId?undefined:startNewSku}/>
           {/* C5: New Draft replaces "+ New Batch". Two ruled choices, and the

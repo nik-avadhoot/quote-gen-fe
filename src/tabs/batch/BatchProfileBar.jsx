@@ -26,8 +26,16 @@ const profileSectionLabel={color:C.amber,fontWeight:700,fontSize:7.5,
   textTransform:"uppercase",letterSpacing:"0.12em",whiteSpace:"nowrap"};
 
 export default function BatchProfileBar({ pricingCard = null }){
-  const {batchAgeLabel,batchProfile,freight,locations,
-    sectorCodes,sectors,setBatchProfile,showToast}=useAppState();
+  const {batchAgeLabel,batchProfile,batchWorkspaceRequest,durableBatch,freight,locations,
+    sectorCodes,sectors,setBatchProfile,setBatchWorkspaceRequest,showToast}=useAppState();
+  const hasGovernedCustomer=durableBatch?.customer_party_id!=null;
+  const governedCustomer=hasGovernedCustomer ? durableBatch.customer_party : null;
+  const governedGroup=durableBatch?.pricing_groups?.find(group=>group.status!=="removed");
+  const governedRoute=governedGroup?.delivery_groups?.find(route=>route.status!=="removed");
+  const governedDestination=governedRoute?.ship_to_location?.location_code
+    ||governedRoute?.destination_text||"Destination unavailable";
+  const governedBilling=governedRoute?.bill_to_location?.location_code
+    ||governedRoute?.billing_text||"Billing unavailable";
 
   // ── U1 Slice D — Client is a GOVERNED SELECTION, not free text ───────────
   // Product Owner ruling, 2026-09-08. The whole control moved into
@@ -40,10 +48,9 @@ export default function BatchProfileBar({ pricingCard = null }){
   // manage_customer_master or make_quote to create, both decided by the
   // backend and RLS. With the flag off, the plain input below is unchanged.
   //
-  // What reaches Batch state is still ONE string in `client`, the temporary
-  // U1 representation of that selection — not a foreign key. No partyId, no
-  // link object, no new Batch or localStorage field; U4 owns the durable
-  // Batch identity relationship.
+  // The U1 control remains the private/local string editor. A new governed
+  // Batch has an exact saved customer_party_id instead; its read-only identity
+  // is rendered below from durableBatch, never inferred from the Family name.
   //
   // `delivery` is NOT part of any of this. It is the freight-destination
   // master key that resolves freight[plant][delivery] a few lines below, and
@@ -55,10 +62,22 @@ export default function BatchProfileBar({ pricingCard = null }){
   // "Batch Profile" label can open or collapse them together. Presentation
   // only — no Batch field reads or writes this.
   const [openCards,setOpenCards]=useState({customer:false,commercials:false,terms:false,pricing:false});
-  const anyCardOpen=Object.values(openCards).some(Boolean);
+  // S3: the Batch workspace lives inside the Pricing card and mounts only while
+  // it is expanded. A return from Costing (governed Apply, or the TopBar return)
+  // asks for the workspace on its originating row, so while a request for THIS
+  // Batch is pending the card is open; collapsing it withdraws the request.
+  const workspaceRequested=batchWorkspaceRequest!=null&&durableBatch?.id!=null
+    &&String(batchWorkspaceRequest.batchId)===String(durableBatch.id);
+  const anyCardOpen=Object.values(openCards).some(Boolean)||workspaceRequested;
+  const pricingExpanded=openCards.pricing||workspaceRequested;
+  const setPricingExpanded=open=>{
+    if(!open&&workspaceRequested)setBatchWorkspaceRequest?.(null);
+    setOpenCards(current=>({...current,pricing:open}));
+  };
   const setCardOpen=key=>open=>setOpenCards(current=>({...current,[key]:open}));
   const toggleAllCards=()=>{
     const next=!anyCardOpen;
+    if(!next&&workspaceRequested)setBatchWorkspaceRequest?.(null);
     setOpenCards({customer:next,commercials:next,terms:next,pricing:next});
   };
 
@@ -98,13 +117,24 @@ export default function BatchProfileBar({ pricingCard = null }){
 
       {/* ── 1. CUSTOMER DETAILS — 3 × 2 grid (label | field) ── */}
       <SummaryRow title="Customer"
-        facts={[batchProfile.client||"No client",batchProfile.sector||"No sector",
-          [batchProfile.plant,batchProfile.delivery].filter(Boolean).join(" → ")||"Route unresolved"]}
+        facts={hasGovernedCustomer
+          ?[governedCustomer?.display_name||"Customer identity unavailable",`Family: ${durableBatch.family?.name||"Unavailable"}`,
+            `${durableBatch.plant?.name||"Plant unavailable"} · ${durableBatch.sector?.name||"Sector unavailable"}`]
+          :[batchProfile.client||"No client",batchProfile.sector||"No sector",
+            [batchProfile.plant,batchProfile.delivery].filter(Boolean).join(" → ")||"Route unresolved"]}
         status={(batchProfile.customerType||"existing").replace(/^./,c=>c.toUpperCase())}
         expanded={openCards.customer} onExpandedChange={setCardOpen("customer")}
         verticalTitleWhenExpanded titleStyle={profileSectionLabel}
         style={{minWidth:300,maxWidth:420,flex:"1 1 360px",alignSelf:"stretch"}}
         contentStyle={{padding:0}}>
+      {hasGovernedCustomer ? <div style={{padding:"5px 8px",fontSize:10,lineHeight:1.5}}>
+        <div><strong>Customer:</strong> {governedCustomer?.display_name||"Identity unavailable"} · {governedCustomer?.customer_code||"Prospect / code unavailable"}</div>
+        <div><strong>Family:</strong> {durableBatch.family?.name||"Unavailable"}</div>
+        <div><strong>Plant / Sector:</strong> {durableBatch.plant?.name||"Unavailable"} / {durableBatch.sector?.name||"Unavailable"}</div>
+        <div><strong>Delivery:</strong> {governedDestination}</div>
+        <div><strong>Bill-to:</strong> {governedBilling}</div>
+        <div><strong>Payment:</strong> {governedGroup?.payment_terms_days||"Unspecified"} days</div>
+      </div> :
       <div style={{padding:"3px 8px",display:"flex",flexDirection:"row",gap:6,alignItems:"stretch"}}>
         <div style={{display:"grid",gridTemplateColumns:"auto 1fr auto 1fr",
           columnGap:5,rowGap:2,alignItems:"center"}}>
@@ -187,6 +217,7 @@ export default function BatchProfileBar({ pricingCard = null }){
           </select>
         </div>
       </div>
+      }
       </SummaryRow>
 
       {/* ── 2. COMMERCIALS — rates + aligned Terms row ── */}
@@ -363,7 +394,7 @@ export default function BatchProfileBar({ pricingCard = null }){
       })()}
 
       {pricingCard&&<div className="batch-profile-pricing-card">
-        {cloneElement(pricingCard,{expanded:openCards.pricing,onExpandedChange:setCardOpen("pricing")})}
+        {cloneElement(pricingCard,{expanded:pricingExpanded,onExpandedChange:setPricingExpanded})}
       </div>}
       {/* Import profile / New batch live in the Batch grid toolbar beside Focus
           mode, freeing this row's width for the separate Terms card. */}

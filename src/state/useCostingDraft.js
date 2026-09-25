@@ -46,7 +46,7 @@ import { CONTEXT_ONLY_FIELDS, DRAFT_CORRUPT_KEY, DRAFT_KEY, DRAFT_VERSION,
   shouldAdvanceSkuValue } from "./costingDraftModel.js";
 
 export function useCostingDraft(st){
-  const { batchProfile, batchRows, setAutoFill, setSetAutoFill } = st;
+  const { batchProfile, batchRows, setAutoFill, setBatchRows, setSetAutoFill } = st;
 
   const[draft,setDraft]=useState(()=>{
     const raw=getItem(DRAFT_KEY);
@@ -168,7 +168,30 @@ export function useCostingDraft(st){
     setReviewCopy(freshReviewCopy(rowId,rowSpec,{setAutoFill}));
   const exitReview=()=>{
     if(reviewCopy)setSetAutoFill(reviewCopy.prev.setAutoFill);
+    const reviewedRow=reviewCopy
+      ?batchRows.find(row=>row.id===reviewCopy.rowId):null;
+    // A governed-origin Costing row is a session-only review adapter, never a
+    // second Batch row system. Remove it as the review closes; the durable row
+    // remains untouched unless the explicit governed apply already succeeded.
+    if(reviewedRow?.durableRowId!=null)
+      setBatchRows(rows=>rows.filter(row=>row.id!==reviewCopy.rowId));
     setReviewCopy(null);
+  };
+  // The single guarded exit used by every route out of a Costing deep-dive.
+  // Returning false means the caller must leave both the review and the target
+  // navigation untouched.
+  const requestExitReview=()=>{
+    if(!inReview)return true;
+    if(reviewDirty){
+      const index=Math.max(1,batchRows.findIndex(row=>row.id===activeBatchRowId)+1);
+      if(!window.confirm(
+        `Discard unpushed changes to Batch Row ${index}?\n\n`+
+        "Your Costing draft is untouched and will reappear as you left it.\n\n"+
+        "OK = discard review changes  |  Cancel = stay in COSTING DEEP-DIVE"
+      ))return false;
+    }
+    exitReview();
+    return true;
   };
   const markReviewPushed=(pushedFields,constructionFormalised)=>
     setReviewCopy(rc=>rc===null?rc:({...rc,
@@ -219,5 +242,5 @@ export function useCostingDraft(st){
   return { activeBatchRowId, applyContextCascade, batchDefaults, contextValues,
     draftDirty, exitReview, markDraftSent, markReviewPushed, openReview,
     profileDraft, resetDraft, reviewBaseline, reviewDirty, s, setContextField,
-    setSpec, spec, specRaw };
+    requestExitReview, setSpec, spec, specRaw };
 }

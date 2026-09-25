@@ -21,6 +21,7 @@ import {
 import { durableBatchPreparation, durableRowSelection, durableRowSpecificationEvidence,
   durableRowToLocalPreview, localPreviewState }
   from "../src/lib/batchRowModel.js";
+import { batchSkuChoices } from "../src/lib/batchSkuChoice.js";
 import { readFileSync } from "node:fs";
 
 let passed = 0;
@@ -333,13 +334,21 @@ check(durableBatchPreparation({ ...preparationBatch, pricing_groups: [{ id: 81, 
   "U4-FE-32d a different complete route cannot disguise an incomplete selected freight basis")
 check(workspacePanel.includes("/row-options")
   && workspacePanel.includes("/rows/${row.id}")
-  && workspacePanel.includes("Copy to local preview")
-  && workspacePanel.includes("No caller-visible durable rows")
+  && !workspacePanel.includes("Copy to local preview")
+  && workspacePanel.includes("No products yet. Use Add product below")
+  && workspacePanel.includes("+ Add product")
   && workspacePanel.includes("no governed record was written"),
-  "U4-FE-33 durable row UI exposes live, fixture, empty and local-preview boundaries")
+  "U4-FE-33 durable row UI exposes live, fixture and empty governed-product boundaries without a preview grid")
+check(workspacePanel.includes("Costing deep-dive")
+  && workspacePanel.includes("openDurableRowInCosting({")
+  && workspacePanel.includes("transition: loadBatchRowIntoCosting")
+  && workspacePanel.includes("commitLocalPreview(row, preview, existing, targetProfile)")
+  && workspacePanel.includes('mode: "row-focus"'),
+  "S2-FE-1 durable-row deep-dive keeps its session adapter internal and preserves return identity")
 check(workspace.includes("/batches/pricing-basis?reference=")
   && workspace.includes("runMutation(`/batches/${batch.id}/pricing-basis`")
   && workspace.includes("Reopen persisted selection")
+  && workspace.includes("setBatchProfile(freshBatchProfileValues(accepted))")
   && workspace.includes("governed RPC completed"),
   "U4-FE-7 production workspace opens, mutates through the backend RPC route and reopens")
 check(!workspace.includes("localStorage") && !workspace.includes(".table(")
@@ -368,7 +377,7 @@ check(appCss.includes(".batch-profile-pricing-card {\n  width: auto;\n  min-widt
   && !appCss.includes("flex-wrap: wrap;\n}\n\n.batch-profile-pricing-card .batch-pb-open-actions")
   && !appCss.includes(".batch-pb-workspace-line")
   && workspace.includes("batchReferenceField={batchReferenceField}")
-  && workspace.includes("aria-label=\"View Batch workspace\"")
+  && batchEntry.includes("is-governed-primary")
   && selector.includes("{batchReferenceField}")
   && selector.indexOf("batch-pb-compact-notice") > selector.indexOf("batch-pb-release-row")
   && !appCss.includes(".batch-workspace-pricing-slot")
@@ -386,11 +395,11 @@ check(appCss.includes(".batch-profile-pricing-card {\n  width: auto;\n  min-widt
 check(!profileBar.includes("<SummaryRow title=\"Actions\"")
   && !profileBar.includes("onClick={copyCostingToProfile}")
   && batchGrid.includes("onClick={copyCostingToProfile}")
-  && batchGrid.includes("onClick={startNewBatch}")
-  && batchGrid.indexOf("onClick={startNewBatch}") < batchGrid.indexOf("onClick={onToggleFocusMode}")
+  && batchGrid.includes("Batch tools ▾")
+  && !batchGrid.includes("+ New customer quote")
   && !profileBar.includes("onClick={importConstrFromSpec}")
   && !profileBar.includes("+ Constr"),
-  "U4-FE-11a Import profile and New batch sit in the grid toolbar beside Focus mode, freeing the profile row")
+  "U4-FE-11a secondary Batch setup stays in the grid toolbar while the primary new-Quote action leads above it")
 check(workspace.includes("Permanent Batch reference")
   && workspace.includes("batch-pb-workspace-meta")
   && selector.includes("Pricing date")
@@ -414,20 +423,19 @@ check(profileBar.includes("<SummaryRow title=\"Customer\"")
   && profileBar.includes(">PT</span>")
   && profileBar.includes(">Interest</span>"),
   "U4-FE-13 Customer, Commercials and Terms are separate cards; Terms is one field per row and keeps every guarded control")
-check(workspace.includes("setWorkspaceOpen(true)")
-  && workspace.includes("View durable Batch identity, profile, people and groups")
+check(batchEntry.includes("embedded batchId={durableBatch.id}")
   && workspacePanel.includes("apiFetch(`/batches/${batchId}/workspace`)")
   && workspacePanel.includes("runMutation")
   && workspacePanel.includes("/delivery-groups")
   && workspacePanel.includes("/freight-basis")
   && !workspacePanel.includes(".table("),
-  "U4-FE-14 durable workspace reads and changes Delivery Groups only through authenticated backend routes")
-check(appCss.includes(".batch-workspace-panel-scrim")
-  && appCss.includes("position: fixed")
-  && appCss.includes("justify-content: flex-end")
-  && workspacePanel.includes("role=\"dialog\"")
-  && workspacePanel.includes("aria-modal=\"true\""),
-  "U4-FE-15 workspace details overlay the grid instead of consuming its permanent height")
+  "U4-FE-14 the primary durable workspace reads and changes Delivery Groups only through authenticated backend routes")
+check(appCss.includes(".batch-workspace-primary")
+  && appCss.includes(".batch-workspace-panel.is-embedded")
+  && batchEntry.includes("{!durableBatch?.id && <>")
+  && batchEntry.includes("{durableBatch?.id && <BatchWorkspacePanel")
+  && workspacePanel.includes('role={embedded ? "region" : "dialog"}'),
+  "U4-FE-15 an open governed Batch replaces the local grid with one embedded durable workspace")
 check(workspacePanel.includes("Partial caller-visible result")
   && workspacePanel.includes("Denied:")
   && workspacePanel.includes("Hidden values have not been inferred")
@@ -467,7 +475,12 @@ check(workspacePanel.includes("fixtureMutation")
 check(pricingState.includes("durableBatch")
   && batchEntry.includes("key={durableBatch?.id || \"unbound\"}")
   && costingBridge.includes("const startNewBatch=()=>setNewBatchDialogOpen(true)")
-  && costingBridge.includes("const completeNewBatchStart=(governedBatch=null)=>")
+  // 2026-09-22: completeNewBatchStart gained a second, DEFAULTED argument for
+  // the Quick-to-Customer-quote promotion path. The sector inheritance this
+  // check is about is unchanged — `freshBatchProfileValues(governedBatch)` still
+  // supplies it on both paths — so the signature is matched by its stable
+  // prefix rather than being pinned to an exact arity.
+  && costingBridge.includes("const completeNewBatchStart=(governedBatch=null,")
   && costingBridge.includes("freshBatchProfileValues(governedBatch)")
   && batchGrid.includes("resolveBatchCommercialDefaults(batchProfile")
   && quoteActions.includes("batchCommercialDefaults.wastePP")
@@ -476,12 +489,15 @@ check(pricingState.includes("durableBatch")
 check(newBatchPanel.includes('apiFetch("/batches/create-options")')
   && newBatchPanel.includes('runMutation("/batches"')
   && newBatchPanel.includes("family_id: Number(familyId)")
+  && newBatchPanel.includes("customer_party_id: Number(partyId)")
   && newBatchPanel.includes("plant_id: Number(plantId)")
   && newBatchPanel.includes("sector_id: Number(sectorId)")
-  && newBatchPanel.includes("const ready = state.status === \"ready\" && familyId && plantId && sectorId")
+  && newBatchPanel.includes("&& (shipToId || destinationText.trim()) && (billToId || billingText.trim())")
   && !newBatchPanel.includes(".table("),
-  "U4-FE-24 governed creation uses caller-scoped options and the existing Batch RPC wrapper only")
-check(newBatchPanel.includes("Find Customer Family or member Customer")
+  "U4-FE-24 governed creation requires exact member, delivery and terms through the Batch API only")
+check(newBatchPanel.includes("Find or create Customer/Prospect")
+  && newBatchPanel.includes('className="new-batch-search-choices"')
+  && newBatchPanel.includes('className="is-create"')
   && newBatchPanel.includes("member.display_name")
   && newBatchPanel.includes("member.customer_code")
   && newBatchPanel.includes("make-quote authority")
@@ -490,6 +506,17 @@ check(newBatchPanel.includes("Find Customer Family or member Customer")
   && newBatchPanel.includes("first attached Sector is suggested")
   && newBatchPanel.includes("guidance and inheritance follow the selected Sector only"),
   "U4-FE-25 creation presents exact Family/member/Plant identity and restricts the Batch to one attached Sector")
+const skuChoices = [
+  { id: 7, plant_item_code: "NAG-BOX-7", customer: { display_name: "Acme Foods" },
+    versions: [{ item_name: "Export carton" }], external_references: [], last_used_at: null },
+  { id: 8, plant_item_code: "NAG-BOX-8", customer: { display_name: "Acme Foods" },
+    versions: [{ item_name: "Retail carton" }],
+    external_references: [{ reference_value: "BUYER-8" }], last_used_at: "2026-09-22T10:00:00Z" },
+];
+check(batchSkuChoices(skuChoices, "acme").map(sku => sku.id).join(",") === "8,7"
+  && batchSkuChoices(skuChoices, "buyer-8").map(sku => sku.id).join(",") === "8"
+  && batchSkuChoices(skuChoices, "export carton").map(sku => sku.id).join(",") === "7",
+  "S2-FE-1 established SKU search covers exact customer references and item names, with recent use first")
 check(workspacePanel.includes("Customer Family Sectors")
   && workspacePanel.includes("This Batch uses one only")
   && workspacePanel.includes("BATCH SECTOR")
@@ -524,15 +551,13 @@ check(workspacePanel.includes('runMutation(`/batches/${batch.id}/sets`')
   && workspace.includes("FIX-SET-9301"),
   "U4-FE-35 SET identity, membership and active/dissolved state are explicit on the fixture surface")
 const canonicalNavigation = [
-  "Start Costing", "Batch Builder", "My Batches", "Approval Inbox", "Quotes",
+  "Quick calculation", "Batch Builder", "Active Batches", "Approval Inbox", "Quotes",
   "Customer Families", "Customers and Prospects", "Construction Library", "Plant Construction Adoption",
   "SKU Master", "Commercial Policies", "Rate Masters", "Freight Masters", "Pricing Basis Releases",
   "Plant Configuration", "Users & Access", "Producing Plants", "Audit History",
 ];
-check(["Workspace", "Customer Masters", "Product Masters", "Commercial Masters", "Technical Masters",
-  "Administration"].every(section => sidebar.includes(`["${section}"`))
+check(["Workspace", "Reference data", "Administration"].every(section => sidebar.includes(`["${section}"`))
   && !sidebar.includes('["Plant Capabilities"')
-  && sidebar.indexOf('item("gsm"') > sidebar.indexOf('["Technical Masters"')
   && sidebar.indexOf('item("gsm"') > sidebar.indexOf('pending("PC","Plant Configuration"')
   && sidebar.indexOf('item("gsm"') < sidebar.indexOf('["Administration"')
   && canonicalNavigation.every(label => sidebar.includes(`"${label}"`))
@@ -550,18 +575,18 @@ check(sidebar.includes("openSections")
   && appCss.includes(".sidebar-nav-section.is-current")
   && appCss.includes(".sidebar-nav-pending small"),
   "U4-FE-36a navigation uses a compact active-section accordion and restrained status tags")
-const productMastersMenu = sidebar.slice(
-  sidebar.indexOf('["Product Masters"'), sidebar.indexOf('["Commercial Masters"'));
-check(productMastersMenu.includes(':[pending("CL","Construction Library"')
-  && productMastersMenu.includes('item("conadoption","PA","Plant Construction Adoption"')
-  && productMastersMenu.includes('item("skus","SK","SKU Master"')
-  && productMastersMenu.includes(':[pending("SK","SKU Master"')
-  && productMastersMenu.includes('Read-only governed SKUs, versions, specifications and Location applicability')
-  && !productMastersMenu.includes('pending("SV","SKU Versions"')
-  && !productMastersMenu.includes('pending("SL","SKU–Location Applicability"')
-  && !productMastersMenu.includes('pending("SR","Specification Reference"')
+const referenceDataMenu = sidebar.slice(
+  sidebar.indexOf('["Reference data"'), sidebar.indexOf('["Administration"'));
+check(referenceDataMenu.includes(':[pending("CL","Construction Library"')
+  && referenceDataMenu.includes('item("conadoption","PA","Plant Construction Adoption"')
+  && referenceDataMenu.includes('item("skus","SK","SKU Master"')
+  && referenceDataMenu.includes(':[pending("SK","SKU Master"')
+  && referenceDataMenu.includes('Read-only governed SKUs, versions, specifications and Location applicability')
+  && !referenceDataMenu.includes('pending("SV","SKU Versions"')
+  && !referenceDataMenu.includes('pending("SL","SKU–Location Applicability"')
+  && !referenceDataMenu.includes('pending("SR","Specification Reference"')
   && sidebar.includes('detail === "Capability required" ? "Restricted"'),
-  "U4-FE-36b Product Masters remains visible and SKU functions do not become redundant destinations")
+  "U4-FE-36b Product reference data remains reachable and SKU functions do not become redundant destinations")
 check(sidebar.includes('pending("CP","Customers and Prospects","Locations and External References included")')
   && !sidebar.includes('pending("CL","Customer Locations"')
   && !sidebar.includes('pending("ER","External References"')
@@ -577,25 +602,20 @@ check(workspacePanel.includes("waste_override_pct")
   && workspacePanel.includes("conv_override_rate")
   && workspacePanel.includes("freight_override")
   && workspacePanel.includes("Blank continues the ladder; zero stops it")
-  && workspacePanel.includes("Resolve values & freshness")
-  && workspacePanel.includes('/rows/${row.id}/effective-inputs')
-  && workspacePanel.includes("No persisted governed calculation")
-  && workspacePanel.includes("Fresh · calculation and presentation match")
-  && workspacePanel.includes("Calculation fresh · presentation changed")
-  && workspacePanel.includes("Calculation stale · recalculate before Send")
-  && workspacePanel.includes("Freshness unavailable · calculation evidence denied")
-  && workspacePanel.includes("Supplier-credit terms are not Batch Calculate inputs")
+  && workspacePanel.includes('/batches/${batch.id}/readiness')
+  && !workspacePanel.includes('/rows/${row.id}/effective-inputs')
+  && workspacePanel.includes("governedReadinessFromResponse")
   && !workspacePanel.includes(".rpc(")
   && !workspacePanel.includes(".table("),
-  "U4-FE-37 row overrides, governed effective sources and all freshness states stay behind backend routes")
+  "U4-FE-37 row overrides remain editable while one backend Batch result owns all readiness and freshness")
 check(workspacePanel.includes("Preparation and readiness")
-  && workspacePanel.includes("Durable structure, local preview and governed evidence are reported separately")
+  && workspacePanel.includes("One backend result evaluates every active durable row")
   && workspacePanel.includes("Atomic Send creates one immutable, unnumbered draft candidate")
-  && workspacePanel.includes("durableRowSpecificationEvidence")
-  && workspacePanel.includes("BCT and ECT are preserved specification references")
+  && workspacePanel.includes("openReadinessBlocker")
+  && workspacePanel.includes("batch-row-field-")
   && appCss.includes(".batch-workspace-preparation-grid")
-  && appCss.includes(".batch-workspace-spec-evidence"),
-  "U4-FE-37a readiness and supported specification checks remain concise and commercially honest")
+  && appCss.includes(".batch-workspace-readiness-blockers"),
+  "U4-FE-37a readiness stays concise and every blocker opens its exact governed target")
 check(workspace.includes('freshness: "not_calculated"')
   && workspace.includes('freshness: "calculation_stale"')
   && workspace.includes('waste: { value: 0, source: "row" }')

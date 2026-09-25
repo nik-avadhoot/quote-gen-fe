@@ -18,7 +18,11 @@ export const Sel=({value,onChange,opts,ph=""})=>
     {ph&&<option value="">{ph}</option>}
     {opts.map(o=><option key={o.v??o} value={o.v??o}>{o.l??o}</option>)}
   </select>;
-export const Btn=({ch,onClick,v="primary",sm,full,disabled,style:sx={}})=>{
+// `id` and `title` are forwarded so a control can be NAMED and focused from
+// elsewhere (the journey's Next action targets FOCUS.send / FOCUS.calculate) and
+// so a disabled button can say why. Both are optional and change nothing when
+// absent.
+export const Btn=({ch,onClick,v="primary",sm,full,disabled,id,title,style:sx={}})=>{
   const vs={primary:{background:C.amber,color:C.white},
     secondary:{background:C.white,color:C.slateM,border:`1px solid ${C.border}`},
     ghost:{background:"transparent",color:C.slateL,border:"none"},
@@ -30,6 +34,7 @@ export const Btn=({ch,onClick,v="primary",sm,full,disabled,style:sx={}})=>{
   // control was unavailable. That is what made a blank Family proposal look
   // like a dead button. Forward it to the DOM so "disabled" actually is.
   return<button disabled={!!disabled} aria-disabled={disabled?"true":undefined}
+    id={id} title={title}
     onClick={disabled?undefined:onClick} style={{
     padding:sm?"5px 12px":"8px 16px",borderRadius:6,fontSize:sm?11:13,fontWeight:600,
     cursor:disabled?"not-allowed":"pointer",border:"none",width:full?"100%":"auto",

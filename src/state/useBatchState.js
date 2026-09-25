@@ -12,6 +12,7 @@ import { getItem, setItem } from "../lib/persist.js";
 import { sameSetCode } from "../engine/rowType.js";
 import { togglePinnedAddOn } from "../lib/pinnedAddOns.js";
 import { clearUntouchedLegacySeed, freshNewClientProfileValues } from "./costingDraftModel.js";
+import { isS1ActiveBrowserFixture, S1_ACTIVE_PROFILE, S1_ACTIVE_ROWS } from "../lib/s1BrowserFixture.js";
 
 export function useBatchState(st){
   // D-5: setTab and showToast were used ONLY by restoreAutosave, which the
@@ -19,17 +20,19 @@ export function useBatchState(st){
   // at all — see the composition-order note in docs/post-split-state.md §2, which
   // still lists that dependency.
   const { constructionLib, sectorCodes } = st;
+  const s1ActiveFixture=isS1ActiveBrowserFixture();
 
   // ── BATCH ENTRY STATE ─────────────────────────────────────────────────────
   // A first load starts with no commercial overrides, like + New Batch, so the
   // selected Sector is the authority for conversion, waste and margin.
   const[batchProfile,setBatchProfile]=useState(()=>{
+    if(s1ActiveFixture)return S1_ACTIVE_PROFILE;
     try{const s=getItem('cbb_batchprofile');
       return s?clearUntouchedLegacySeed(JSON.parse(s)):freshNewClientProfileValues();
     }catch(e){return freshNewClientProfileValues();}
   });
   // Persist batchProfile on every change
-  useEffect(()=>{try{setItem('cbb_batchprofile',JSON.stringify(batchProfile));}catch(e){};},[batchProfile]);
+  useEffect(()=>{if(s1ActiveFixture)return;try{setItem('cbb_batchprofile',JSON.stringify(batchProfile));}catch{ /* storage unavailable */ }},[batchProfile,s1ActiveFixture]);
   const[pinnedAddOns,setPinnedAddOns]=useState(()=>{
     try{const s=getItem('cbb_pinned_addons');return s?JSON.parse(s):[];}catch(e){return[];}
   });
@@ -54,6 +57,7 @@ export function useBatchState(st){
   // single source for profile; the profile snapshot inside the autosave is
   // deliberately NOT read here, so no second source of truth is introduced.
   const[batchRows,setBatchRows]=useState(()=>{
+    if(s1ActiveFixture)return S1_ACTIVE_ROWS;
     try{
       const s=getItem('cbb_batch_autosave');
       if(!s)return[];
@@ -114,6 +118,7 @@ export function useBatchState(st){
   // ── AUTO-SAVE: batch rows ─────────────────────────────────────────────────
   // Must be declared AFTER batchRows and batchProfile (both used in dep array).
   useEffect(()=>{
+    if(s1ActiveFixture)return;
     // D-5: NO GUARD. batchRows hydrates on mount above, so an empty batch here
     // means the batch IS empty — either storage held nothing, or the user emptied
     // it deliberately. Both must persist.
@@ -125,7 +130,7 @@ export function useBatchState(st){
     // Observed: deleting all 8 rows left a 1-row residue in storage.
     try{setItem('cbb_batch_autosave',JSON.stringify({
       ts:Date.now(),rows:batchRows,profile:batchProfile}));}catch{ /* storage full or unavailable */ }
-  },[batchRows,batchProfile]);
+  },[batchRows,batchProfile,s1ActiveFixture]);
 
   // Conversational filter parser — no AI tokens, pure local regex/keyword matching.
   // Parses a free-text query like "active alcobev ITC BS>8 GSM 700-750 Cobb 125"

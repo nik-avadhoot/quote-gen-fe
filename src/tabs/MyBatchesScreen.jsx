@@ -22,6 +22,7 @@ import { apiFetch } from "../lib/apiClient.js";
 import { U4_BATCH_CATALOGUE_ILLUSTRATION, searchableBatchText } from "../lib/batchCatalogueModel.js";
 import { classifyResponse } from "../lib/backendError.js";
 import { useAppState } from "../state/AppStateContext.js";
+import { freshBatchProfileValues } from "../state/costingDraftModel.js";
 import { AccessDeniedState, EmptyState, LoadingState } from "../ui/appStates.jsx";
 import { LifecycleBadge, PermanentCode, ProvenanceTag } from "../ui/dataDisplay.jsx";
 import { PanelFocusToggle, RowDisclosure, ScreenFooter } from "../ui/screenChrome.jsx";
@@ -80,13 +81,16 @@ function rowDetail(row) {
 
 export default function MyBatchesScreen({ fixtureOnly = false, onExitFixture }) {
   const {
-    durableBatch, setDurableBatch, setQuoteView, setQuoteWorkspaceRequest, setTab,
+    durableBatch, requestExitReview, setBatchProfile, setDurableBatch,
+    setQuoteView, setQuoteWorkspaceRequest, setTab,
   } = useAppState();
   const fixture = U4_BATCH_CATALOGUE_ILLUSTRATION;
   const [state, setState] = useState(fixtureOnly
     ? { status: "ready", catalogue: fixture }
     : { status: "loading", catalogue: null });
   const [query, setQuery] = useState("");
+  const [scope, setScope] = useState("open");
+  const [loadingMore, setLoadingMore] = useState(false);
   const [status, setStatus] = useState("all");
   const [plant, setPlant] = useState("all");
   const [owner, setOwner] = useState("all");
@@ -97,7 +101,7 @@ export default function MyBatchesScreen({ fixtureOnly = false, onExitFixture }) 
   useEffect(() => {
     if (fixtureOnly) return undefined;
     let live = true;
-    apiFetch("/batches/catalogue")
+    apiFetch(`/batches/catalogue?scope=${scope}`)
       .then(async response => {
         const data = await response.json().catch(() => ({}));
         const result = classifyResponse({ ok: response.ok, status: response.status, data });
@@ -116,9 +120,30 @@ export default function MyBatchesScreen({ fixtureOnly = false, onExitFixture }) 
         catalogue: null,
       }));
     return () => { live = false; };
-  }, [fixtureOnly]);
+  }, [fixtureOnly, scope]);
 
-  const allRows = useMemo(() => state.catalogue?.rows || [], [state.catalogue]);
+  const loadMore = async () => {
+    const cursor = state.catalogue?.next_cursor;
+    if (!cursor || loadingMore || fixtureOnly) return;
+    setLoadingMore(true);
+    try {
+      const response = await apiFetch(`/batches/catalogue?scope=${scope}&before_id=${encodeURIComponent(cursor)}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.catalogue?.scope !== scope) throw new Error("Older Batches could not be loaded.");
+      setState(previous => previous.catalogue?.scope !== scope ? previous : ({
+        ...previous, catalogue: { ...data.catalogue,
+          rows: [...(previous.catalogue?.rows || []), ...(data.catalogue.rows || [])] },
+      }));
+    } catch {
+      setOpening({ status: "error", id: null, message: "Older Batches could not be loaded; the current list was kept." });
+    }
+    setLoadingMore(false);
+  };
+
+  const allRows = useMemo(() => (state.catalogue?.rows || []).filter(row => !fixtureOnly ||
+    (scope === "open" ? ["working", "sent", "submitted", "approved"].includes(row.status)
+      : ["issued_locked", "abandoned", "archived"].includes(row.status))),
+  [state.catalogue, fixtureOnly, scope]);
   const statusOptions = useMemo(() => [...new Set(allRows.map(row => row.status).filter(Boolean))].sort(), [allRows]);
   const plantOptions = useMemo(() => [...new Map(allRows.filter(row => row.plant).map(row =>
     [String(row.plant.id), row.plant])).values()].sort((a, b) =>
@@ -172,8 +197,15 @@ export default function MyBatchesScreen({ fixtureOnly = false, onExitFixture }) 
         return;
       }
 
-      setDurableBatch({ ...workspaceData.batch,
-        pricing_basis_release: pricingData.batch.pricing_basis_release || null });
+      const reopened = { ...workspaceData.batch,
+        pricing_basis_release: pricingData.batch.pricing_basis_release || null };
+      if (!requestExitReview?.()) {
+        setOpening({ status: "ready", id: row.id,
+          message: "Batch switch cancelled; the Costing review was kept unchanged." });
+        return;
+      }
+      setBatchProfile(freshBatchProfileValues(reopened));
+      setDurableBatch(reopened);
       setOpening({ status: "ready", id: row.id, message: "Caller-visible Batch reopened." });
       setTab("batch");
     } catch {
@@ -204,9 +236,16 @@ export default function MyBatchesScreen({ fixtureOnly = false, onExitFixture }) 
     </div>}
 
     <div role="toolbar" aria-label="My Batches controls" style={toolbar}>
+      <select aria-label="Batch work scope" value={scope} onChange={event => {
+        setScope(event.target.value); setStatus("all"); setExpanded([]);
+        if (!fixtureOnly) setState({ status: "loading", catalogue: null });
+      }} style={control}>
+        <option value="open">Active · unfinished</option>
+        <option value="closed">Completed / abandoned</option>
+      </select>
       <input type="search" aria-label="Search displayed Batches" value={query}
         placeholder="Batch, customer, plant, sector or Release"
-        title="Filters the displayed bounded list in this browser. It cannot reach Batches outside the window the server returned."
+        title="Filters loaded Batches. Load older Batches to extend the search."
         onChange={event => setQuery(event.target.value)}
         style={{ ...control, width: 232, minWidth: 140, flex: "0 1 232px" }} />
       <select aria-label="Batch state" value={status} onChange={event => setStatus(event.target.value)} style={control}>
@@ -235,8 +274,8 @@ export default function MyBatchesScreen({ fixtureOnly = false, onExitFixture }) 
       <PanelFocusToggle panel="list" noun="Batch list" focused={focusPanel === "list"} onToggle={toggleFocus} />
     </div>
 
-    {catalogue?.results_limited && <Notice>
-      Newest {catalogue.display_limit} caller-visible Batches only. Search and filters cannot reach older Batches.
+    {catalogue?.next_cursor && <Notice>
+      Showing the newest {allRows.length} {scope === "open" ? "unfinished" : "terminal"} Batches. Load older work below.
     </Notice>}
     {(catalogue?.details_partial || catalogue?.denied_sections?.length > 0) && <Notice>
       <strong>Catalogue detail is partial.</strong>
@@ -261,9 +300,9 @@ export default function MyBatchesScreen({ fixtureOnly = false, onExitFixture }) 
       </div>}
       {state.status === "ready" && (rows.length === 0
         ? <EmptyState
-            title={anyFilter ? "No displayed Batch matches these filters" : "No caller-visible Batches"}
+            title={anyFilter ? "No displayed Batch matches these filters" : scope === "open" ? "No active Batches" : "No completed or abandoned Batches"}
             hint={anyFilter
-              ? "Clear a filter to widen the answer. Filters only search the bounded window the server returned."
+              ? "Clear a filter or load older Batches to widen the answer."
               : "Empty and access-denied remain separate states. No trial Batch or fixture is created."} />
         : <table style={denseTable}>
             <thead>
@@ -327,9 +366,13 @@ export default function MyBatchesScreen({ fixtureOnly = false, onExitFixture }) 
               })}
             </tbody>
           </table>)}
+      {state.status === "ready" && catalogue?.next_cursor && <button type="button"
+        disabled={loadingMore} onClick={loadMore} style={{ ...rowAction, margin: 10, padding: "6px 12px" }}>
+        {loadingMore ? "Loading older Batches…" : "Load older Batches"}
+      </button>}
     </div>
 
-    <ScreenFooter right={`${allRows.length} in the returned window · secondary detail is one row disclosure away`}>
+    <ScreenFooter right={`${allRows.length} loaded · secondary detail is one row disclosure away`}>
       <ProvenanceTag kind="governed" />
       <span>Batches ·</span>
       <ProvenanceTag kind="immutable" />

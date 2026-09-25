@@ -133,6 +133,11 @@ code {
   padding: 7px;
 }
 
+.batch-profile-full.is-governed .batch-profile-pricing-card.is-governed-primary {
+  width: 100%;
+  max-width: none;
+}
+
 /* Three rows: the Release select is fixed so the inline note keeps some width,
    and the open-Batch identity sits beside DATE instead of on its own line. */
 .batch-profile-pricing-card .batch-pb-release-field {
@@ -377,6 +382,44 @@ code {
   color: #344861;
   font-family: system-ui, 'Segoe UI', sans-serif;
 }
+
+.batch-workspace-primary {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.batch-workspace-panel.is-embedded {
+  width: 100%;
+  min-width: 0;
+  border-left: 0;
+  box-shadow: none;
+}
+
+.batch-workspace-panel.is-embedded > header {
+  align-items: center;
+  min-height: 38px;
+  padding: 5px 10px;
+}
+
+.batch-workspace-panel.is-embedded > header h2 { font-size: 13px; }
+.batch-workspace-panel.is-embedded > header p { margin-top: 1px; font-size: 8px; }
+.batch-workspace-panel.is-embedded .batch-workspace-panel-content {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px 12px;
+}
+.batch-workspace-panel.is-embedded .batch-workspace-preparation { order: 1; }
+.batch-workspace-panel.is-embedded .batch-workspace-products { order: 2; }
+.batch-workspace-panel.is-embedded .batch-workspace-groups-section { order: 3; }
+.batch-workspace-panel.is-embedded .batch-workspace-sets-section { order: 4; }
+.batch-workspace-panel.is-embedded .batch-workspace-identity-section,
+.batch-workspace-panel.is-embedded .batch-workspace-access-section,
+.batch-workspace-panel.is-embedded .batch-workspace-profile-section,
+.batch-workspace-panel.is-embedded .batch-workspace-advanced-section { order: 5; }
+.batch-workspace-panel.is-embedded .batch-workspace-row-overrides { display: none; }
+.batch-workspace-panel.is-embedded > footer { padding: 5px 10px; font-size: 7.5px; }
 
 .batch-workspace-panel > header {
   display: flex;
@@ -953,6 +996,30 @@ code {
 .batch-workspace-preparation-grid small { color: #718096; font-size: 7px; }
 .batch-workspace-preparation-blockers { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
 .batch-workspace-preparation-blockers span { padding: 3px 6px; border-radius: 4px; background: #fff0e2; color: #a65318; font-size: 7.5px; }
+.batch-workspace-readiness-blockers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 7px;
+}
+.batch-workspace-readiness-blockers button {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid #e4b986;
+  border-radius: 5px;
+  background: #fff8ed;
+  color: #344861;
+  cursor: pointer;
+  text-align: left;
+}
+.batch-workspace-readiness-blockers strong { color: #a65318; font-size: 8px; white-space: nowrap; }
+.batch-workspace-readiness-blockers span { overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.batch-workspace-readiness-blockers small { color: #a65318; font-size: 7px; white-space: nowrap; }
+.batch-workspace-readiness-blockers button:focus-visible { outline: 2px solid #d97825; outline-offset: 1px; }
 .batch-workspace-send-blockers { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .batch-workspace-send-blockers span { padding: 3px 6px; border-radius: 4px; background: #f1ede7; color: #536a84; font-size: 7.5px; }
 .batch-workspace-governed-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 8px; }
@@ -1091,6 +1158,29 @@ code {
   flex-direction: column;
   gap: 3px;
 }
+
+.batch-workspace-sku-proposal { grid-column: 1 / -1; }
+.batch-workspace-sku-proposal > button {
+  padding: 4px 8px;
+  border-color: #d97825;
+  color: #a55a16;
+}
+.batch-workspace-sku-proposal-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid #ead9c3;
+  border-radius: 5px;
+  background: #fff;
+}
+.batch-workspace-sku-proposal-fields > strong,
+.batch-workspace-sku-proposal-fields > small,
+.batch-workspace-sku-proposal-fields > [role="alert"] {
+  grid-column: 1 / -1;
+}
+.batch-workspace-sku-proposal-fields > button { grid-column: 1 / -1; justify-self: start; }
 
 .batch-workspace-row-editor-title strong,
 .batch-workspace-row-version-evidence strong {
@@ -1274,6 +1364,68 @@ code {
 .new-batch-family-search {
   margin-bottom: 7px;
 }
+
+.new-batch-find-toggle {
+  margin: 0 0 7px;
+  border: 1px solid #d97825;
+  border-radius: 5px;
+  background: #fff;
+  color: #9a5418;
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+  text-align: left;
+}
+
+.new-batch-find-toggle span { margin-left: 4px; }
+
+.new-batch-search-choices {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 8px;
+  padding: 7px;
+  border: 1px solid #d9cdbd;
+  border-radius: 6px;
+  background: #fffaf4;
+}
+
+.new-batch-search-choices button {
+  border: 0;
+  border-radius: 4px;
+  background: #fff;
+  color: #344861;
+  padding: 5px 7px;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.new-batch-search-choices button:hover,
+.new-batch-search-choices button:focus-visible { background: #f2e8da; }
+
+.new-batch-search-choices button.is-create {
+  border: 1px solid #d97825;
+  color: #9a5418;
+  font-weight: 750;
+}
+
+.new-batch-prospect-entry {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px solid #d9cdbd;
+  border-radius: 6px;
+  background: #fffaf4;
+  color: #344861;
+  font-size: 10px;
+}
+
+.new-batch-prospect-entry label { display: grid; gap: 3px; }
+.new-batch-prospect-entry small { color: #718096; }
+.new-batch-prospect-matches { display: grid; gap: 3px; }
+.new-batch-prospect-matches button { text-align: left; }
 
 .new-batch-panel label small {
   color: #9a5418;

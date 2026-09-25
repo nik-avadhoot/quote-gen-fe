@@ -57,6 +57,18 @@ without explicit Product Owner scope.
   read-only increment record.
 - [`u2-plant-construction-adoption-increment.md`](u2-plant-construction-adoption-increment.md) —
   read-only Plant Construction Adoption matrix and local verification.
+- [`cost-calculation-journey-ux-review-2026-09-22.md`](cost-calculation-journey-ux-review-2026-09-22.md)
+  — hurdle register CC-01..CC-34 for the login-to-shareable-quote journey. A review record, not an
+  authorisation.
+- [`quote-journey-slice-1-closure.md`](quote-journey-slice-1-closure.md) — slice 1 of that
+  reshaping: one stage vocabulary, one shared readiness register, and verbs that name their
+  consequence. Locally verified, fixture-browser only.
+- [`quote-journey-slice-2-closure.md`](quote-journey-slice-2-closure.md) — slice 2: the lane is an
+  explicit persisted choice rather than an inference, shareability belongs to a Quote revision, and
+  partial calculation stops reading as ready. Locally verified, fixture-browser only.
+- [`quotation-simplification-h0-s1-evidence-2026-09-22.md`](quotation-simplification-h0-s1-evidence-2026-09-22.md)
+  — Product Owner D-1..D-9 selections for the simplification programme, H0 handoff evidence, and
+  the locally verified Batch-first S1 shell.
 
 ## Current open work
 
@@ -69,6 +81,10 @@ without explicit Product Owner scope.
   product decision.
 - [`u2-location-applicability-decision-packet.md`](u2-location-applicability-decision-packet.md) —
   accepted decision packet for governed SKU Master Location applicability (Amendment 05).
+- [`quote-journey-decision-packet-2026-09-22.md`](quote-journey-decision-packet-2026-09-22.md) —
+  original D-1..D-9 alternatives. The simplification programme's selections are now recorded in
+  `quotation-simplification-h0-s1-evidence-2026-09-22.md`; the packet remains rationale, not an
+  open implementation gate.
 
 ## Active S9 material — do not archive
 

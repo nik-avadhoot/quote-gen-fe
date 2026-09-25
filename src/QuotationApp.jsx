@@ -53,7 +53,7 @@ export default function App(){
 function QuotationApp(){
   const st = useAppState();
   const { profile, setShowChangePassword, setShowProfile,
-    showChangePassword, showProfile, showToast, tab } = st;
+    setQuoteHeaderContext, showChangePassword, showProfile, showToast, tab } = st;
 
   // ── MAIN RENDER ───────────────────────────────────────────────────────────
   return(
@@ -66,7 +66,8 @@ function QuotationApp(){
         <div style={{flex:1,overflow:"hidden",position:"relative"}}>
           {tab==="costing"&&<CostingTab/>}
           {tab==="items"&&<QuotesWorkspace/>}
-          {tab==="approvalinbox"&&<QuoteCatalogueScreen mode="inbox"/>}
+          {tab==="approvalinbox"&&<QuoteCatalogueScreen mode="inbox"
+            onContextChange={setQuoteHeaderContext}/>}
           {tab==="mybatches"&&<MyBatchesScreen/>}
           {tab==="batch"&&<BatchEntryTab/>}
           {tab==="constrlib"&&<ConstructionLibTab/>}

@@ -26,6 +26,8 @@ import { useCostingBatchBridge } from "./useCostingBatchBridge.js";
 import { useQuoteActions } from "./useQuoteActions.js";
 import { usePricingBasisState } from "./usePricingBasisState.js";
 import { useGovernedConstructions } from "./useGovernedConstructions.js";
+import { useQuoteLane } from "./useQuoteLane.js";
+import { useGovernedSectors } from "./useGovernedSectors.js";
 
 export function AppStateProvider({ children }){
   const st = {};
@@ -33,6 +35,7 @@ export function AppStateProvider({ children }){
   Object.assign(st, useUiState());            // FIRST: showToast is used by every slice below
   Object.assign(st, useMastersState());       // no deps
   Object.assign(st, useCostingState());       // no deps
+  Object.assign(st, useGovernedSectors(st));  // AFTER useUiState (needs profile) and useMastersState (whose local `sectors`/`sectorCodes` it deliberately REPLACES — Commercial Policies is the governed Sector master as of 2026-09-22), BEFORE useBatchState which consumes sectorCodes
   Object.assign(st, useQuoteItemsState(st));  // needs profile (ui)
   Object.assign(st, usePricingBasisState());  // U3 fallback + the single U4 durable Batch binding
   Object.assign(st, useBatchState(st));       // needs sectorCodes + constructionLib (masters), setTab/showToast (ui)
@@ -41,6 +44,7 @@ export function AppStateProvider({ children }){
   Object.assign(st, useCostingResult(st));    // needs spec (draft), masters, batchRows/batchProfile (batch)
   useBatchInvalidation(st);                   // AFTER masters AND batch: reads both, calls invalidateAllBatchResults
   Object.assign(st, useCostingBatchBridge(st)); // AFTER useCostingResult: consumes resolveSpecWasteConv
+  Object.assign(st, useQuoteLane(st));         // AFTER usePricingBasisState (durableBatch), useBatchState (rows + invalidateAllBatchResults) and the bridge: owns the explicit, persisted Quick-vs-Customer-quote choice
   Object.assign(st, useQuoteActions(st));     // AFTER everything: reads r/missing (derived) and restoreRef (items)
 
   return <AppStateContext.Provider value={st}>{children}</AppStateContext.Provider>;

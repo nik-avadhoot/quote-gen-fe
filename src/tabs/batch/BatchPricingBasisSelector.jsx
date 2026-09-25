@@ -208,7 +208,7 @@ export default function BatchPricingBasisSelector({
             <strong className="batch-pb-compact-label">RELEASE</strong>
             <label className="batch-pb-release-field" title="Governed Pricing Basis Release">
               <span className="batch-pb-sr-label">Governed Release</span>
-              <select aria-label="Governed Release" value={selected ? String(selected.id) : ""} onChange={choose}
+              <select id="batch-pricing-basis-release" aria-label="Governed Release" value={selected ? String(selected.id) : ""} onChange={choose}
                 disabled={!plantCode || read.status !== "ready" || !isValidDateOnly(draft.pricingDate)}>
                 <option value="">{eligible.length ? "Choose eligible Release" : "No eligible Release"}</option>
                 {selected && !selectedOption?.eligibility.eligible && (

@@ -543,8 +543,15 @@ console.log("\n── S8 producer: a route change preserves the override ──"
   eq("no context falls back to the system figure", resolveBatchInterest(undefined).value, 0.5);
   const bridge = readFileSync(new URL("../src/state/useCostingBatchBridge.js", import.meta.url), "utf8");
   const draft = readFileSync(new URL("../src/state/useCostingDraft.js", import.meta.url), "utf8");
+  // S2 moved the review build into prepareBatchRowReview({row,profile,...});
+  // `profile` is the review's target Profile, defaulting to the live
+  // batchProfile for local rows and the governed Batch's own for durable rows.
+  const review = bridge.slice(bridge.indexOf("export function prepareBatchRowReview("),
+    bridge.indexOf("export function useCostingBatchBridge("));
   ok("Deep Dive review copy carries the resolved Batch interest",
-     bridge.includes("sp.interest=resolveBatchInterest(batchProfile).value;"));
+     review.includes("sp.interest=resolveBatchInterest(profile).value;")
+     && bridge.includes("const loadBatchRowIntoCosting=(row,targetProfile=batchProfile)=>{")
+     && bridge.includes("prepareBatchRowReview({row,profile:targetProfile,"));
   ok("Costing START resolves interest instead of `?? INIT_SPEC.interest`",
      draft.includes("out.interest=resolveBatchInterest(cv).value;")
      && !draft.includes("out.interest=cv.interest===undefined"));
