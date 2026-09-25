@@ -1,121 +1,57 @@
 # Current state handoff
 
-Updated: 2026-09-18. This is a concise working snapshot, not a closure award. Verify the source,
-repository status, and deployed state before relying on any time-sensitive claim.
+Updated: 2026-09-25. This is the canonical record of implemented and deployed product state.
+For the reading order and decision ownership, start at
+[`PROJECT-HANDOFF.md`](PROJECT-HANDOFF.md).
 
-## Product and repository shape
+## Live delivery truth
 
-The application is split across two independent repositories:
+S1 through S5 are implemented and live. They are not pending design work and must not be described
+as fixture-only or as blocked by the earlier S9 activation programme.
 
-- `quote-gen-fe`: React 19 + Vite frontend. Authentication, feature-gated governed screens, local
-  costing/legacy workspaces, and API-backed operational screens coexist during the transition.
-- `quote-gen-be`: Flask API, Supabase caller-context and governed route layer, database migrations
-  and tests, the `calculate-batch-row` Edge Function source, and Excel-template export.
-
-The frontend still has local `cbb_*` persistence for legacy master, costing, batch, template, and
-working-quote state. Newer governed reads and mutations travel through the authenticated backend
-and Supabase RLS/RPC boundaries. Do not describe the system as either “localStorage only” or “fully
-database-backed”; both models currently exist in deliberately different areas.
-
-Both repositories are on `data-model/s0-provenance`; this evidence/docs thread is committed in each
-repository. Inspect status afresh before every increment because concurrent tool-managed linked
-worktrees can appear under `.claude/worktrees`. Treat those and every new pre-existing change as
-user/project-owned; do not stage, discard, reflow, or fold them into an unrelated increment.
-
-## Current S9 truth
-
-S9 remains active unfinished work:
-
-| Boundary | Current truth |
+| Surface | Live deployment evidence |
 |---|---|
-| Local implementation | Present |
-| Automated database verification | Complete in the recorded S9 run |
-| Database migrations | S9 gates activated through `20260911091000_s9c_quote_workflow_gates`; beta Wave A (`20260917182121`, `20260917182138`) and Wave B seed (`20260918040738`) are live |
-| Production attestation secret | Edge half (`QCA_KEY_ID`, `QCA_KEY_HEX`) provisioned 2026-09-17; database keyring `app_private.attestation_keys` still empty (0 rows, 2026-09-18), so live Calculate cannot verify yet |
-| `calculate-batch-row` Edge Function | Version 1 ACTIVE with JWT verification (deployed 2026-09-18); not yet exercised by a real caller |
-| Governed Calculate through real authenticated runtime | Not verified |
-| Atomic Send and quotation workflow through deployed runtime | Not verified |
-| Maker/Checker/Admin authorization through that runtime | Not verified end to end |
-| Genuine browser and persistent calculation/quotation journey | Not verified |
-| Product Owner journey validation | Outstanding |
-| Technical/Product Owner closure | **No** |
+| Backend | Production deployment commit `6d1d84b` |
+| Frontend | Production deployment commit `e627007` |
+| Product increment | S1–S5 implemented and live |
+| Next delivery lane | S6 pilot/consolidation — pending |
 
-The active record is
-[`s9-technical-closure-and-u3-u6-handoff.md`](s9-technical-closure-and-u3-u6-handoff.md).
-Migration activation and local/automated tests are real evidence, but they do not substitute for
-secret provisioning, deployment, authenticated runtime proof, browser proof, persistent evidence,
-or Product Owner acceptance.
+The two repositories remain intentionally separate:
 
-Completing S9 later should require a focused activation run and an update/final addendum to that
-record—not another documentation reorganisation.
+- `quote-gen-fe` is the React/Vite product surface, including the governed Batch and Quote journey.
+- `quote-gen-be` is the Flask API, Supabase caller-context/governed route layer, database
+  migrations and tests, Edge Function source, and Excel-template exporter.
 
-## Other delivery state
+Some legacy local `cbb_*` persistence still coexists with governed data flows. Do not collapse that
+into either “localStorage only” or “fully database-backed”; consult the decision sources before
+changing a boundary.
 
-- Canonical product and architecture decisions are in
-  [`data-model-decisions.md`](data-model-decisions.md).
-- S7 and S8 have scoped closure records. Those records do not close S9.
-- U1 has several scoped closure records. Read each record’s final status section; do not infer that
-  every U1 concern is closed from one slice.
-- U3 Pricing Basis is implemented and automated-test verified locally. Its caller-scoped release,
-  component-history, eligibility, and blank-versus-zero presentation has not received a genuine
-  authenticated-live browser walkthrough or Product Owner validation.
-- U4 has broad local durable Batch implementation. The My Batches read-only catalogue and reopen
-  journey are locally technically closed and fixture verified; authenticated-live browser evidence
-  and Product Owner validation remain deferred. The Customer Family/Sector migrations are activated
-  as `20260915100440` and `20260915100521` (catalogue gate 7/7); the governed Sector master still
-  has zero rows, which blocks Family/Prospect/Batch creation until governed Sectors exist.
-- U2's caller-scoped SKU Master now includes the Amendment 02/03 field model and both Amendment 04
-  governed-action slices: proposal, draft/version work, approval, Plant Item Code assignment,
-  publication, lifecycle, portfolio, references, SKU Set proposal/confirmation/retirement and
-  append-only history. Amendment 05 Master Location applicability writes are live too. The two latest
-  migrations were applied on 2026-09-17 after empty-table/conflict preflight; focused live pgTAP passed
-  74/74 across SKU governance and both new boundaries. Caller-token routes and activation-gated controls
-  are ready; settled-Customer Sets require a different confirmer. Genuine authenticated-browser mutation
-  proof and Product Owner validation remain outstanding because the live SKU tables are still empty.
-- U2 Plant Construction Adoption is now a read-only matrix inside the governed Construction surface
-  (`2de4c15`): approved versions of published Constructions are shown against only the caller's exact
-  `plant_access` scope, with Adopted, Withdrawn, Not adopted and Unavailable kept distinct. Focused
-  fixtures are 10/0 and the existing Construction route gate is 38/0. Browser evidence is a labelled
-  developer fixture only; adoption proposal/approval/withdrawal and authenticated-live qualification
-  remain later work. See [`u2-plant-construction-adoption-increment.md`](u2-plant-construction-adoption-increment.md).
-- The Family G authenticated-read correction is applied live as `20260917182121` (beta Wave A):
-  authenticated callers can execute the Family G read helpers; anon/public remain denied.
-- U5 read-only Quote workflow presentation is implemented and automated-test verified locally:
-  Approval Inbox, Quote History, immutable revisions/items/snapshots, workflow chronology, customer
-  outcomes, exact persisted identities, and guarded Batch-to-Quote navigation are present. Submit,
-  Approve, Return, Withdraw, Issue, Create Revision, Amend, and Reprice remain visibly disabled as
-  `Backend activation pending`. Authenticated-live browser evidence and Product Owner validation are
-  still deferred.
-- The local Costing/Batch Builder bridge carries Printing Technology and number of colours as
-  row-owned descriptive metadata. They remain outside shared Construction confirmation and every
-  calculation path; governed persistence, Send snapshots, exports, and SKU Master search remain
-  follow-up work.
-- Presence in either dirty worktree remains implementation evidence, not deployment or Product Owner
-  closure.
-- S10 and later S-tranche work are not made current merely by appearing in an older roadmap.
+## Current non-blocking follow-up
 
-## Durable guardrails
+The complete short list is maintained in
+[`OPEN-DECISIONS-BACKLOG.md`](OPEN-DECISIONS-BACKLOG.md). Its items do not reopen S1–S5 or block
+S6 planning unless the named boundary is directly involved:
 
-- Mirrored costing implementations must not drift.
-- Blank, zero, and unresolved values have different meanings.
-- Tenant/plant authorization, quotation authority, audit history, and immutable revisions are
-  protected boundaries.
-- Applied database migrations are immutable project history; never rename or delete them.
-- Do not expose or inspect secret material during ordinary repository work.
-- Broad Markdown replacements must be anchored to the section being replaced; silent section loss
-  has occurred before.
-- Generated Edge engine files are regenerated through the repository bundling flow. Do not edit a
-  generated copy as if it were an independent source.
+1. A protected, authenticated production Batch-to-Quote smoke check.
+2. A Batch-workspace Compare entry point.
+3. S5R-17 cross-customer test using a second active Party.
+4. Named ownership for the U4/CPH migration-path pin.
+5. A future beta-reset plan that retains real beta accounts and removes only fixture/trial business
+   data after explicit authorisation.
 
-## Immediate sequence
+## Guardrails that remain current
 
-1. Continue independent read-only/product-surface work only within its accepted scope.
-2. For S9 activation, follow the limited-beta waves in
-   [`beta-readiness-plan.md`](beta-readiness-plan.md): the Edge Function is deployed and its secrets
-   are present; the Product Owner still provisions the matching database keyring row, and the
-   Maker/Checker invitees must accept before any capability grant and the real authenticated smoke.
-3. Verify Maker, Checker, and Admin boundaries; inspect persistent calculation, quotation, and
-   workflow evidence; run directly affected regressions.
-4. Complete the genuine frontend journey with the Product Owner.
-5. Update the S9 record truthfully to award technical and Product Owner closure only after those
-   outcomes are observed.
+- Preserve tenant/plant authorization, quotation authority, audit history, immutable revisions,
+  and optimistic-concurrency boundaries.
+- Applied migrations are immutable history. Add a corrective migration instead of rewriting an
+  applied one.
+- Mirrored costing implementations require a deliberate mirror review.
+- Blank, zero, and unresolved values have distinct meanings.
+- Do not expose or inspect secret material in ordinary work.
+
+## Status of earlier programme records
+
+Earlier S7–S9, U-series, beta, and component-split packets are retained as audit and design
+evidence. They are not live-state authority unless the handoff map explicitly names them for a
+specific decision. In particular, historical references to an unexercised S9 runtime or a full main
+database reset must not override the live S1–S5 state or the current limited reset decision.

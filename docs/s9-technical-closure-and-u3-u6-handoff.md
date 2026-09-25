@@ -1,5 +1,10 @@
 # S9 technical closure and U3–U6 handoff
 
+> **Historical technical snapshot (2026-09-15).** Retained for S9/U-series evidence only. It does
+> not describe present delivery status or reopen S1–S5; use
+> [`current-state.md`](current-state.md) for live truth and
+> [`OPEN-DECISIONS-BACKLOG.md`](OPEN-DECISIONS-BACKLOG.md) for remaining work.
+
 Date: 2026-09-11  
 Updated: 2026-09-15
 Scope: S9 deferral position and UX-first U3–U6 handoff

@@ -1,5 +1,9 @@
 # Limited beta operating sheet
 
+> **Historical operating record (2026-09-17).** Its prepared/not-live statement is a checkpoint,
+> not present status. S1–S5 are now live; use [`current-state.md`](current-state.md) and
+> [`OPEN-DECISIONS-BACKLOG.md`](OPEN-DECISIONS-BACKLOG.md) for current delivery and follow-up.
+
 Date: 2026-09-17
 
 State: **Prepared — not live**

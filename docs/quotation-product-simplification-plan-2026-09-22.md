@@ -1,5 +1,10 @@
 # Quotation product simplification plan
 
+> **Completed planning record.** The accepted S1–S5 choices are preserved in
+> [`quotation-simplification-h0-s1-evidence-2026-09-22.md`](quotation-simplification-h0-s1-evidence-2026-09-22.md).
+> Do not treat this proposal as active implementation direction; see
+> [`current-state.md`](current-state.md) for live status.
+
 Date: 2026-09-22  
 Status: implementation plan for Product Owner confirmation and controlled handoff  
 Governing posture: cautious optimism and continuous forward motion

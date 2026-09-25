@@ -1,8 +1,14 @@
-# Open work register
+# Historical open-work register
 
-This is the single startup register. Detailed packets remain linked as evidence, but they do not
-automatically expand the current increment. Reclassify an item here when evidence or Product Owner
-direction changes its status.
+> **Superseded as the startup register on 2026-09-25.** The short, active list is now
+> [`OPEN-DECISIONS-BACKLOG.md`](OPEN-DECISIONS-BACKLOG.md); live status is
+> [`current-state.md`](current-state.md). This retained register preserves detailed checkpoints and
+> evidence from earlier programmes. It must not be used to reopen S1–S5 or to infer present status
+> without those two canonical records.
+
+Detailed packets remain linked as evidence, but they do not automatically expand a current
+increment. Reclassify an item in the canonical backlog when evidence or Product Owner direction
+changes its status.
 
 | Classification | Item | Current boundary / clearing action |
 |---|---|---|

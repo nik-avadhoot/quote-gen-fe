@@ -1,5 +1,10 @@
 # Customer Pricing History — Phase 0 implementation plan and Sr Dev handoff
 
+> **Completed implementation-plan record.** Customer Pricing History is part of the live S1–S5
+> delivery. Retain this document for scope and acceptance context; current status and follow-up are
+> in [`current-state.md`](current-state.md) and
+> [`OPEN-DECISIONS-BACKLOG.md`](OPEN-DECISIONS-BACKLOG.md).
+
 Date: 2026-09-23  
 Status: **Product Owner approved for implementation**  
 Primary implementer: **Sr Dev Claude Opus 5**  

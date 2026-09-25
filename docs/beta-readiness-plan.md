@@ -1,5 +1,9 @@
 # Limited beta readiness plan
 
+> **Historical readiness rationale (2026-09-17).** This plan preserves its beta-entry/exit
+> reasoning. It does not define current delivery status: S1–S5 are live and S6
+> pilot/consolidation is pending. See [`current-state.md`](current-state.md).
+
 Date: 2026-09-17
 Authority: Product Owner approval, 2026-09-17, of the beta-entry / beta-exit split proposed by the
 Sr Dev reviewer. This record changes **when** existing closure gates are observed. It does not
