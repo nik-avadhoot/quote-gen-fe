@@ -26,6 +26,8 @@ packet, or exploratory proposal to reverse those facts.
 | Data model, authorization, audit and immutable-history rules | [`data-model-decisions.md`](data-model-decisions.md) | Governing product/data architecture decisions |
 | Costing START/REVIEW behaviour | [`costing-start-review-decisions.md`](costing-start-review-decisions.md) | Costing-entry and review decisions |
 | Quote-journey product choices for S1–S5 | [`quotation-simplification-h0-s1-evidence-2026-09-22.md`](quotation-simplification-h0-s1-evidence-2026-09-22.md) | The accepted D-1–D-9 selections; the earlier alternatives are rationale only |
+| Customer Pricing History scope and mechanism | [`customer-pricing-history-phase-0-implementation-plan-2026-09-23.md`](customer-pricing-history-phase-0-implementation-plan-2026-09-23.md) | Accepted CPH product scope and implementation mechanism; not live-status authority |
+| Commercial Intelligence product decisions | [`commercial-intelligence-decisions.md`](commercial-intelligence-decisions.md) | Approved CI product decisions; not an implementation plan |
 | Current unresolved decisions and assigned next actions | [`OPEN-DECISIONS-BACKLOG.md`](OPEN-DECISIONS-BACKLOG.md) | Work that needs an owner or a later decision |
 | Backend reset boundary | [`../../quote-gen-be/docs/beta-main-reset-package-2026-09-24.md`](../../quote-gen-be/docs/beta-main-reset-package-2026-09-24.md) | Historical reset evidence and the current non-destructive reset constraint |
 
@@ -40,7 +42,7 @@ not standing authority.
 | Canonical | This handoff, `current-state.md`, `data-model-decisions.md`, `costing-start-review-decisions.md`, the accepted S1–S5 evidence, and the open-decision backlog | Start here; update these only when their governed facts change |
 | Operational evidence | `beta-*`, `u1-*` through `u4-*`, `s9-*`, `data-model-s7*` through `data-model-s9*`, closure evidence, implementation packets, and regression records | Trace a specific implementation, test, or approval; they do not define current status alone |
 | Historical / superseded | `data-model-canonical-amendment-*`, early `data-model-*` design/brief/proposal/review files, `component-split-plan.md`, `post-split-state.md`, `defect-pass-*`, and archive contents | Preserve for audit and rationale; do not place on a newcomer’s implementation path |
-| Exploratory / request sources | `feature-requests.md`, `commercial-intelligence-decisions.md`, UX reviews, discovery reports, and pre-acceptance design packets | Context only until an item is explicitly accepted into a canonical source |
+| Exploratory / request sources | `feature-requests.md`, UX reviews, discovery reports, and pre-acceptance design packets | Context only until an item is explicitly accepted into a canonical source |
 
 The existing `docs/README.md` remains a preserved user-owned working file. This handoff supersedes
 it as the newcomer route for this cleanup increment without overwriting its uncommitted work.

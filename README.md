@@ -4,8 +4,9 @@ React 19 + Vite frontend for the PKGCanvas corrugated-packaging platform, curren
 the Quotation Module. The companion Flask/Supabase
 repository is [`../quote-gen-be`](../quote-gen-be).
 
-For project status and authority, start with [`docs/README.md`](docs/README.md). In particular,
-[`docs/current-state.md`](docs/current-state.md) records the incomplete S9 activation boundary.
+For project status and authority, start with
+[`docs/PROJECT-HANDOFF.md`](docs/PROJECT-HANDOFF.md). It routes each decision domain to its
+canonical source; [`docs/current-state.md`](docs/current-state.md) records live status.
 
 ## Local development
 
@@ -43,13 +44,11 @@ The application is transitional: legacy `cbb_*` state still uses browser storage
 governed screens use the authenticated backend and Supabase. A browser backup is therefore not a
 complete backup of governed database records.
 
-## S9 status
+## Current delivery
 
-Local S9 implementation, migrations, and recorded automated database verification exist. The
-production attestation secret and Edge Function are not activated, and the real authenticated
-Calculate/Send/workflow, runtime authorization, persistent, browser, and Product Owner journeys are
-not verified. S9 is not technically or Product Owner closed. Keep the S9 records and backend
-artifacts active.
+S1–S5 are implemented and live; S6 pilot/consolidation is pending. Historical S9 records remain
+available as evidence but do not define current delivery status. Use
+[`docs/current-state.md`](docs/current-state.md) before relying on a deployment or runtime claim.
 
 ## Checks
 

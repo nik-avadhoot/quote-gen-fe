@@ -1,7 +1,12 @@
 # Quotation simplification — H0 handoff and S1 evidence
 
+> **Canonical decisions; historical checkpoints.** The Product Owner's D-1–D-9 selections below
+> remain the canonical S1–S5 quote-journey decisions. The dated handoff, local-verification and
+> “awaiting review; not committed or deployed” wording records the 2026-09-23 checkpoint only.
+> Use [`current-state.md`](current-state.md) for live delivery status.
+
 Date: 2026-09-23  
-Status: H0 complete; revised S1 implemented and locally verified; awaiting review; not committed or deployed
+Status: historical H0/S1 implementation checkpoint; D-1–D-9 remain canonical product decisions
 
 ## H0 — handoff and baseline
 

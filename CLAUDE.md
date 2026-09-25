@@ -1,9 +1,10 @@
 # Frontend working instructions
 
 The parent [`../AGENTS.md`](../AGENTS.md) governs development and review posture. Start with
-[`docs/README.md`](docs/README.md), [`docs/current-state.md`](docs/current-state.md), and
-[`docs/open-work.md`](docs/open-work.md). Detailed historical plans are not mandatory startup
-reading.
+[`docs/PROJECT-HANDOFF.md`](docs/PROJECT-HANDOFF.md), then
+[`docs/current-state.md`](docs/current-state.md) and
+[`docs/OPEN-DECISIONS-BACKLOG.md`](docs/OPEN-DECISIONS-BACKLOG.md). Detailed historical plans are
+not mandatory startup reading.
 
 ## Repository shape
 
@@ -15,17 +16,13 @@ The frontend is no longer a monolith. `QuotationApp.jsx` is a thin shell; shared
 in `src/state/AppStateProvider.jsx`, and screens live under `src/tabs/`. The app currently combines
 legacy browser-persisted workspaces with newer authenticated backend/Supabase-backed surfaces.
 
-## Current S9 boundary
+## Current delivery boundary
 
-S9 migrations and recorded automated database verification are complete, but production
-attestation-secret provisioning and Edge deployment/activation are incomplete. Governed Calculate,
-Atomic Send, Quote workflow operations, and Maker/Checker/Admin boundaries have not been verified
-through the real deployed runtime. The genuine browser/persistent journey and Product Owner
-validation are also outstanding. S9 is not technically or Product Owner closed.
-
-Keep the S9 records in `docs/`, the migrations/tests/routes in `quote-gen-be`, and
-`quote-gen-be/supabase/functions/calculate-batch-row/` active and easy to find. Do not deploy,
-provision or inspect secrets, or alter live Supabase without explicit scope.
+S1–S5 are implemented and live; S6 pilot/consolidation is pending. Historical S9 records remain
+available as evidence and must not be used as current delivery status. Keep the S9 records in
+`docs/`, the migrations/tests/routes in `quote-gen-be`, and
+`quote-gen-be/supabase/functions/calculate-batch-row/` easy to find. Do not deploy, provision or
+inspect secrets, or alter live Supabase without explicit scope.
 
 ## Architecture guardrails
 

@@ -26,6 +26,16 @@ Some legacy local `cbb_*` persistence still coexists with governed data flows. D
 into either “localStorage only” or “fully database-backed”; consult the decision sources before
 changing a boundary.
 
+## S1–S5 capability map
+
+| Slice | Live capability |
+|---|---|
+| S1 | Batch-first shell for the quotation journey |
+| S2 | Governed Batch and SKU start |
+| S3 | One governed working surface, with Costing retained for row-level deep-dive |
+| S4 | Exact Quote approval and sharing |
+| S5 | Customer response, history, and revision journey |
+
 ## Current non-blocking follow-up
 
 The complete short list is maintained in
