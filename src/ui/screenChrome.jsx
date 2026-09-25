@@ -46,6 +46,7 @@ const ACTION_LABEL = {
   calculate: "Calculate", send: "Send", submit: "Submit", approve: "Approve",
   return: "Return", withdraw: "Withdraw", share: "Share with customer",
   create_revision: "Create revision", amend: "Amend", reprice: "Reprice",
+  record_outcome: "Record response",
 };
 
 // Backend-reported workflow availability. A missing/malformed entry fails

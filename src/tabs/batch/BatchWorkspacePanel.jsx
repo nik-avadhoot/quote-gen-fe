@@ -34,6 +34,66 @@ function ProfileValue({ label, value }) {
   </div>;
 }
 
+const PRIOR_QUOTE_SOURCE_LABEL = {
+  exact_source_revision: "Exact source revision of this Create Revision",
+  last_quote_customer_plant: "Latest issued Quote for this exact Customer/Prospect and Plant",
+};
+
+function PriorQuoteCard({ priorQuote, fixtureOnly, onOpen }) {
+  const { status, priorQuote: record, message } = priorQuote;
+  // A display-only flag (SD: "offer-validity lapse as a flag only, never an
+  // automatic Expired write"). The reference instant is read once at mount
+  // through useState's lazy initializer rather than inline during render.
+  const [nowMs] = useState(() => Date.now());
+  if (fixtureOnly || status === "fixture") return <section className="batch-workspace-advanced-section"
+    aria-labelledby="batch-workspace-prior-quote-title">
+    <h3 id="batch-workspace-prior-quote-title" tabIndex={-1}>Previous approved Quote</h3>
+    <small>Fixture-only workspace illustration; the prior-Quote lookup is not called.</small>
+  </section>;
+  if (status === "idle" || status === "loading") return <section className="batch-workspace-advanced-section"
+    aria-labelledby="batch-workspace-prior-quote-title">
+    <h3 id="batch-workspace-prior-quote-title" tabIndex={-1}>Previous approved Quote</h3>
+    <small>{status === "loading" ? "Checking for a prior Quote…" : "Not yet checked."}</small>
+  </section>;
+  if (status === "error" || status === "denied") return <section className="batch-workspace-advanced-section"
+    aria-labelledby="batch-workspace-prior-quote-title">
+    <h3 id="batch-workspace-prior-quote-title" tabIndex={-1}>Previous approved Quote</h3>
+    <small>{status === "denied" ? "Access denied for this lookup." : (message || "Prior-Quote lookup service could not be reached.")}</small>
+  </section>;
+  if (status === "no_customer_selected") return <section className="batch-workspace-advanced-section"
+    aria-labelledby="batch-workspace-prior-quote-title">
+    <h3 id="batch-workspace-prior-quote-title" tabIndex={-1}>Previous approved Quote</h3>
+    <small>No Customer/Prospect selected on this Batch yet, so no prior Quote can be matched.</small>
+  </section>;
+  if (status === "no_history" || !record) return <section className="batch-workspace-advanced-section"
+    aria-labelledby="batch-workspace-prior-quote-title">
+    <h3 id="batch-workspace-prior-quote-title" tabIndex={-1}>Previous approved Quote</h3>
+    <small>No prior issued Quote found for this exact Customer/Prospect and Plant.</small>
+  </section>;
+
+  const lapsed = record.offer_validity_to
+    && new Date(record.offer_validity_to).getTime() < nowMs
+    && record.standing === "current";
+  return <section className="batch-workspace-advanced-section" aria-labelledby="batch-workspace-prior-quote-title">
+    <h3 id="batch-workspace-prior-quote-title" tabIndex={-1}>Previous approved Quote</h3>
+    <div className="batch-workspace-identity-grid">
+      <Identity label="Quote reference" value={record.quote_reference || `Revision #${record.revision_id}`}
+        detail={record.revision_no != null ? `Revision ${record.revision_no}` : "Not yet numbered"} />
+      <Identity label="Standing" value={record.standing || record.workflow_status}
+        detail={PRIOR_QUOTE_SOURCE_LABEL[record.source_kind] || null} />
+      <Identity label="Issued" value={record.issued_at ? new Date(record.issued_at).toLocaleDateString() : "—"}
+        detail={record.offer_validity_to ? `Valid to ${record.offer_validity_to}` : null} />
+      <Identity label="Customer outcome" value={record.latest_outcome || "None recorded"}
+        detail={record.latest_outcome_at ? new Date(record.latest_outcome_at).toLocaleString() : null} />
+    </div>
+    {lapsed && <div className="batch-workspace-panel-state is-partial" role="status">
+      Offer validity has lapsed on this prior Quote. This is a flag only — its standing was never
+      changed automatically.
+    </div>}
+    <button type="button" onClick={onOpen}>Open and compare</button>
+  </section>;
+}
+
 function GovernedReadinessSummary({ readiness, busy, fixtureOnly, onBlocker,
   onRefreshReadiness, onCalculateAll, onSend }) {
   const counts = governedReadinessCounts(readiness);
@@ -668,6 +728,49 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     // visibly-stale state; no callback or response object can create a loop.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batch?.id, batch?.content_version, fixtureOnly]);
+
+  // S5 Slice A: the exact prior Quote for this Batch's Customer/Prospect and
+  // Plant. Fetched once per Batch identity (never re-derived from mutable
+  // current Batch/Customer fields) so a stale card cannot linger across a
+  // navigation to a different Batch.
+  const [priorQuote, setPriorQuote] = useState({ status: "idle", priorQuote: null });
+  const priorQuoteBatchRef = useRef(null);
+  useEffect(() => {
+    if (fixtureOnly) return undefined;
+    if (batch?.id == null || priorQuoteBatchRef.current === batch.id) return undefined;
+    priorQuoteBatchRef.current = batch.id;
+    let cancelled = false;
+    setPriorQuote({ status: "loading", priorQuote: null });
+    (async () => {
+      try {
+        const response = await apiFetch(`/quotes/batches/${encodeURIComponent(batch.id)}/prior-quote`);
+        const data = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!response.ok) {
+          const outcome = classifyResponse({ ok: response.ok, status: response.status, data });
+          setPriorQuote({ status: outcome.kind === "access-denied" ? "denied" : "error",
+            message: outcome.message, priorQuote: null });
+          return;
+        }
+        setPriorQuote({ status: data.status, priorQuote: data.prior_quote || null });
+      } catch {
+        if (!cancelled) setPriorQuote({ status: "error",
+          message: "The prior Quote lookup could not be reached.", priorQuote: null });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [batch?.id, fixtureOnly]);
+
+  const openPriorQuote = () => {
+    if (fixtureOnly || priorQuote.priorQuote?.revision_id == null) return;
+    setQuoteWorkspaceRequest({
+      revisionId: priorQuote.priorQuote.revision_id,
+      requestId: `prior-quote-${batch.id}-${priorQuote.priorQuote.revision_id}-${Date.now()}`,
+    });
+    setQuoteView("history");
+    setTab("items");
+    onClose?.();
+  };
 
   const loadRowCatalogue = async () => {
     if (fixtureOnly || rowCatalogue.status === "ready" || rowCatalogue.status === "loading") return;
@@ -1414,6 +1517,8 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
             <span>Resolve only the caller-visible Quote family attached to exact Batch identity #{batch.id}. A missing link remains an explicit empty result.</span></div>
           <button type="button" onClick={openLinkedQuote} disabled={fixtureOnly}>Open Quote evidence</button>
         </div>
+
+        <PriorQuoteCard priorQuote={priorQuote} fixtureOnly={fixtureOnly} onOpen={openPriorQuote} />
 
         <section className="batch-workspace-access-section" aria-labelledby="batch-workspace-access-title">
           <h3 id="batch-workspace-access-title" tabIndex={-1}>People and edit lock</h3>

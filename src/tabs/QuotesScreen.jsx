@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../lib/apiClient.js";
 import { isFeatureEnabled } from "../lib/featureFlags.js";
 import { classifyResponse } from "../lib/backendError.js";
@@ -134,7 +134,101 @@ function CustomerDocumentPreview({ quote, revision }) {
   </section>;
 }
 
-export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, sourceBatchState }) {
+function _factValue(value) {
+  return value === "unavailable" || value === null || value === undefined ? "Unavailable" : String(value);
+}
+
+function RevisionCompareRow({ row }) {
+  return <tr>
+    <td>{row.sku_id != null ? `SKU #${row.sku_id}` : `Lineage #${row.batch_row_lineage_id}`}</td>
+    <td><LifecycleBadge status={row.status} /></td>
+    <td>{_factValue(row.previous_rate)}</td>
+    <td>{_factValue(row.current_rate)}</td>
+    <td>{row.rate_movement === "unavailable" ? "Unavailable" : row.rate_movement}</td>
+    <td>{_factValue(row.previous_quantity)}</td>
+    <td>{_factValue(row.current_quantity)}</td>
+    <td>{_factValue(row.previous_line_total)}</td>
+    <td>{_factValue(row.current_line_total)}</td>
+    <td>{_factValue(row.previous_margin_pct)}</td>
+    <td>{_factValue(row.current_margin_pct)}</td>
+  </tr>;
+}
+
+// S5 Slice B: price first (D-5), then disclosure. Never re-derives values
+// from current Batch/SKU/master data - every cell is frozen evidence or the
+// literal "Unavailable".
+function RevisionCompare({ revisionId, sourceRevisionId, fixtureOnly }) {
+  const [state, setState] = useState({ status: "idle", comparison: null });
+  const requestedRef = useRef(null);
+  const [disclosureOpen, setDisclosureOpen] = useState(false);
+
+  useEffect(() => {
+    if (fixtureOnly || revisionId == null || sourceRevisionId == null) return undefined;
+    const key = `${revisionId}:${sourceRevisionId}`;
+    if (requestedRef.current === key) return undefined;
+    requestedRef.current = key;
+    let cancelled = false;
+    setState({ status: "loading", comparison: null });
+    (async () => {
+      try {
+        const response = await apiFetch(`/quotes/revisions/${encodeURIComponent(revisionId)}/compare`);
+        const data = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!response.ok) {
+          const result = classifyResponse({ ok: response.ok, status: response.status, data });
+          setState({ status: "error", message: result.message, comparison: null });
+          return;
+        }
+        setState({ status: "ready", comparison: data.comparison || null });
+      } catch {
+        if (!cancelled) setState({ status: "error",
+          message: "The comparison service could not be reached.", comparison: null });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [revisionId, sourceRevisionId, fixtureOnly]);
+
+  if (fixtureOnly) return <div className="quote-evidence-muted">
+    Fixture-only workspace illustration; the revision comparison is not called.</div>;
+  if (revisionId == null || sourceRevisionId == null) return <div className="quote-evidence-muted">
+    No source revision recorded for this Quote — nothing to compare against.</div>;
+  if (state.status === "idle" || state.status === "loading") return <div className="quote-evidence-muted">
+    Loading comparison…</div>;
+  if (state.status === "error") return <div className="quote-error-state">
+    <strong>Comparison unavailable</strong><span>{state.message}</span></div>;
+  const comparison = state.comparison;
+  if (!comparison) return <div className="quote-evidence-muted">No comparison evidence returned.</div>;
+  return <div>
+    {comparison.mixed_engine && <div className="batch-workspace-panel-state is-partial" role="status">
+      Rows in this comparison were calculated on different engine versions — read the authority
+      disclosure before treating a rate movement as a like-for-like change.
+    </div>}
+    <table className="quote-compare-table"><thead><tr>
+      <th>Item</th><th>Status</th><th>Prev rate</th><th>Rate</th><th>Δ rate</th>
+      <th>Prev qty</th><th>Qty</th><th>Prev total</th><th>Total</th><th>Prev margin %</th><th>Margin %</th>
+    </tr></thead><tbody>
+      {comparison.rows.map(row => <RevisionCompareRow key={row.batch_row_lineage_id ?? `${row.status}-${row.sku_id}`} row={row} />)}
+    </tbody></table>
+    {(comparison.added_count > 0 || comparison.removed_count > 0) && <p className="quote-evidence-muted">
+      {comparison.added_count} row(s) added, {comparison.removed_count} row(s) removed since the prior revision.</p>}
+    <details open={disclosureOpen} onToggle={event => setDisclosureOpen(event.target.open)}>
+      <summary>Input differences (dimensions, Construction, waste, conversion, MOQ)</summary>
+      {comparison.rows.map(row => <div key={`in-${row.batch_row_lineage_id}`} className="quote-frozen-json">
+        <strong>{row.sku_id != null ? `SKU #${row.sku_id}` : `Lineage #${row.batch_row_lineage_id}`}</strong>
+        <pre>{JSON.stringify({ previous: row.previous_input_disclosure, current: row.current_input_disclosure }, null, 2)}</pre>
+      </div>)}
+    </details>
+    <details>
+      <summary>Authority differences (Pricing Basis, engine, rounding, interest, freight)</summary>
+      {comparison.rows.map(row => <div key={`auth-${row.batch_row_lineage_id}`} className="quote-frozen-json">
+        <strong>{row.sku_id != null ? `SKU #${row.sku_id}` : `Lineage #${row.batch_row_lineage_id}`}</strong>
+        <pre>{JSON.stringify({ previous: row.previous_authority_disclosure, current: row.current_authority_disclosure }, null, 2)}</pre>
+      </div>)}
+    </details>
+  </div>;
+}
+
+export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, sourceBatchState, fixtureOnly = false }) {
   const revisions = useMemo(() => orderedQuoteRevisions(quote.revisions), [quote.revisions]);
   const revision = revisions.find(row => String(row.id) === String(selectedId)) || revisions[0];
   const batch = quote.batch;
@@ -220,6 +314,10 @@ export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, 
           : <section className="quote-evidence-section"><h3>Recipient identity unavailable</h3>
             <p>This legacy revision has no exact Batch-selected Customer identity. Any earlier addressee text is non-authoritative.</p>
           </section>}
+        <section className="quote-evidence-section"><h3>Compare with source revision</h3>
+          <RevisionCompare revisionId={revision.id} sourceRevisionId={revision.source_revision_id}
+            fixtureOnly={fixtureOnly} />
+        </section>
         {revision.return_note && <div className="quote-return-note"><strong>Recorded return note</strong>{revision.return_note}</div>}
         {revision.withdraw_reason && <div className="quote-return-note"><strong>Recorded withdrawal reason</strong>{revision.withdraw_reason}</div>}
         {revision.void_reason && <div className="quote-return-note"><strong>Recorded void reason</strong>{revision.void_reason}
@@ -230,8 +328,22 @@ export function QuoteEvidence({ quote, selectedId, onSelect, onOpenSourceBatch, 
           {revision.items?.length ? revision.items.map((item, index) => <SnapshotCard key={item.id} item={item} index={index} />)
             : <EmptyState title="No caller-visible Quote Items" hint="This revision has no visible immutable item evidence." />}
         </section>
-        <section className="quote-evidence-section"><h3>Customer outcome stream</h3>
-          <CustomerOutcomeTimeline events={revision.customer_outcomes} />
+        <section className="quote-evidence-section"><h3>Customer response</h3>
+          {revision.customer_outcomes?.length
+            ? (() => {
+              const latest = [...revision.customer_outcomes]
+                .sort((a, b) => (a.occurred_at || "").localeCompare(b.occurred_at || "") || (a.id - b.id))
+                .at(-1);
+              return <div className="quote-revision-facts" style={{ marginBottom: 8 }}>
+                <EvidencePair label="Latest response"><LifecycleBadge status={latest.outcome} /></EvidencePair>
+                <EvidencePair label="Recorded">{dateTime(latest.occurred_at)}</EvidencePair>
+                <EvidencePair label="Recorded by">{quoteActor(latest.recorded_by_actor, latest.recorded_by)}</EvidencePair>
+              </div>;
+            })()
+            : <div className="quote-evidence-muted">No caller-visible customer outcome has been recorded yet.</div>}
+          <details><summary>Full append-only response history</summary>
+            <CustomerOutcomeTimeline events={revision.customer_outcomes} />
+          </details>
         </section>
       </main> : <EmptyState title="No revisions visible" hint="The Quote family is visible, but it has no caller-visible revision evidence." />}
     </div>
@@ -250,6 +362,8 @@ export default function QuotesScreen({
   const [workflow, setWorkflow] = useState({ status: "idle", message: "" });
   const [shareOpen, setShareOpen] = useState(false);
   const [share, setShare] = useState({ channel: "Email", shared_on: new Date().toISOString().slice(0, 10), external_reference: "" });
+  const [outcomeOpen, setOutcomeOpen] = useState(false);
+  const [outcome, setOutcome] = useState({ outcome: "accepted", acceptance_date: "", acceptance_reference: "", note: "" });
 
   const openQuote = async event => {
     event?.preventDefault();
@@ -289,6 +403,10 @@ export default function QuotesScreen({
   const runWorkflow = async action => {
     if (fixtureOnly || !selectedRevision) return;
     if (action === "share") return setShareOpen(true);
+    if (action === "record_outcome") {
+      setOutcome({ outcome: "accepted", acceptance_date: "", acceptance_reference: "", note: "" });
+      return setOutcomeOpen(true);
+    }
     const body = {};
     if (action === "submit") {
       const expected = state.quote?.batch?.content_version;
@@ -299,8 +417,11 @@ export default function QuotesScreen({
       const note = window.prompt("Return note (required)"); if (note == null) return; body.note = note;
     } else if (action === "withdraw") {
       const reason = window.prompt("Withdrawal reason (required)"); if (reason == null) return; body.reason = reason;
-    } else if (["approve", "create_revision"].includes(action)
-      && !window.confirm(`${action === "approve" ? "Approve" : "Create the next revision from"} this immutable revision?`)) return;
+    } else if (action === "approve" && !window.confirm("Approve this immutable revision?")) return;
+    else if (action === "create_revision" && !window.confirm(
+      "The issued document remains immutable and stays exactly as sent. "
+      + "The source Batch will reopen for the next revision — you will edit and recalculate "
+      + "governed rows and Send again before anything new is issued. Continue?")) return;
     const route = action === "create_revision" ? "create-revision" : action;
     setWorkflow({ status: "busy", message: `${action.replaceAll("_", " ")} in progress…` });
     try {
@@ -333,6 +454,30 @@ export default function QuotesScreen({
       await exportQuote();
     } catch {
       setWorkflow({ status: "error", message: "Sharing may not have been recorded. Refresh before retrying." });
+    }
+  };
+  const submitOutcome = async event => {
+    event.preventDefault();
+    if (fixtureOnly || !selectedRevision) return;
+    setWorkflow({ status: "busy", message: "Recording the customer response…" });
+    try {
+      const response = await apiFetch(`/quotes/revisions/${encodeURIComponent(selectedRevision.id)}/outcome`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+          outcome: outcome.outcome,
+          acceptance_date: outcome.outcome === "accepted" && outcome.acceptance_date ? outcome.acceptance_date : null,
+          acceptance_reference: outcome.outcome === "accepted" && outcome.acceptance_reference.trim()
+            ? outcome.acceptance_reference.trim() : null,
+          note: outcome.note.trim() || null,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      const result = classifyResponse({ ok: response.ok, status: response.status, data });
+      if (!response.ok) return setWorkflow({ status: "error", message: result.message });
+      setOutcomeOpen(false);
+      setWorkflow({ status: "success", message: "Customer response recorded." });
+      await openQuote();
+    } catch {
+      setWorkflow({ status: "error", message: "The response may not have been recorded. Refresh before retrying." });
     }
   };
 
@@ -408,6 +553,25 @@ export default function QuotesScreen({
       <button type="submit" disabled={workflow.status === "busy"} style={{ ...control, borderColor: C.green, color: C.green, fontWeight: 700 }}>Record and download</button>
       <button type="button" onClick={() => setShareOpen(false)} style={control}>Cancel</button>
     </form>}
+    {outcomeOpen && selectedRevision && <form onSubmit={submitOutcome} style={{ display: "flex", gap: 8, alignItems: "end",
+      flexWrap: "wrap", padding: "8px 12px", borderBottom: `1px solid ${C.border}`, background: C.white, fontSize: T.label }}>
+      <strong style={{ color: C.amberD }}>Record customer response for this issued revision</strong>
+      <label>Outcome
+        <select value={outcome.outcome} onChange={event => setOutcome(value => ({ ...value, outcome: event.target.value }))} style={control}>
+          {["awaiting_response", "accepted", "rejected", "expired"].map(value => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}
+        </select>
+      </label>
+      {outcome.outcome === "accepted" && <>
+        <label>Acceptance date <input type="date" value={outcome.acceptance_date}
+          onChange={event => setOutcome(value => ({ ...value, acceptance_date: event.target.value }))} style={control} /></label>
+        <label>Customer PO/reference <input maxLength="200" value={outcome.acceptance_reference}
+          onChange={event => setOutcome(value => ({ ...value, acceptance_reference: event.target.value }))} style={control} /></label>
+      </>}
+      <label>Note <input maxLength="2000" value={outcome.note}
+        onChange={event => setOutcome(value => ({ ...value, note: event.target.value }))} style={{ ...control, minWidth: 200 }} /></label>
+      <button type="submit" disabled={workflow.status === "busy"} style={{ ...control, borderColor: C.green, color: C.green, fontWeight: 700 }}>Record response</button>
+      <button type="button" onClick={() => setOutcomeOpen(false)} style={control}>Cancel</button>
+    </form>}
     <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "10px 12px 16px" }}>
       {workflow.status !== "idle" && <div className="quote-error-state" role="status">
         <strong>Workflow</strong><span>{workflow.message}</span>
@@ -418,7 +582,7 @@ export default function QuotesScreen({
       {state.status === "empty" && <EmptyState title="Quote not found" hint="No caller-visible Quote matches that permanent reference." />}
       {state.status === "error" && <div className="quote-error-state"><strong>Quote could not be loaded</strong><span>{state.message}</span></div>}
       {state.status === "ready" && state.quote && <QuoteEvidence quote={state.quote} selectedId={selectedId} onSelect={setSelectedId}
-        onOpenSourceBatch={onOpenSourceBatch} sourceBatchState={sourceBatchState} />}
+        onOpenSourceBatch={onOpenSourceBatch} sourceBatchState={sourceBatchState} fixtureOnly={fixtureOnly} />}
     </div>
     <ScreenFooter right="Read-only · a permanent reference is allocated on first approval">
       <ProvenanceTag kind="immutable" />
