@@ -993,17 +993,6 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
     setBusy(false);
   };
 
-  const openSentQuote = () => {
-    if (sentRevisionId == null) return;
-    setQuoteWorkspaceRequest({
-      revisionId: sentRevisionId,
-      requestId: `atomic-send-${batch.id}-${sentRevisionId}-${Date.now()}`,
-    });
-    setQuoteView("history");
-    setTab("items");
-    onClose?.();
-  };
-
   const openLinkedQuote = () => {
     if (fixtureOnly || batch?.id == null) return;
     setQuoteWorkspaceRequest({
@@ -1790,10 +1779,25 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
           onBlocker={openReadinessBlocker}
           onRefreshReadiness={refreshGovernedReadiness} onCalculateAll={calculateAll}
           onSend={atomicSend} />
-        {sentRevisionId != null && <div className="batch-workspace-send-result">
-          <div><strong>Immutable draft candidate #{sentRevisionId} was created.</strong>
-            <span>Open its exact caller-visible snapshot. A permanent Quote reference is still allocated only on first approval.</span></div>
-          <button type="button" onClick={openSentQuote}>Open immutable draft evidence</button>
+        {/* PERSISTENT, not tied to sentRevisionId: that local state resets on
+            reload or on navigating away and back, but a Batch left in
+            `sent` still has a live, unsubmitted draft candidate every time
+            this workspace is reopened. Submit lives in Quote History, not
+            here — this is the one place in the Batch's own workspace that
+            says so and hands off to it, by durable Batch identity so it
+            resolves correctly whether or not this exact browser session
+            created the candidate. */}
+        {batch.status === "sent" && <div className="batch-workspace-send-result">
+          <div><strong>{sentRevisionId != null
+            ? `Immutable draft candidate #${sentRevisionId} was created.`
+            : "This Batch has an unsubmitted draft Quote candidate."}</strong>
+            <span>{sentRevisionId != null
+              ? "Open its exact caller-visible snapshot. A permanent Quote reference is still allocated only on first approval."
+              : "Nothing changes until you Submit it for Checker review."}
+              {" "}Submit, Approve and Share happen in Quote History, not here.</span></div>
+          <button type="button" onClick={openLinkedQuote} disabled={fixtureOnly}>
+            Open Quote History to Submit
+          </button>
         </div>}
 
         <section className="batch-workspace-profile-section" aria-labelledby="batch-workspace-profile-title">
@@ -2092,7 +2096,9 @@ export default function BatchWorkspacePanel({ batchId, fixtureOnly = false, fixt
       </div>}
 
       <footer>
-        <span>Calculate and Atomic Send are governed and active. Submit, approval and Issue remain separate workflow actions.</span>
+        <span>Calculate and Atomic Send are governed and active here. Submit, Approve and Share with the
+          customer happen in Quote History — open it from the sent-candidate link above once this
+          Batch has been Sent.</span>
         <span>Bill-to and Ship-to remain distinct; the selected Ship-to supplies the freight destination.</span>
       </footer>
     </aside>

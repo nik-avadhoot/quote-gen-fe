@@ -263,12 +263,52 @@ export default function QuoteCatalogueScreen({
       const reason = window.prompt("Withdrawal reason (required)");
       if (reason == null) return;
       body.reason = reason;
-    } else if (action === "issue") {
-      const quoteDate = window.prompt("Quote date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10));
-      if (quoteDate == null) return;
-      const validity = window.prompt("Offer valid to (YYYY-MM-DD, blank if not set)", selectedRevision.offer_validity_to || "");
-      if (validity == null) return;
-      Object.assign(body, { quote_date: quoteDate || null, offer_validity_to: validity || null });
+    } else if (action === "share") {
+      // The backend retired the old issue_quote_revision route (quote_date +
+      // offer_validity_to) in favour of /share, which records the actual
+      // sharing act as evidence (CDM: a customer share is an attributed
+      // business event, not a download) — see
+      // quote_revision_share_evidence.sql.
+      //
+      // The RPC also requires an exact recipient already recorded on the
+      // revision (addressee_name + addressee_details.party_id, captured at
+      // Atomic Send) - but the read-side "enabled" signal that shows this
+      // button (workflow_activation.py quote_revision_actions) does not check
+      // that, only workflow/batch status. A revision can therefore reach here
+      // enabled with no recipient, and the RPC's own refusal never reaches the
+      // caller as readable text - server.py's _rpc_call intentionally never
+      // forwards raw database exception text, so every PT422 from this RPC
+      // collapses to the same generic "One of the values is not valid for
+      // this record." Checking the one precondition this screen can see
+      // avoids asking three prompts just to fail on a message that does not
+      // say why.
+      if (!selectedRevision.addressee_name
+        || selectedRevision.addressee_details?.identity_authority !== "batches.customer_party_id"
+        || !selectedRevision.addressee_details?.party_id) {
+        return setWorkflow({ status: "error", message: "This revision has no exact customer "
+          + "recipient recorded. Recipient identity is captured at Atomic Send — reopen the "
+          + "source Batch and Send again before sharing." });
+      }
+      // Channel is a fixed enum on the server; a free-text prompt would let a
+      // typo fail validation after the Maker has already answered every
+      // question, so it's asked as a numbered choice instead of relying on
+      // exact spelling.
+      const channels = ["Email", "WhatsApp", "Printed/hand-delivered", "Customer portal", "Other"];
+      const choice = window.prompt(
+        `How was this shared with the customer?\n${channels.map((label, index) => `${index + 1}. ${label}`).join("\n")}\n\nEnter a number:`,
+        "1");
+      if (choice == null) return;
+      const channel = channels[Number(choice) - 1];
+      if (!channel) {
+        return setWorkflow({ status: "error", message: `Enter a number from 1 to ${channels.length}.` });
+      }
+      const sharedOn = window.prompt("Date shared with the customer (YYYY-MM-DD)",
+        new Date().toISOString().slice(0, 10));
+      if (sharedOn == null) return;
+      const reference = window.prompt(
+        "External reference (optional — e.g. an email subject or courier tracking id)", "");
+      if (reference == null) return;
+      Object.assign(body, { channel, shared_on: sharedOn, external_reference: reference.trim() || null });
     } else if (["approve", "create_revision"].includes(action)
       && !window.confirm(`${action === "approve" ? "Approve" : "Create the next revision from"} this immutable revision?`)) return;
 

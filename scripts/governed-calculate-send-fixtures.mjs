@@ -72,7 +72,7 @@ check(source.includes("expected_content_version: batch.content_version")
 check(source.includes("setQuoteWorkspaceRequest")
   && source.includes('setQuoteView("history")')
   && source.includes('setTab("items")')
-  && source.includes("Open immutable draft evidence"),
+  && source.includes("Open Quote History to Submit"),
   "U5-CS-FE-9 successful Atomic Send can hand off the exact immutable revision to Quote History");
 
 console.log(`\n${passes} passed, ${failures.length} failed`);
